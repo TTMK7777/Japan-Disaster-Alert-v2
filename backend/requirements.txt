@@ -17,4 +17,3 @@ python-dotenv==1.0.1
 # テスト
 pytest==8.0.0
 pytest-asyncio==0.23.5
-httpx==0.28.1  # TestClientで使用
