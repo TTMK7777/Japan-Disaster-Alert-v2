@@ -1,0 +1,167 @@
+[
+  {
+    "id": "tokyo_001",
+    "name": "東京都庁",
+    "address": "東京都新宿区西新宿2-8-1",
+    "latitude": 35.6896,
+    "longitude": 139.6917,
+    "capacity": 5000,
+    "facilities": ["バリアフリー", "駐車場", "備蓄倉庫"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_002",
+    "name": "新宿中央公園",
+    "address": "東京都新宿区西新宿2-11",
+    "latitude": 35.6909,
+    "longitude": 139.6892,
+    "capacity": 10000,
+    "facilities": ["広域避難場所", "ヘリポート"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_003",
+    "name": "代々木公園",
+    "address": "東京都渋谷区代々木神園町2-1",
+    "latitude": 35.6715,
+    "longitude": 139.6949,
+    "capacity": 20000,
+    "facilities": ["広域避難場所", "駐車場", "トイレ"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_004",
+    "name": "渋谷区役所",
+    "address": "東京都渋谷区宇田川町1-1",
+    "latitude": 35.6641,
+    "longitude": 139.6979,
+    "capacity": 2000,
+    "facilities": ["バリアフリー", "医療設備"],
+    "types": ["earthquake", "flood"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_005",
+    "name": "上野公園",
+    "address": "東京都台東区上野公園5-20",
+    "latitude": 35.7146,
+    "longitude": 139.7732,
+    "capacity": 15000,
+    "facilities": ["広域避難場所", "バリアフリー", "トイレ"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_006",
+    "name": "皇居外苑",
+    "address": "東京都千代田区皇居外苑1-1",
+    "latitude": 35.6825,
+    "longitude": 139.7540,
+    "capacity": 50000,
+    "facilities": ["広域避難場所"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_007",
+    "name": "日比谷公園",
+    "address": "東京都千代田区日比谷公園1-6",
+    "latitude": 35.6739,
+    "longitude": 139.7560,
+    "capacity": 8000,
+    "facilities": ["広域避難場所", "トイレ", "水飲み場"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_008",
+    "name": "品川区役所",
+    "address": "東京都品川区広町2-1-36",
+    "latitude": 35.6093,
+    "longitude": 139.7304,
+    "capacity": 3000,
+    "facilities": ["バリアフリー", "備蓄倉庫"],
+    "types": ["earthquake", "tsunami", "flood"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_009",
+    "name": "お台場海浜公園",
+    "address": "東京都港区台場1-4",
+    "latitude": 35.6295,
+    "longitude": 139.7753,
+    "capacity": 5000,
+    "facilities": ["駐車場", "トイレ"],
+    "types": ["earthquake"],
+    "is_open": true
+  },
+  {
+    "id": "tokyo_010",
+    "name": "世田谷区役所",
+    "address": "東京都世田谷区世田谷4-21-27",
+    "latitude": 35.6463,
+    "longitude": 139.6532,
+    "capacity": 2500,
+    "facilities": ["バリアフリー", "医療設備", "備蓄倉庫"],
+    "types": ["earthquake", "flood", "landslide"],
+    "is_open": true
+  },
+  {
+    "id": "osaka_001",
+    "name": "大阪城公園",
+    "address": "大阪府大阪市中央区大阪城1-1",
+    "latitude": 34.6873,
+    "longitude": 135.5262,
+    "capacity": 30000,
+    "facilities": ["広域避難場所", "トイレ", "駐車場"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "osaka_002",
+    "name": "難波宮跡公園",
+    "address": "大阪府大阪市中央区法円坂1",
+    "latitude": 34.6813,
+    "longitude": 135.5206,
+    "capacity": 10000,
+    "facilities": ["広域避難場所"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "yokohama_001",
+    "name": "山下公園",
+    "address": "神奈川県横浜市中区山下町279",
+    "latitude": 35.4436,
+    "longitude": 139.6519,
+    "capacity": 8000,
+    "facilities": ["広域避難場所", "トイレ"],
+    "types": ["earthquake", "fire"],
+    "is_open": true
+  },
+  {
+    "id": "yokohama_002",
+    "name": "横浜市役所",
+    "address": "神奈川県横浜市中区本町6-50-10",
+    "latitude": 35.4478,
+    "longitude": 139.6364,
+    "capacity": 3000,
+    "facilities": ["バリアフリー", "備蓄倉庫"],
+    "types": ["earthquake", "tsunami", "flood"],
+    "is_open": true
+  },
+  {
+    "id": "kobe_001",
+    "name": "神戸市役所",
+    "address": "兵庫県神戸市中央区加納町6-5-1",
+    "latitude": 34.6901,
+    "longitude": 135.1956,
+    "capacity": 4000,
+    "facilities": ["バリアフリー", "医療設備", "備蓄倉庫"],
+    "types": ["earthquake", "tsunami"],
+    "is_open": true
+  }
+]

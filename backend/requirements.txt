@@ -1,0 +1,20 @@
+# FastAPI関連
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.3
+pydantic-settings==2.6.1
+
+# HTTPクライアント
+httpx==0.28.1
+
+# レート制限
+slowapi==0.1.9
+
+# 環境変数管理
+python-dotenv==1.0.1
+
+# キャッシュ・スケジューラー（将来の拡張用）
+# テスト
+pytest==8.0.0
+pytest-asyncio==0.23.5
+httpx==0.28.1  # TestClientで使用

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>オフライン - 災害対応AI</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Sans', sans-serif;
+      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      color: white;
+    }
+
+    .container {
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .icon {
+      font-size: 80px;
+      margin-bottom: 24px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    h1 {
+      font-size: 24px;
+      margin-bottom: 16px;
+      font-weight: 700;
+    }
+
+    .message {
+      font-size: 16px;
+      opacity: 0.9;
+      margin-bottom: 32px;
+      line-height: 1.6;
+    }
+
+    .lang-switch {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 32px;
+      flex-wrap: wrap;
+    }
+
+    .lang-btn {
+      padding: 8px 16px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      background: transparent;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.3s;
+    }
+
+    .lang-btn:hover, .lang-btn.active {
+      background: rgba(255,255,255,0.2);
+      border-color: white;
+    }
+
+    .retry-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 16px 32px;
+      background: white;
+      color: #1e3a8a;
+      border: none;
+      border-radius: 12px;
+      font-size: 18px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .retry-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
+    }
+
+    .retry-btn:active {
+      transform: translateY(0);
+    }
+
+    .emergency-info {
+      margin-top: 48px;
+      padding: 20px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 12px;
+      text-align: left;
+    }
+
+    .emergency-info h2 {
+      font-size: 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .emergency-list {
+      list-style: none;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+
+    .emergency-list li {
+      padding: 6px 0;
+      border-bottom: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .emergency-list li:last-child {
+      border-bottom: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .icon {
+        animation: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon" aria-hidden="true">📡</div>
+
+    <h1 id="title">オフラインです</h1>
+    <p class="message" id="message">
+      インターネットに接続されていません。<br>
+      接続を確認して、もう一度お試しください。
+    </p>
+
+    <div class="lang-switch">
+      <button class="lang-btn active" onclick="setLang('ja')">日本語</button>
+      <button class="lang-btn" onclick="setLang('en')">English</button>
+      <button class="lang-btn" onclick="setLang('zh')">中文</button>
+      <button class="lang-btn" onclick="setLang('ko')">한국어</button>
+      <button class="lang-btn" onclick="setLang('vi')">Tiếng Việt</button>
+    </div>
+
+    <button class="retry-btn" onclick="retry()">
+      <span>🔄</span>
+      <span id="retry-text">再接続</span>
+    </button>
+
+    <div class="emergency-info">
+      <h2 id="emergency-title">📞 緊急連絡先</h2>
+      <ul class="emergency-list">
+        <li>🚔 警察: 110</li>
+        <li>🚒 消防・救急: 119</li>
+        <li>🌊 海上保安庁: 118</li>
+        <li>📱 災害用伝言ダイヤル: 171</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    const translations = {
+      ja: {
+        title: 'オフラインです',
+        message: 'インターネットに接続されていません。<br>接続を確認して、もう一度お試しください。',
+        retry: '再接続',
+        emergency: '緊急連絡先'
+      },
+      en: {
+        title: 'You are offline',
+        message: 'No internet connection.<br>Please check your connection and try again.',
+        retry: 'Reconnect',
+        emergency: 'Emergency Contacts'
+      },
+      zh: {
+        title: '您处于离线状态',
+        message: '没有网络连接。<br>请检查连接后重试。',
+        retry: '重新连接',
+        emergency: '紧急联系方式'
+      },
+      ko: {
+        title: '오프라인 상태입니다',
+        message: '인터넷에 연결되어 있지 않습니다.<br>연결을 확인하고 다시 시도해 주세요.',
+        retry: '다시 연결',
+        emergency: '긴급 연락처'
+      },
+      vi: {
+        title: 'Bạn đang ngoại tuyến',
+        message: 'Không có kết nối internet.<br>Vui lòng kiểm tra kết nối và thử lại.',
+        retry: 'Kết nối lại',
+        emergency: 'Liên hệ khẩn cấp'
+      }
+    };
+
+    function setLang(lang) {
+      const t = translations[lang];
+      document.getElementById('title').textContent = t.title;
+      document.getElementById('message').innerHTML = t.message;
+      document.getElementById('retry-text').textContent = t.retry;
+      document.getElementById('emergency-title').innerHTML = '📞 ' + t.emergency;
+
+      // Update active button
+      document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+      event.target.classList.add('active');
+    }
+
+    function retry() {
+      window.location.reload();
+    }
+
+    // Check connection status
+    window.addEventListener('online', () => {
+      window.location.reload();
+    });
+  </script>
+</body>
+</html>
