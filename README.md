@@ -1,54 +1,87 @@
-# 災害対応AIエージェントシステム
+# Japan Disaster Alert
 
-多言語対応の災害情報提供システム。在留外国人・訪日観光客を含む全ての人々に、迅速かつ正確な災害情報を提供します。
+A multilingual disaster information system for Japan, providing real-time earthquake, weather, and emergency alerts to foreign residents and tourists in 16 languages.
 
-## 主な機能
+## Features
 
-- **地震情報**: P2P地震情報からリアルタイム取得
-- **気象情報**: 都道府県別の天気概況（気象庁API）
-- **多言語対応**: 16言語対応（訪日客TOP10カ国をカバー）
-- **ハイブリッド翻訳**: 静的マッピング → Claude API → キャッシュの3層方式
-- **避難所検索**: 現在地周辺の避難所表示（開発中）
+- **Real-time Earthquake Data** — Live feeds from P2P earthquake network with intensity maps
+- **JMA Weather Alerts** — Prefecture-level weather warnings via Japan Meteorological Agency API
+- **16-Language Support** — Covers the top 10 tourist-origin countries visiting Japan (2024), plus residents
+- **Hybrid Translation Engine** — Three-layer approach: static location mapping → AI translation (Gemini/Claude) → cache
+- **Shelter Finder** — Nearby evacuation shelter search based on current location
+- **PWA Ready** — Offline support via Service Worker with installable manifest
+- **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
 
-## 技術スタック
+## Supported Languages
 
-### バックエンド
-- Python 3.12
-- FastAPI
-- httpx（非同期HTTPクライアント）
-- Claude API（未登録地名の翻訳用・オプション）
+| Code | Language | Region |
+|------|----------|--------|
+| `ja` | 日本語 | Japan |
+| `en` | English | US / Australia / Europe |
+| `ko` | 한국어 | Korea |
+| `zh` | 简体中文 | China |
+| `zh-TW` | 繁體中文 | Taiwan / Hong Kong |
+| `th` | ภาษาไทย | Thailand |
+| `ms` | Bahasa Melayu | Malaysia |
+| `id` | Bahasa Indonesia | Indonesia |
+| `tl` | Filipino | Philippines |
+| `vi` | Tiếng Việt | Vietnam |
+| `fr` | Français | France |
+| `de` | Deutsch | Germany |
+| `it` | Italiano | Italy |
+| `es` | Español | Spain |
+| `ne` | नेपाली | Nepal |
+| `easy_ja` | やさしい日本語 | Japanese learners |
 
-### フロントエンド
-- Next.js 14
-- React 18
-- TypeScript
-- Tailwind CSS
+## Tech Stack
 
-### データソース
-- [気象庁 気象データ高度利用ポータル](https://www.data.jma.go.jp/developer/index.html)
-- [P2P地震情報 API](https://www.p2pquake.net/)
+### Backend
+- **Python 3.11+** with **FastAPI** and **Uvicorn**
+- **httpx** — async HTTP client for JMA and P2P APIs
+- **slowapi** — per-route rate limiting
+- **pydantic-settings** — environment-based configuration
+- **Gemini API / Claude API** — AI-powered translation fallback (optional)
 
-## セットアップ
+### Frontend
+- **Next.js 15** with **React 19** and **TypeScript**
+- **Tailwind CSS** — utility-first styling
+- **Leaflet / react-leaflet** — interactive maps
+- **PWA** — Service Worker for offline capability
 
-### 必要条件
-- Python 3.11以上
-- Node.js 18以上
+### Data Sources
+- [Japan Meteorological Agency (JMA)](https://www.data.jma.go.jp/developer/index.html)
+- [P2P Earthquake Network API](https://www.p2pquake.net/)
+
+## Getting Started
+
+### Prerequisites
+
+- Python 3.11 or higher
+- Node.js 18 or higher
 - npm
 
-### バックエンド
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/TTMK7777/Japan-Disaster-Alert-v2.git
+cd Japan-Disaster-Alert-v2
+```
+
+### 2. Backend setup
 
 ```bash
 cd backend
 python3 -m venv venv
-source venv/bin/activate  # Windows: .\venv\Scripts\activate
+source venv/bin/activate       # Windows: .\venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env           # Edit .env with your settings
 python run.py
 ```
 
-バックエンドは http://localhost:8000 で起動します。
-APIドキュメントは http://localhost:8000/docs で確認できます。
+Backend starts at http://localhost:8000
+API docs available at http://localhost:8000/docs
 
-### フロントエンド
+### 3. Frontend setup
 
 ```bash
 cd frontend
@@ -56,108 +89,106 @@ npm install
 npm run dev
 ```
 
-フロントエンドは http://localhost:3000 で起動します。
+Frontend starts at http://localhost:3001
 
-### 一括起動
+### 4. Start both services at once (optional)
 
 ```bash
 chmod +x scripts/start_dev.sh
 ./scripts/start_dev.sh
 ```
 
-## API エンドポイント
+## Environment Variables
 
-| エンドポイント | メソッド | 説明 |
-|--------------|--------|------|
-| `/` | GET | ヘルスチェック |
-| `/api/v1/earthquakes` | GET | 地震情報取得 |
-| `/api/v1/weather/{area_code}` | GET | 天気情報取得 |
-| `/api/v1/alerts` | GET | 警報・注意報取得 |
-| `/api/v1/translate` | POST | テキスト翻訳 |
-| `/api/v1/shelters` | GET | 避難所検索 |
-| `/api/v1/languages` | GET | 対応言語一覧 |
+Copy `backend/.env.example` to `backend/.env` and fill in the values:
 
-### クエリパラメータ
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ENVIRONMENT` | Runtime environment (`development` / `production`) | No |
+| `LOG_LEVEL` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) | No |
+| `API_TIMEOUT` | External API request timeout in seconds | No |
+| `AI_PROVIDER` | AI provider to use (`auto`, `gemini`, `claude`) | No |
+| `GEMINI_API_KEY` | Google Gemini API key (get from [Google AI Studio](https://aistudio.google.com/apikey)) | Optional |
+| `GEMINI_MODEL` | Gemini model name | No |
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key (get from [Anthropic Console](https://console.anthropic.com/)) | Optional |
+| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | No |
+| `HOST` | Server bind address | No |
+| `PORT` | Server port | No |
+| `NEXT_PUBLIC_API_URL` | Backend URL used by the frontend | No |
 
-- `lang`: 言語コード（ja, en, zh, zh-TW, ko, vi, th, id, ms, tl, fr, de, it, es, ne, easy_ja）
-- `limit`: 取得件数
+> AI API keys are fully optional. The system works without them using the built-in static location translation table (75 locations x 15 languages).
 
-## プロジェクト構造
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/` | GET | Health check |
+| `/api/v1/earthquakes` | GET | Latest earthquake data |
+| `/api/v1/weather/{area_code}` | GET | Weather info by prefecture code |
+| `/api/v1/alerts` | GET | Active weather warnings |
+| `/api/v1/translate` | POST | Text translation |
+| `/api/v1/shelters` | GET | Nearby evacuation shelters |
+| `/api/v1/languages` | GET | Supported language list |
+
+**Common query parameters:**
+- `lang` — language code (e.g., `en`, `ko`, `zh`)
+- `limit` — number of results to return
+
+## Project Structure
 
 ```
-災害対応AI/
+Japan-Disaster-Alert-v2/
 ├── backend/
 │   ├── app/
-│   │   ├── main.py           # FastAPIアプリケーション
-│   │   ├── models.py         # データモデル
-│   │   └── services/
-│   │       ├── jma_service.py           # 気象庁API連携
-│   │       ├── p2p_service.py           # P2P地震情報連携
-│   │       ├── translator.py            # 多言語翻訳サービス
-│   │       └── location_translations.py # 震源地名静的翻訳（75地名×15言語）
+│   │   ├── main.py                       # FastAPI application entry point
+│   │   ├── models.py                     # Pydantic data models
+│   │   ├── config.py                     # Environment-based settings
+│   │   ├── exceptions.py                 # Custom exception classes
+│   │   ├── services/
+│   │   │   ├── jma_service.py            # JMA weather API integration
+│   │   │   ├── p2p_service.py            # P2P earthquake API integration
+│   │   │   ├── translator.py             # Hybrid translation service
+│   │   │   ├── location_translations.py  # Static location name translations
+│   │   │   ├── shelter_service.py        # Evacuation shelter lookup
+│   │   │   ├── tsunami_service.py        # Tsunami alert service
+│   │   │   ├── volcano_service.py        # Volcano alert service
+│   │   │   └── warning_service.py        # General warning aggregation
+│   │   └── utils/
+│   │       ├── area_codes.py             # JMA area code mapping
+│   │       ├── error_handler.py          # Unified error handling
+│   │       └── logger.py                 # Structured logging
+│   ├── tests/
 │   ├── requirements.txt
-│   └── run.py
+│   ├── run.py
+│   └── .env.example
 ├── frontend/
 │   ├── src/
-│   │   ├── app/
-│   │   │   ├── layout.tsx
-│   │   │   ├── page.tsx
-│   │   │   └── globals.css
-│   │   └── components/
-│   │       ├── LanguageSelector.tsx
-│   │       ├── EarthquakeList.tsx
-│   │       ├── WeatherInfo.tsx
-│   │       └── AlertBanner.tsx
+│   │   ├── app/                          # Next.js App Router pages
+│   │   ├── components/                   # React components
+│   │   ├── config/                       # API configuration
+│   │   ├── i18n/                         # Translation strings (16 languages)
+│   │   └── types/                        # TypeScript type definitions
+│   ├── public/
+│   │   ├── sw.js                         # Service Worker
+│   │   └── manifest.json                 # PWA manifest
 │   └── package.json
 ├── docs/
 ├── scripts/
 │   └── start_dev.sh
-├── PROJECT_PLAN.md
-└── README.md
+└── LICENSE
 ```
 
-## 対応言語（16言語）
+## Running Tests
 
-訪日客TOP10カ国（2024年）を網羅した多言語対応。
+```bash
+cd backend
+pytest tests/ -v
+```
 
-| コード | 言語 | 対象国・地域 | 訪日客数(2024) |
-|-------|------|------------|--------------|
-| ja | 日本語 | 日本 | - |
-| ko | 한국어 | 韓国 | 881万人（1位） |
-| zh | 简体中文 | 中国 | 698万人（2位） |
-| zh-TW | 繁體中文 | 台湾・香港 | 872万人（3位+5位） |
-| en | English | 米国・豪州・欧米 | 272万人（4位） |
-| th | ภาษาไทย | タイ | 10位 |
-| ms | Bahasa Melayu | マレーシア | 11位 |
-| id | Bahasa Indonesia | インドネシア | 15位 |
-| tl | Filipino | フィリピン | 技能実習生多数 |
-| vi | Tiếng Việt | ベトナム | 在留52万人 |
-| fr | Français | フランス | 16位 |
-| de | Deutsch | ドイツ | 14位 |
-| it | Italiano | イタリア | 17位 |
-| es | Español | スペイン | 18位 |
-| ne | नेपाली | ネパール | 在留17万人 |
-| easy_ja | やさしい日本語 | 日本語学習者 | - |
+## Disclaimer
 
-## 今後の開発予定
+This system provides reference information only and is **not** a substitute for official disaster information. During emergencies, always follow announcements from the Japan Meteorological Agency and your local government.
 
-- [ ] 避難所マップ機能（Leaflet/OpenStreetMap）
-- [ ] プッシュ通知（FCM/APNs）
-- [ ] LINE公式アカウント連携
-- [ ] SNS情報収集・デマ検出
-- [ ] 自治体向け管理画面
-- [x] ハイブリッド翻訳システム（静的マッピング + Claude API + キャッシュ）
-- [x] 16言語対応（訪日客TOP10カ国カバー）
+## License
 
-## ライセンス
-
-MIT License
-
-## 免責事項
-
-本システムは参考情報を提供するものであり、公式の災害情報に代わるものではありません。
-災害時は必ず公式発表（気象庁、自治体等）をご確認ください。
-
----
-
-**開発**: Taimu Tsuji
+[MIT License](LICENSE)
