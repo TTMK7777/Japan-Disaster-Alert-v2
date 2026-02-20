@@ -497,12 +497,12 @@ class TranslatorService:
         try:
             target_name = self.LANG_NAMES.get(target_lang, target_lang)
 
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     url,
-                    headers={"Content-Type": "application/json", "x-goog-api-key": self.gemini_api_key},
+                    headers={"Content-Type": "application/json"},
                     json={
                         "contents": [{
                             "parts": [{
@@ -938,12 +938,12 @@ Important:
         """
         try:
             prompt = self._build_warning_prompt(warning_name_ja, target_lang, area_name, severity)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     url,
-                    headers={"Content-Type": "application/json", "x-goog-api-key": self.gemini_api_key},
+                    headers={"Content-Type": "application/json"},
                     json={
                         "contents": [{
                             "parts": [{"text": prompt}]
@@ -1195,12 +1195,12 @@ Important guidelines:
         """Gemini APIを使用して安全ガイドを生成"""
         try:
             prompt = self._build_safety_guide_prompt(disaster_type, target_lang, location, severity)
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.gemini_model}:generateContent?key={self.gemini_api_key}"
 
             async with httpx.AsyncClient() as client:
                 response = await client.post(
                     url,
-                    headers={"Content-Type": "application/json", "x-goog-api-key": self.gemini_api_key},
+                    headers={"Content-Type": "application/json"},
                     json={
                         "contents": [{"parts": [{"text": prompt}]}],
                         "generationConfig": {

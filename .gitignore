@@ -82,13 +82,3 @@ htmlcov/
 tmp/
 temp/
 *.tmp
-
-# Internal documents (not for public release)
-HANDOVER.md
-CLAUDE.md
-CLAUDE_CODE_*.md
-*_REPORT.md
-*_PLAN.md
-*_COMPLETE.md
-.claude/
-start.bat
