@@ -30,7 +30,7 @@ class PushNotificationService:
     """Web Push通知サービス"""
 
     def __init__(self):
-        self._subscriptions_path = Path(settings.push_subscriptions_path)
+        self._subscriptions_path = settings.push_subscriptions_path
         self._vapid_public_key = settings.vapid_public_key
         self._vapid_private_key = settings.vapid_private_key
         self._vapid_claims_email = settings.vapid_claims_email

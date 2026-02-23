@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     vapid_public_key: str = ""
     vapid_private_key: str = ""
     vapid_claims_email: str = ""
-    push_subscriptions_path: str = "data/push_subscriptions.json"
+    push_subscriptions_path: Path = Path(__file__).parent.parent / "data" / "push_subscriptions.json"
     
     # サーバー設定
     host: str = "0.0.0.0"

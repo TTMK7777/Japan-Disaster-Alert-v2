@@ -37,6 +37,28 @@ class AIProvider:
         self.anthropic_api_version = anthropic_api_version
         self.translate_timeout = translate_timeout
         self.generate_timeout = generate_timeout
+        self._client: Optional[httpx.AsyncClient] = None
+
+    # ------------------------------------------------------------------
+    # HTTPクライアント管理
+    # ------------------------------------------------------------------
+
+    def _get_client(self) -> httpx.AsyncClient:
+        """
+        httpx.AsyncClient を遅延初期化して返す。
+
+        クライアントが未生成またはクローズ済みの場合は新規作成する。
+        接続プーリングを有効にするため、インスタンスを再利用する。
+        """
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def close(self) -> None:
+        """HTTPクライアントを明示的にクローズする"""
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     # ------------------------------------------------------------------
     # プロバイダー選択
@@ -91,33 +113,33 @@ class AIProvider:
                 f"{self.gemini_model}:generateContent?key={self.gemini_api_key}"
             )
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    url,
-                    headers={"Content-Type": "application/json"},
-                    json={
-                        "contents": [{
-                            "parts": [{
-                                "text": (
-                                    f"Translate this Japanese earthquake location name to {target_name}. "
-                                    f"Only output the translation, nothing else.\n\n{text}"
-                                )
-                            }]
-                        }],
-                        "generationConfig": {
-                            "maxOutputTokens": 100,
-                            "temperature": 0.1,
-                        },
+            client = self._get_client()
+            response = await client.post(
+                url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{
+                        "parts": [{
+                            "text": (
+                                f"Translate this Japanese earthquake location name to {target_name}. "
+                                f"Only output the translation, nothing else.\n\n{text}"
+                            )
+                        }]
+                    }],
+                    "generationConfig": {
+                        "maxOutputTokens": 100,
+                        "temperature": 0.1,
                     },
-                    timeout=self.translate_timeout,
-                )
+                },
+                timeout=self.translate_timeout,
+            )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                else:
-                    logger.warning(f"Gemini API error: {response.status_code} - {response.text}")
-                    return None
+            if response.status_code == 200:
+                data = response.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"].strip()
+            else:
+                logger.warning(f"Gemini API error: {response.status_code} - {response.text}")
+                return None
 
         except Exception as e:
             logger.error(f"Gemini API request error: {e}", exc_info=True)
@@ -128,34 +150,34 @@ class AIProvider:
         try:
             target_name = LANG_NAMES.get(target_lang, target_lang)
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-API-Key": self.anthropic_api_key,
-                        "anthropic-version": self.anthropic_api_version,
-                    },
-                    json={
-                        "model": self.anthropic_model,
-                        "max_tokens": 100,
-                        "messages": [{
-                            "role": "user",
-                            "content": (
-                                f"Translate this Japanese earthquake location name to {target_name}. "
-                                f"Only output the translation, nothing else.\n\n{text}"
-                            ),
-                        }],
-                    },
-                    timeout=self.translate_timeout,
-                )
+            client = self._get_client()
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": self.anthropic_api_key,
+                    "anthropic-version": self.anthropic_api_version,
+                },
+                json={
+                    "model": self.anthropic_model,
+                    "max_tokens": 100,
+                    "messages": [{
+                        "role": "user",
+                        "content": (
+                            f"Translate this Japanese earthquake location name to {target_name}. "
+                            f"Only output the translation, nothing else.\n\n{text}"
+                        ),
+                    }],
+                },
+                timeout=self.translate_timeout,
+            )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    return data["content"][0]["text"].strip()
-                else:
-                    logger.warning(f"Claude API error: {response.status_code}")
-                    return None
+            if response.status_code == 200:
+                data = response.json()
+                return data["content"][0]["text"].strip()
+            else:
+                logger.warning(f"Claude API error: {response.status_code}")
+                return None
 
         except Exception as e:
             logger.error(f"Claude API request error: {e}", exc_info=True)
@@ -191,30 +213,30 @@ class AIProvider:
                 f"{self.gemini_model}:generateContent?key={self.gemini_api_key}"
             )
 
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    url,
-                    headers={"Content-Type": "application/json"},
-                    json={
-                        "contents": [{"parts": [{"text": prompt}]}],
-                        "generationConfig": {
-                            "maxOutputTokens": max_tokens,
-                            "temperature": 0.1 if max_tokens <= 500 else 0.2,
-                        },
+            client = self._get_client()
+            response = await client.post(
+                url,
+                headers={"Content-Type": "application/json"},
+                json={
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "maxOutputTokens": max_tokens,
+                        "temperature": 0.1 if max_tokens <= 500 else 0.2,
                     },
-                    timeout=self.generate_timeout,
-                )
+                },
+                timeout=self.generate_timeout,
+            )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    content = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-                    result = self.extract_json(content)
-                    if result is None:
-                        logger.warning(f"Gemini応答のJSONパースエラー: {content[:200]}")
-                    return result
-                else:
-                    logger.warning(f"Gemini API error: {response.status_code}")
-                    return None
+            if response.status_code == 200:
+                data = response.json()
+                content = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                result = self.extract_json(content)
+                if result is None:
+                    logger.warning(f"Gemini応答のJSONパースエラー: {content[:200]}")
+                return result
+            else:
+                logger.warning(f"Gemini API error: {response.status_code}")
+                return None
 
         except Exception as e:
             logger.error(f"Gemini API生成エラー: {e}", exc_info=True)
@@ -223,32 +245,32 @@ class AIProvider:
     async def _generate_with_claude(self, prompt: str, max_tokens: int) -> Optional[dict]:
         """Claude APIでJSON生成"""
         try:
-            async with httpx.AsyncClient() as client:
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "Content-Type": "application/json",
-                        "X-API-Key": self.anthropic_api_key,
-                        "anthropic-version": self.anthropic_api_version,
-                    },
-                    json={
-                        "model": self.anthropic_model,
-                        "max_tokens": max_tokens,
-                        "messages": [{"role": "user", "content": prompt}],
-                    },
-                    timeout=self.generate_timeout,
-                )
+            client = self._get_client()
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={
+                    "Content-Type": "application/json",
+                    "X-API-Key": self.anthropic_api_key,
+                    "anthropic-version": self.anthropic_api_version,
+                },
+                json={
+                    "model": self.anthropic_model,
+                    "max_tokens": max_tokens,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=self.generate_timeout,
+            )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    content = data["content"][0]["text"].strip()
-                    result = self.extract_json(content)
-                    if result is None:
-                        logger.warning(f"Claude応答のJSONパースエラー: {content[:200]}")
-                    return result
-                else:
-                    logger.warning(f"Claude API error: {response.status_code}")
-                    return None
+            if response.status_code == 200:
+                data = response.json()
+                content = data["content"][0]["text"].strip()
+                result = self.extract_json(content)
+                if result is None:
+                    logger.warning(f"Claude応答のJSONパースエラー: {content[:200]}")
+                return result
+            else:
+                logger.warning(f"Claude API error: {response.status_code}")
+                return None
 
         except Exception as e:
             logger.error(f"Claude API生成エラー: {e}", exc_info=True)

@@ -62,7 +62,8 @@ async def lifespan(app: FastAPI):
     # 起動時
     logger.info("災害対応AIシステム起動中...")
     yield
-    # 終了時
+    # 終了時: リソース解放
+    await translator.close()
     logger.info("災害対応AIシステム終了")
 
 
