@@ -147,6 +147,31 @@ class VolcanoWarning(BaseModel):
     headline: Optional[str] = None
 
 
+class PushSubscription(BaseModel):
+    """Web Pushサブスクリプション"""
+    endpoint: str
+    keys: dict[str, str]  # p256dh, auth
+
+
+class PushUnsubscribeRequest(BaseModel):
+    """サブスクリプション解除リクエスト"""
+    endpoint: str
+
+
+class PushTestRequest(BaseModel):
+    """テスト通知送信リクエスト"""
+    title: str = "テスト通知"
+    body: str = "プッシュ通知のテストです"
+    url: str = "/"
+
+
+class PushNotificationResponse(BaseModel):
+    """プッシュ通知レスポンス"""
+    success: bool
+    message: str
+    sent_count: int = 0
+
+
 class SafetyGuide(BaseModel):
     """安全ガイド（AI生成）"""
     disaster_type: str  # earthquake, tsunami, flood, typhoon, volcano, etc.

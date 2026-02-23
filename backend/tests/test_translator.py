@@ -2,19 +2,27 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.services.translator import TranslatorService
 
+
 @pytest.fixture
 def mock_settings():
     with patch("app.config.settings") as mock:
         mock.anthropic_api_key = "test_key"
         mock.gemini_api_key = "test_key"
+        mock.gemini_model = "gemini-2.0-flash"
+        mock.anthropic_model = "claude-sonnet-4-20250514"
+        mock.anthropic_api_version = "2023-06-01"
         mock.ai_provider = "auto"
         mock.api_timeout = 10.0
+        mock.ai_timeout_translate = 10.0
+        mock.ai_timeout_generate = 30.0
         mock.translation_cache_file.exists.return_value = False
         yield mock
+
 
 @pytest.fixture
 def translator(mock_settings):
     return TranslatorService()
+
 
 @pytest.mark.asyncio
 async def test_translate_location_static(translator):
@@ -23,25 +31,28 @@ async def test_translate_location_static(translator):
     result = await translator.translate_location("北海道北西沖", "en")
     assert result == "Off the northwest coast of Hokkaido"
 
+
 @pytest.mark.asyncio
 async def test_translate_location_no_change(translator):
     """同じ言語の場合は翻訳しないテスト"""
     result = await translator.translate_location("東京", "ja")
     assert result == "東京"
 
+
 @pytest.mark.asyncio
 async def test_translate_cache_hit(translator):
     """キャッシュヒットのテスト"""
-    # キャッシュを手動で設定
+    # キャッシュを手動で設定（TranslationCache の set メソッド経由）
     cache_key = translator._get_cache_key("未知の地名", "en")
-    translator._cache[cache_key] = "Unknown Place"
-    
+    translator._cache.set(cache_key, "Unknown Place")
+
     # モックのAI翻訳メソッド（呼ばれてはいけない）
     translator._translate_with_ai = AsyncMock()
-    
+
     result = await translator.translate_location("未知の地名", "en")
     assert result == "Unknown Place"
     translator._translate_with_ai.assert_not_called()
+
 
 @pytest.mark.asyncio
 async def test_template_translation(translator):
@@ -51,6 +62,7 @@ async def test_template_translation(translator):
     result = await translator.translate(text, "en")
     assert "Tsunami Warning" in result
     assert "evacuate" in result.lower()
+
 
 def test_get_supported_languages(translator):
     """対応言語一覧の取得テスト"""

@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # Claude API
     anthropic_api_key: Optional[str] = None
     anthropic_api_version: str = "2023-06-01"
-    anthropic_model: str = "claude-3-haiku-20240307"
+    anthropic_model: str = "claude-haiku-4-5-20251001"
 
     # Gemini API
     gemini_api_key: Optional[str] = None
@@ -50,13 +50,20 @@ class Settings(BaseSettings):
     max_content_size: int = 1_048_576  # 1MB
     max_translate_text_length: int = 5000  # 文字数
 
-    # CORS設定
-    allowed_origins: str = "http://localhost:3000,http://localhost:3001,http://localhost:8000"
+    # CORS設定（環境変数 CORS_ORIGINS で上書き可能、カンマ区切り）
+    cors_origins: str = "http://localhost:3000,http://localhost:3001"
     
     # キャッシュ設定
     cache_dir: Path = Path(__file__).parent.parent / "data"
     translation_cache_file: Path = Path(__file__).parent.parent / "data" / "translation_cache.json"
     shelter_data_dir: Path = Path(__file__).parent.parent / "data" / "shelters"
+    shelter_csv_path: str = ""  # 国土地理院CSVファイルパス（空の場合はサンプルデータを使用）
+
+    # プッシュ通知設定（VAPID）
+    vapid_public_key: str = ""
+    vapid_private_key: str = ""
+    vapid_claims_email: str = ""
+    push_subscriptions_path: str = "data/push_subscriptions.json"
     
     # サーバー設定
     host: str = "0.0.0.0"

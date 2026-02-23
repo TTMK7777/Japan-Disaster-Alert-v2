@@ -32,3 +32,8 @@ class ValidationError(DisasterAlertError):
     """バリデーションエラー"""
     pass
 
+
+class PushNotificationError(DisasterAlertError):
+    """プッシュ通知エラー"""
+    pass
+

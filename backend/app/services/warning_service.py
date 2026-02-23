@@ -202,15 +202,18 @@ class WarningService:
         """
         APIレスポンスを警報リストにパース（Claude API使用版）
 
-        未対応言語（th, id, ms, tl, fr, de, it, es, ne, zh-TW）の場合に使用
+        未対応言語（th, id, ms, tl, fr, de, it, es, ne, zh-TW）の場合に使用。
+        asyncio.gather() で全警報のAI翻訳を並列実行し、N+1問題を解消。
+        return_exceptions=True により各言語・各警報のエラーが独立してハンドリングされる。
         """
-        alerts = []
         report_datetime = data.get("reportDatetime", "")
 
         area_types = data.get("areaTypes", [])
         if not area_types:
-            return alerts
+            return []
 
+        # 1. 翻訳が必要な警報メタデータを収集
+        pending_items: list[dict] = []
         for area_type in area_types:
             areas = area_type.get("areas", [])
             for area in areas:
@@ -227,46 +230,78 @@ class WarningService:
                         severity = warning_info.get("severity", "medium")
                         alert_id = f"{area_code}_{code}_{datetime.now().strftime('%Y%m%d%H%M')}"
 
-                        # Claude APIで動的生成
-                        try:
-                            generated = await self.translator.generate_warning_text(
-                                warning_name_ja=title_ja,
-                                target_lang=lang,
-                                area_name=area_name_ja,
-                                severity=severity
-                            )
+                        pending_items.append({
+                            "code": code,
+                            "title_ja": title_ja,
+                            "severity": severity,
+                            "alert_id": alert_id,
+                            "area_name_ja": area_name_ja,
+                        })
 
-                            # 地域名も翻訳
-                            area_translated = await self.translator.translate_location(area_name_ja, lang)
+        if not pending_items:
+            return []
 
-                            alerts.append(DisasterAlert(
-                                id=alert_id,
-                                type=self._get_alert_type(severity),
-                                title=title_ja,
-                                title_translated=generated.get("name"),
-                                description=f"{area_name_ja}に{title_ja}が発表されています。",
-                                description_translated=generated.get("description"),
-                                area=area_translated,
-                                issued_at=report_datetime,
-                                expires_at=None,
-                                severity=severity,
-                                action=generated.get("action")  # 推奨行動を追加
-                            ))
-                        except Exception as e:
-                            logger.error(f"AI生成エラー: {e}", exc_info=True)
-                            # フォールバック: 英語版を使用
-                            alerts.append(DisasterAlert(
-                                id=alert_id,
-                                type=self._get_alert_type(severity),
-                                title=title_ja,
-                                title_translated=self._get_warning_name(code, "en"),
-                                description=f"{area_name_ja}に{title_ja}が発表されています。",
-                                description_translated=self._get_description(area_name_ja, self._get_warning_name(code, "en"), "en"),
-                                area=area_name_ja,
-                                issued_at=report_datetime,
-                                expires_at=None,
-                                severity=severity
-                            ))
+        # 2. 全警報のAI翻訳を並列実行
+        async def translate_single(item: dict) -> tuple[dict, Optional[dict], Optional[str]]:
+            """単一警報の翻訳タスク。(metadata, generated_or_None, area_translated_or_None) を返す。"""
+            try:
+                generated, area_translated = await asyncio.gather(
+                    self.translator.generate_warning_text(
+                        warning_name_ja=item["title_ja"],
+                        target_lang=lang,
+                        area_name=item["area_name_ja"],
+                        severity=item["severity"],
+                    ),
+                    self.translator.translate_location(item["area_name_ja"], lang),
+                )
+                return (item, generated, area_translated)
+            except Exception as e:
+                logger.error(f"AI生成エラー: {e}", exc_info=True)
+                return (item, None, None)
+
+        tasks = [translate_single(item) for item in pending_items]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # 3. 結果を DisasterAlert に変換
+        alerts: list[DisasterAlert] = []
+        for result in results:
+            # gather(return_exceptions=True) により例外オブジェクトが返る可能性を処理
+            if isinstance(result, BaseException):
+                logger.error(f"並列翻訳で予期しないエラー: {result}", exc_info=True)
+                continue
+
+            item, generated, area_translated = result
+
+            if generated is not None and area_translated is not None:
+                alerts.append(DisasterAlert(
+                    id=item["alert_id"],
+                    type=self._get_alert_type(item["severity"]),
+                    title=item["title_ja"],
+                    title_translated=generated.get("name"),
+                    description=f"{item['area_name_ja']}に{item['title_ja']}が発表されています。",
+                    description_translated=generated.get("description"),
+                    area=area_translated,
+                    issued_at=report_datetime,
+                    expires_at=None,
+                    severity=item["severity"],
+                    action=generated.get("action"),
+                ))
+            else:
+                # フォールバック: 英語版を使用
+                alerts.append(DisasterAlert(
+                    id=item["alert_id"],
+                    type=self._get_alert_type(item["severity"]),
+                    title=item["title_ja"],
+                    title_translated=self._get_warning_name(item["code"], "en"),
+                    description=f"{item['area_name_ja']}に{item['title_ja']}が発表されています。",
+                    description_translated=self._get_description(
+                        item["area_name_ja"], self._get_warning_name(item["code"], "en"), "en"
+                    ),
+                    area=item["area_name_ja"],
+                    issued_at=report_datetime,
+                    expires_at=None,
+                    severity=item["severity"],
+                ))
 
         return alerts
 

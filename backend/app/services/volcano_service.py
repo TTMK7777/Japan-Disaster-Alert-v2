@@ -1,6 +1,7 @@
 """
 気象庁 火山情報サービス
 """
+import asyncio
 import httpx
 from typing import Optional
 from ..models import VolcanoInfo, VolcanoWarning
@@ -107,32 +108,38 @@ class VolcanoService:
 
     async def get_volcano_warnings(self) -> list[dict]:
         """
-        火山警報を取得
+        火山警報を並列取得
+
+        Semaphore(10) で同時接続数を制限しつつ、asyncio.gather() で並列リクエストを実行。
 
         Returns:
             list[dict]: 火山警報リスト
         """
-        # 各監視火山の警報情報を取得
-        warnings = []
+        semaphore = asyncio.Semaphore(10)
 
-        async with httpx.AsyncClient() as client:
-            for volcano_code in self.MONITORED_VOLCANOES:
+        async def fetch_warning(client: httpx.AsyncClient, volcano_code: int) -> Optional[dict]:
+            async with semaphore:
                 try:
                     url = f"{self.BASE_URL}/data/warning/{volcano_code}.json"
                     response = await client.get(url, timeout=self.timeout)
                     if response.status_code == 200:
                         data = response.json()
                         if data:
-                            warning = self._parse_volcano_warning(data, volcano_code)
-                            if warning:
-                                warnings.append(warning)
+                            return self._parse_volcano_warning(data, volcano_code)
                 except httpx.HTTPError:
-                    continue
+                    pass
                 except Exception as e:
                     logger.warning(f"火山警報取得エラー ({volcano_code}): {e}")
-                    continue
+                return None
 
-        return warnings
+        async with httpx.AsyncClient() as client:
+            tasks = [
+                fetch_warning(client, volcano_code)
+                for volcano_code in self.MONITORED_VOLCANOES
+            ]
+            results = await asyncio.gather(*tasks)
+
+        return [w for w in results if w is not None]
 
     def _parse_volcano_warning(self, data: dict, volcano_code: int) -> Optional[dict]:
         """火山警報情報をパース"""

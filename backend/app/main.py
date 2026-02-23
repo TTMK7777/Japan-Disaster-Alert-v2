@@ -30,7 +30,11 @@ from .models import (
     TsunamiInfo,
     VolcanoInfo,
     VolcanoWarning,
-    SafetyGuide
+    SafetyGuide,
+    PushSubscription,
+    PushUnsubscribeRequest,
+    PushTestRequest,
+    PushNotificationResponse,
 )
 from .services.jma_service import JMAService
 from .services.p2p_service import P2PQuakeService
@@ -39,6 +43,7 @@ from .services.warning_service import WarningService
 from .services.tsunami_service import TsunamiService
 from .services.volcano_service import VolcanoService
 from .services.shelter_service import ShelterService
+from .services.push_service import PushNotificationService
 
 # サービスインスタンス
 jma_service = JMAService()
@@ -48,6 +53,7 @@ warning_service = WarningService()
 tsunami_service = TsunamiService()
 volcano_service = VolcanoService()
 shelter_service = ShelterService()
+push_service = PushNotificationService()
 
 
 @asynccontextmanager
@@ -76,18 +82,18 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # SlowAPIミドルウェア（CORSより前に記述 = 内側で実行、OPTIONSプリフライトが429にならない）
 app.add_middleware(SlowAPIMiddleware)
 
-# CORS設定（環境変数で制御）
-# 本番環境では環境変数 ALLOWED_ORIGINS で許可オリジンを指定すること
-# 例: ALLOWED_ORIGINS=http://localhost:3000,https://example.com
-ALLOWED_ORIGINS = [
-    origin.strip() 
-    for origin in settings.allowed_origins.split(",") 
+# CORS設定（環境変数 CORS_ORIGINS で制御）
+# 本番環境では環境変数 CORS_ORIGINS で許可オリジンを指定すること
+# 例: CORS_ORIGINS=http://localhost:3000,https://example.com
+CORS_ALLOWED_ORIGINS = [
+    origin.strip()
+    for origin in settings.cors_origins.split(",")
     if origin.strip()  # 空文字列を除外
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,  # 環境変数で制限
+    allow_origins=CORS_ALLOWED_ORIGINS,  # 環境変数で制限
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # 必要なメソッドのみ許可
     allow_headers=["Content-Type", "Authorization"],  # 必要なヘッダーのみ許可
@@ -528,9 +534,93 @@ async def get_disaster_types():
     return SUPPORTED_DISASTER_TYPES
 
 
+# ========================================
+# プッシュ通知エンドポイント
+# ========================================
+
+@app.post("/api/v1/push/subscribe", response_model=PushNotificationResponse)
+@handle_errors
+@limiter.limit(settings.rate_limit_general)
+async def push_subscribe(request: Request, subscription: PushSubscription):
+    """
+    プッシュ通知のサブスクリプションを登録
+
+    - **endpoint**: Push Service のエンドポイントURL
+    - **keys**: VAPID認証キー（p256dh, auth）
+    """
+    if not push_service.is_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="プッシュ通知サービスは現在利用できません。VAPID鍵が設定されていません。"
+        )
+
+    result = await push_service.subscribe(subscription)
+    return PushNotificationResponse(
+        success=result,
+        message="サブスクリプションを登録しました" if result else "サブスクリプション登録に失敗しました",
+    )
+
+
+@app.post("/api/v1/push/unsubscribe", response_model=PushNotificationResponse)
+@handle_errors
+@limiter.limit(settings.rate_limit_general)
+async def push_unsubscribe(request: Request, body: PushUnsubscribeRequest):
+    """
+    プッシュ通知のサブスクリプションを解除
+
+    - **endpoint**: 解除するエンドポイントURL
+    """
+    if not push_service.is_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="プッシュ通知サービスは現在利用できません。VAPID鍵が設定されていません。"
+        )
+
+    result = await push_service.unsubscribe(body.endpoint)
+    return PushNotificationResponse(
+        success=result,
+        message="サブスクリプションを解除しました" if result else "指定されたサブスクリプションが見つかりません",
+    )
+
+
+@app.post("/api/v1/push/test", response_model=PushNotificationResponse)
+@handle_errors
+@limiter.limit("5/minute")
+async def push_test(request: Request, body: PushTestRequest):
+    """
+    テスト通知を送信（開発用）
+
+    - **title**: 通知タイトル（デフォルト: テスト通知）
+    - **body**: 通知本文
+    - **url**: クリック時のURL
+    """
+    if settings.environment == "production":
+        raise HTTPException(
+            status_code=403,
+            detail="テスト通知は開発環境でのみ使用できます"
+        )
+
+    if not push_service.is_enabled:
+        raise HTTPException(
+            status_code=503,
+            detail="プッシュ通知サービスは現在利用できません。VAPID鍵が設定されていません。"
+        )
+
+    sent_count = await push_service.send_notification(
+        title=body.title,
+        body=body.body,
+        url=body.url,
+    )
+    return PushNotificationResponse(
+        success=sent_count > 0,
+        message=f"テスト通知を{sent_count}件送信しました",
+        sent_count=sent_count,
+    )
+
+
 if __name__ == "__main__":
     import uvicorn
-    
+
     uvicorn.run(
         app,
         host=settings.host,

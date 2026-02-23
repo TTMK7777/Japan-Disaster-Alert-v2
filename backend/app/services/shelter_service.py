@@ -1,7 +1,9 @@
 """
 避難所データサービス
-国土地理院の避難所データを利用
+国土地理院の避難所データを利用（CSV/JSONからロード可能）
 """
+import csv
+import hashlib
 import httpx
 import math
 import json
@@ -22,6 +24,7 @@ class ShelterService:
     def __init__(self):
         from ..config import settings
         self.DATA_DIR = settings.shelter_data_dir
+        self._csv_path = settings.shelter_csv_path
         self._shelters_cache: list[ShelterInfo] = []
         self._load_shelter_data()
 
@@ -39,20 +42,112 @@ class ShelterService:
 
 
     def _load_shelter_data(self):
-        """避難所データをロード"""
+        """避難所データをロード（CSV > JSON > ハードコードサンプルの優先順位）"""
         try:
-            # サンプルデータをロード（実際のデータに置き換え可能）
+            # 1. CSVファイルからロード（設定にパスが指定されている場合）
+            if self._csv_path:
+                csv_shelters = self._load_shelters_from_csv(self._csv_path)
+                if csv_shelters:
+                    self._shelters_cache = csv_shelters
+                    logger.info(f"CSVから避難所データをロード: {len(csv_shelters)}件")
+                    return
+
+            # 2. JSONサンプルデータをロード
             sample_file = Path(self.DATA_DIR) / "sample_shelters.json"
             if sample_file.exists():
                 with open(sample_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     self._shelters_cache = [ShelterInfo(**s) for s in data]
-            else:
-                # デフォルトのサンプルデータ
-                self._shelters_cache = self._get_sample_shelters()
+                logger.info(f"JSONから避難所データをロード: {len(self._shelters_cache)}件")
+                return
+
+            # 3. ハードコードのサンプルデータにフォールバック
+            self._shelters_cache = self._get_sample_shelters()
+            logger.info(f"サンプルデータにフォールバック: {len(self._shelters_cache)}件")
         except Exception as e:
             logger.error(f"避難所データロードエラー: {e}", exc_info=True)
             self._shelters_cache = self._get_sample_shelters()
+
+    def _load_shelters_from_csv(self, csv_path: str) -> list[ShelterInfo]:
+        """
+        国土地理院の指定緊急避難場所CSV形式データを読み込む
+
+        CSV列（想定）: 施設名, 住所, 緯度, 経度, 洪水, 崖崩れ, 高潮, 地震, 津波, 火災, 内水氾濫, 火山
+
+        Args:
+            csv_path: CSVファイルのパス
+
+        Returns:
+            list[ShelterInfo]: 読み込まれた避難所リスト。ファイルが見つからない場合は空リスト。
+        """
+        path = Path(csv_path)
+        if not path.exists():
+            logger.warning(f"CSVファイルが見つかりません: {csv_path}")
+            return []
+
+        # 災害種別列とtypesキーのマッピング
+        disaster_column_map = {
+            "洪水": "flood",
+            "崖崩れ": "landslide",
+            "崖崩れ、土石流及び地滑り": "landslide",
+            "高潮": "storm_surge",
+            "地震": "earthquake",
+            "津波": "tsunami",
+            "火災": "fire",
+            "大規模な火事": "fire",
+            "内水氾濫": "inland_flood",
+            "火山": "volcano",
+            "火山現象": "volcano",
+        }
+
+        shelters: list[ShelterInfo] = []
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for idx, row in enumerate(reader):
+                    try:
+                        name = row.get("施設名", row.get("名称", "")).strip()
+                        address = row.get("住所", row.get("所在地", "")).strip()
+                        lat_str = row.get("緯度", "").strip()
+                        lon_str = row.get("経度", "").strip()
+
+                        if not name or not lat_str or not lon_str:
+                            continue
+
+                        latitude = float(lat_str)
+                        longitude = float(lon_str)
+
+                        # 災害種別を判定（値が "1", "○", "TRUE" 等なら対応）
+                        types: list[str] = []
+                        for col_name, type_key in disaster_column_map.items():
+                            val = row.get(col_name, "").strip()
+                            if val in ("1", "○", "TRUE", "true", "True", "yes", "Yes"):
+                                if type_key not in types:
+                                    types.append(type_key)
+
+                        # 一意なIDを生成（施設名+緯度経度からハッシュ）
+                        raw_id = f"{name}_{latitude}_{longitude}"
+                        shelter_id = f"csv_{hashlib.md5(raw_id.encode()).hexdigest()[:8]}"
+
+                        shelters.append(ShelterInfo(
+                            id=shelter_id,
+                            name=name,
+                            address=address,
+                            latitude=latitude,
+                            longitude=longitude,
+                            types=types,
+                            is_open=True,
+                        ))
+                    except (ValueError, KeyError) as row_err:
+                        logger.warning(f"CSV行 {idx + 1} の解析スキップ: {row_err}")
+                        continue
+
+            logger.info(f"CSVから{len(shelters)}件の避難所を読み込みました: {csv_path}")
+        except Exception as e:
+            logger.error(f"CSV読み込みエラー: {e}", exc_info=True)
+            return []
+
+        return shelters
 
     def _get_sample_shelters(self) -> list[ShelterInfo]:
         """サンプル避難所データ（東京都の主要避難所）"""
@@ -224,25 +319,33 @@ class ShelterService:
 
     async def fetch_and_update_shelter_data(self) -> bool:
         """
-        国土地理院からデータを取得して更新（管理用）
+        避難所データを再読み込みして更新する
+
+        設定されたCSVパスまたはJSONファイルからデータをリロードします。
+        CSVパスが設定されていない場合はJSON/サンプルデータにフォールバックします。
 
         Returns:
             bool: 成功時True
-        
-        Note:
-            この機能は将来の拡張用に予約されています。
-            現在はサンプルデータを使用しています。
-            
-            Issue: #避難所データ自動更新機能の実装
-            - 国土地理院のCSV/GeoJSONからデータを取得
-            - 定期的なデータ更新スケジューリング
-            - データ検証とエラーハンドリング
         """
-        logger.info(
-            "避難所データの更新機能は今後実装予定です。"
-            "現在はサンプルデータを使用しています。"
-        )
-        return True
+        logger.info("避難所データの更新を開始します...")
+        previous_count = len(self._shelters_cache)
+
+        try:
+            # CSVパスを設定から再取得（動的変更に対応）
+            from ..config import settings
+            self._csv_path = settings.shelter_csv_path
+
+            # データを再ロード
+            self._load_shelter_data()
+
+            current_count = len(self._shelters_cache)
+            logger.info(
+                f"避難所データ更新完了: {previous_count}件 -> {current_count}件"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"避難所データ更新エラー: {e}", exc_info=True)
+            return False
 
     def get_disaster_types(self) -> dict[str, str]:
         """
