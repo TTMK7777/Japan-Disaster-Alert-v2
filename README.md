@@ -111,7 +111,11 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values:
 | `GEMINI_API_KEY` | Google Gemini API key (get from [Google AI Studio](https://aistudio.google.com/apikey)) | Optional |
 | `GEMINI_MODEL` | Gemini model name | No |
 | `ANTHROPIC_API_KEY` | Anthropic Claude API key (get from [Anthropic Console](https://console.anthropic.com/)) | Optional |
-| `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | No |
+| `CORS_ORIGINS` | Comma-separated list of allowed CORS origins | No |
+| `VAPID_PUBLIC_KEY` | VAPID public key for Web Push notifications | Optional |
+| `VAPID_PRIVATE_KEY` | VAPID private key for Web Push notifications | Optional |
+| `VAPID_CLAIMS_EMAIL` | Contact email for VAPID claims | Optional |
+| `SHELTER_CSV_PATH` | Path to GSI shelter CSV file | Optional |
 | `HOST` | Server bind address | No |
 | `PORT` | Server port | No |
 | `NEXT_PUBLIC_API_URL` | Backend URL used by the frontend | No |
@@ -128,7 +132,13 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values:
 | `/api/v1/alerts` | GET | Active weather warnings |
 | `/api/v1/translate` | POST | Text translation |
 | `/api/v1/shelters` | GET | Nearby evacuation shelters |
+| `/api/v1/tsunami` | GET | Tsunami alert information |
+| `/api/v1/volcanoes` | GET | Volcano warning information |
+| `/api/v1/safety-guide` | GET | AI-generated safety guide |
 | `/api/v1/languages` | GET | Supported language list |
+| `/api/v1/push/subscribe` | POST | Register push notification subscription |
+| `/api/v1/push/unsubscribe` | POST | Remove push notification subscription |
+| `/api/v1/push/test` | POST | Send test notification (dev only) |
 
 **Common query parameters:**
 - `lang` — language code (e.g., `en`, `ko`, `zh`)
@@ -147,9 +157,14 @@ Japan-Disaster-Alert-v2/
 │   │   ├── services/
 │   │   │   ├── jma_service.py            # JMA weather API integration
 │   │   │   ├── p2p_service.py            # P2P earthquake API integration
-│   │   │   ├── translator.py             # Hybrid translation service
+│   │   │   ├── translator.py             # Translation service (facade)
+│   │   │   ├── ai_provider.py            # AI API integration (Gemini/Claude)
+│   │   │   ├── translation_cache.py      # File-based translation cache
+│   │   │   ├── translation_templates.py  # Static multilingual templates
+│   │   │   ├── safety_guide.py           # AI safety guide generation
 │   │   │   ├── location_translations.py  # Static location name translations
-│   │   │   ├── shelter_service.py        # Evacuation shelter lookup
+│   │   │   ├── shelter_service.py        # Evacuation shelter lookup (CSV/JSON)
+│   │   │   ├── push_service.py           # Web Push notification service
 │   │   │   ├── tsunami_service.py        # Tsunami alert service
 │   │   │   ├── volcano_service.py        # Volcano alert service
 │   │   │   └── warning_service.py        # General warning aggregation
@@ -182,7 +197,11 @@ Japan-Disaster-Alert-v2/
 
 ```bash
 cd backend
-pytest tests/ -v
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install pytest pytest-asyncio pytest-mock
+pytest tests/ -v     # 31 tests
 ```
 
 ## Disclaimer
