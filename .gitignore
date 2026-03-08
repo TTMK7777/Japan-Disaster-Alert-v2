@@ -82,3 +82,9 @@ htmlcov/
 tmp/
 temp/
 *.tmp
+
+# Security - credentials & keys
+*.p12
+credentials.json
+secrets.json
+.credentials.json
