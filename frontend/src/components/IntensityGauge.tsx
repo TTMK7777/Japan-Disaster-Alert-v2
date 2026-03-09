@@ -103,7 +103,7 @@ export default function IntensityGauge({ intensity, language, showLabel = true, 
           )}
 
           {/* プログレスバー */}
-          <div className={`relative ${s.container} bg-gray-200 rounded-full overflow-hidden ${s.gauge}`}>
+          <div className={`relative ${s.container} bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden ${s.gauge}`}>
             <div
               className={`absolute left-0 top-0 bottom-0 rounded-full transition-all duration-500`}
               style={{
@@ -122,7 +122,7 @@ export default function IntensityGauge({ intensity, language, showLabel = true, 
           </div>
 
           {/* 説明テキスト */}
-          {desc && <p className="text-xs text-gray-600 mt-1">{desc}</p>}
+          {desc && <p className="text-xs text-gray-600 dark:text-gray-300 mt-1">{desc}</p>}
         </div>
       </div>
     </div>
@@ -154,7 +154,7 @@ export function IntensityScale({ currentIntensity, language }: { currentIntensit
   const allIntensities = ['1', '2', '3', '4', '5弱', '5強', '6弱', '6強', '7'];
 
   return (
-    <div className="flex gap-1 items-end justify-center p-2 bg-gray-50 rounded-lg">
+    <div className="flex gap-1 items-end justify-center p-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
       {allIntensities.map((i) => {
         const data = intensityData[i as keyof typeof intensityData];
         const isActive = i === currentIntensity;
@@ -176,7 +176,7 @@ export function IntensityScale({ currentIntensity, language }: { currentIntensit
                 border: isActive ? `2px solid ${data.borderColor}` : 'none',
               }}
             />
-            <span className="text-[8px] mt-1 text-gray-600">
+            <span className="text-[8px] mt-1 text-gray-600 dark:text-gray-300">
               {i.replace('弱', '-').replace('強', '+')}
             </span>
           </div>

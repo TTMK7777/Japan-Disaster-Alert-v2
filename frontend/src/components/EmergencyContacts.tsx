@@ -230,7 +230,7 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
   return (
     <div className="space-y-4">
       {/* ヘッダー */}
-      <div className="bg-red-600 text-white rounded-lg shadow p-4">
+      <div className="bg-red-600 dark:bg-red-700 text-white rounded-lg shadow dark:shadow-gray-900/30 p-4">
         <h2 className="text-xl font-bold flex items-center gap-2">
           <PhoneIcon className="w-6 h-6" />
           {data.title}
@@ -240,11 +240,11 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
 
       {/* 各セクション */}
       {data.sections.map((section, sectionIdx) => (
-        <div key={sectionIdx} className="bg-white rounded-lg shadow overflow-hidden">
-          <h3 className="bg-gray-100 px-4 py-2 font-bold text-gray-800 border-b">
+        <div key={sectionIdx} className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/30 overflow-hidden">
+          <h3 className="bg-gray-100 dark:bg-gray-700 px-4 py-2 font-bold text-gray-800 dark:text-gray-100 border-b dark:border-gray-600">
             {section.title}
           </h3>
-          <div className="divide-y">
+          <div className="divide-y dark:divide-gray-700">
             {section.contacts.map((contact, contactIdx) => (
               <div key={contactIdx} className="p-4 flex items-center gap-4">
                 <a
@@ -256,16 +256,16 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
                   <span className="text-lg font-bold mt-1">{contact.number}</span>
                 </a>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-900 text-lg">{contact.name}</h4>
-                  <p className="text-gray-600 text-sm">{contact.description}</p>
+                  <h4 className="font-bold text-gray-900 dark:text-gray-100 text-lg">{contact.name}</h4>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm">{contact.description}</p>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {contact.available && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
                         {contact.available}
                       </span>
                     )}
                     {contact.languages && (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
                         {contact.languages}
                       </span>
                     )}
@@ -278,12 +278,12 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
       ))}
 
       {/* ヒント */}
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-        <h3 className="font-bold text-amber-800 flex items-center gap-2 mb-2">
+      <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4">
+        <h3 className="font-bold text-amber-800 dark:text-amber-200 flex items-center gap-2 mb-2">
           <InfoIcon className="w-5 h-5" />
           Tips
         </h3>
-        <ul className="space-y-1 text-amber-700 text-sm">
+        <ul className="space-y-1 text-amber-700 dark:text-amber-300 text-sm">
           {data.tips.map((tip, idx) => (
             <li key={idx} className="flex items-start gap-2">
               <span className="text-amber-500">•</span>

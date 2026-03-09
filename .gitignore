@@ -74,6 +74,12 @@ logs/
 htmlcov/
 .pytest_cache/
 .tox/
+test-results/
+playwright-report/
+
+# Database (generated)
+data/app.db
+data/push_subscriptions.json
 
 # Jupyter
 .ipynb_checkpoints/

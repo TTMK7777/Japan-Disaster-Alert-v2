@@ -95,7 +95,7 @@ export default function AlertBanner({ language }: AlertBannerProps) {
   const alertStyle = {
     emergency: 'bg-red-600 text-white pulse-alert',
     warning: 'bg-orange-500 text-white',
-    advisory: 'bg-yellow-400 text-gray-900',
+    advisory: 'bg-yellow-400 text-gray-900 dark:bg-yellow-500',
   };
 
   return (

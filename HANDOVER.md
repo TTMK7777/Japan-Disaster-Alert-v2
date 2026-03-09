@@ -1,6 +1,88 @@
 # Japan-Disaster-Alert 引継ぎ資料
 
-## 最終更新: 2026-02-23
+## 最終更新: 2026-03-09
+
+---
+
+## セッション: 2026-03-09
+
+### 作業サマリー
+| 項目 | 内容 |
+|------|------|
+| **作業内容** | AI-2G戦略レビュー → P0-P3一括実装 → コードドクター全修正 |
+| **変更ファイル** | 42ファイル（modified 30 + new 12）、+4,687/-950行 |
+| **テスト** | Backend 38件 + Frontend 59件（Vitest）+ E2E 28件（Playwright）= 計125件 |
+| **ステータス** | 完了 |
+| **手法** | AI-2G(3脳戦略) → 取締役会Go → 並列実装 → コードドクター(CRITICAL4+HIGH17→全修正) |
+
+### 変更詳細
+
+#### P0: フロントエンドテスト基盤
+- **Vitest + React Testing Library**: 59ユニットテスト（6テストファイル）
+- **Playwright E2E**: 28テスト（4スペックファイル、chromium）
+- テスト対象: page.tsx, EarthquakeList, TsunamiAlert, WarningBanner, IntensityGauge, translations
+
+#### P1: SSEリアルタイム配信 + 構造化ログ
+- **EventManager**: バックグラウンド10秒ポーリング、ID差分検出、ハートビート30秒
+- **SSE エンドポイント**: `/api/v1/events/stream`（MAX_SSE_CLIENTS=500でDoS防御）
+- **useEventStream フック**: EventSource + exponential backoff再接続（最大5回）+ 30秒ポーリングFB
+- **ConnectionStatus コンポーネント**: 接続状態インジケーター（緑/黄/赤）
+- **構造化ログ**: python-json-logger、本番JSON/開発プレーンテキスト自動切替
+
+#### P2: DB移行 + 地域セグメント通知
+- **SQLAlchemy async**: `database.py`（engine/session factory）、`db_models.py`（PushSubscriptionRow, TranslationCacheRow）
+- **翻訳キャッシュDB化**: L1メモリdict + L2 DB write（UPSERT）、SHA-256キー
+- **Push通知DB化**: JSON → SQLite（asyncpg-ready）、IntegrityError catchでupsert
+- **地域セグメント**: 47都道府県コード、preferred_regions(JSON)、earthquake_threshold、alert type preferences
+- **新エンドポイント**: `PUT /push/preferences`, `POST /push/preferences/query`, `GET /regions`
+- **Pydanticバリデーション**: endpoint(https://), language(allowlist), regions(6桁コード)
+
+#### P3: ダークモード完全対応
+- **useTheme フック**: light/dark/system、localStorage永続化、system preference listener
+- **ThemeToggle**: ☀/☾/◐ サイクルボタン
+- **FOUT防止**: blocking inline script in `<head>`
+- **全コンポーネント**: `dark:` Tailwindクラス適用
+- **CSS変数**: `.dark` セレクター、ダーク震度カラー
+
+#### コードドクター修正（CRITICAL 4 + HIGH 17）
+- [CRITICAL] Push endpoint GET→POST変更（URLパラメータ露出防止）
+- [CRITICAL] alert_type URL injection → VALID_ALERT_TYPES whitelist
+- [CRITICAL] ハイドレーションミスマッチ → useState('ja') + useEffect復元
+- [CRITICAL] ダークモードFOUT → blocking script
+- [HIGH] EventManager race condition → single-lock alive-list パターン
+- [HIGH] SSE DoS → MAX_SSE_CLIENTS=500 + 503レスポンス
+- [HIGH] useEventStream stale closure → connectRef
+- [HIGH] setState after unmount → isMountedRef
+- [HIGH] sanitizeLang() バリデーション追加
+- [HIGH] AbortController + 10sタイムアウト on fetchWarnings
+- [HIGH] PrefectureSelector extracted outside render
+- [HIGH] TsunamiAlert no-op button → onFindShelter prop
+- その他 HIGH 6件
+
+### 新規ファイル
+| ファイル | 説明 |
+|---------|------|
+| `backend/app/database.py` | SQLAlchemy async engine/session factory |
+| `backend/app/db_models.py` | テーブル定義（push_subscriptions, translation_cache） |
+| `backend/app/services/event_manager.py` | SSEイベント管理 |
+| `frontend/src/hooks/useEventStream.ts` | SSEクライアントフック |
+| `frontend/src/hooks/useTheme.ts` | テーマ管理フック |
+| `frontend/src/components/ThemeToggle.tsx` | テーマ切替ボタン |
+| `frontend/src/components/ConnectionStatus.tsx` | 接続状態インジケーター |
+| `frontend/vitest.config.ts` | Vitest設定 |
+| `frontend/playwright.config.ts` | Playwright設定 |
+| `frontend/src/test/setup.ts` | テストセットアップ |
+| `frontend/src/components/__tests__/*.test.tsx` | ユニットテスト6ファイル |
+| `frontend/e2e/*.spec.ts` | E2Eテスト4ファイル |
+
+### 次回やること / 残課題
+- **CI/CD**: GitHub Actions（Docker不要のテスト実行パイプライン）
+- **Sentry**: エラー監視統合（構造化ログは導入済み）
+- **AsyncClient共有化**: jma/p2p/tsunami service のhttpxクライアント共有（ai_providerパターン参照）
+- **push_service バッチ化**: asyncio.Semaphore(10) + gather
+- **EarthquakeList React.memo**: リストアイテム最適化
+- **Pydantic V2 ConfigDict**: class Config → SettingsConfigDict 移行
+- **PWAアイコン作成**
 
 ---
 

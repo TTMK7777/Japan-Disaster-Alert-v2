@@ -7,8 +7,12 @@ import EarthquakeList from '@/components/EarthquakeList';
 import EmergencyAlert from '@/components/EmergencyAlert';
 import WarningBanner from '@/components/WarningBanner';
 import EmergencyContacts from '@/components/EmergencyContacts';
+import ConnectionStatus from '@/components/ConnectionStatus';
+import ThemeToggle from '@/components/ThemeToggle';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
 import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/translations';
+import { useEventStream } from '@/hooks/useEventStream';
+import { useTheme } from '@/hooks/useTheme';
 import type { SupportedLanguage } from '@/i18n/types';
 
 // Error Boundary コンポーネント
@@ -39,10 +43,10 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 
       return (
         this.props.fallback || (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-6 text-center" role="alert">
-            <div className="text-red-600 text-4xl mb-2" aria-hidden="true">⚠️</div>
-            <h3 className="text-lg font-bold text-red-800 mb-2">{msg.title}</h3>
-            <p className="text-red-600 mb-4">{msg.message}</p>
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg p-6 text-center" role="alert">
+            <div className="text-red-600 dark:text-red-400 text-4xl mb-2" aria-hidden="true">⚠️</div>
+            <h3 className="text-lg font-bold text-red-800 dark:text-red-200 mb-2">{msg.title}</h3>
+            <p className="text-red-600 dark:text-red-400 mb-4">{msg.message}</p>
             <button
               onClick={() => window.location.reload()}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
@@ -62,7 +66,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
 const EarthquakeMap = dynamic(() => import('@/components/EarthquakeMap'), {
   ssr: false,
   loading: () => (
-    <div className="flex justify-center items-center h-64 bg-gray-100 rounded-lg">
+    <div className="flex justify-center items-center h-64 bg-gray-100 dark:bg-gray-800 rounded-lg">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-disaster-blue"></div>
     </div>
   ),
@@ -71,7 +75,7 @@ const EarthquakeMap = dynamic(() => import('@/components/EarthquakeMap'), {
 const ShelterMap = dynamic(() => import('@/components/ShelterMap'), {
   ssr: false,
   loading: () => (
-    <div className="flex justify-center items-center h-64 bg-gray-100 rounded-lg">
+    <div className="flex justify-center items-center h-64 bg-gray-100 dark:bg-gray-800 rounded-lg">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-disaster-blue"></div>
     </div>
   ),
@@ -120,6 +124,7 @@ export default function Home() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [earthquakeView, setEarthquakeView] = useState<EarthquakeViewType>('list');
   const [mounted, setMounted] = useState(false);
+  const { theme, setTheme } = useTheme();
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
   const [earthquakeLoading, setEarthquakeLoading] = useState(true);
   const [earthquakeError, setEarthquakeError] = useState<ApiError | null>(null);
@@ -135,12 +140,17 @@ export default function Home() {
     [language]
   );
 
-  // 地震データの取得
+  // 地震データの取得（ポーリングフォールバック・手動リトライ用）
   const fetchEarthquakes = useCallback(async () => {
     try {
       setEarthquakeLoading(true);
       setEarthquakeError(null);
-      const response = await fetch(`${API_BASE_URL}/api/v1/earthquakes?lang=${language}&limit=20`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(`${API_BASE_URL}/api/v1/earthquakes?lang=${language}&limit=20`, {
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
       if (response.ok) {
         const data = await response.json();
         setEarthquakes(data);
@@ -159,13 +169,69 @@ export default function Home() {
     }
   }, [language, getErrorMessage]);
 
+  // SSEコールバック（HIGH #5: useCallbackをJSXプロパティ外に引き上げ）
+  const handleEarthquake = useCallback((data: { earthquakes: any[]; updated_at: string }) => {
+    setEarthquakes(data.earthquakes);
+    setEarthquakeLoading(false);
+    setEarthquakeError(null);
+    setLastUpdate(new Date(data.updated_at));
+  }, []);
+
+  const handleTsunami = useCallback((data: { tsunamis: any[]; updated_at: string }) => {
+    // 津波データはWarningBannerやEmergencyAlertが個別にハンドリング
+    // ここでは最終更新時刻のみ更新
+    setLastUpdate(new Date(data.updated_at));
+  }, []);
+
+  // SSEイベントストリーム接続（ポーリングフォールバック内蔵）
+  const eventStream = useEventStream({
+    lang: language,
+    enabled: mounted,
+    onEarthquake: handleEarthquake,
+    onTsunami: handleTsunami,
+  });
+
+  // 初回マウント時のデータ取得（SSE接続前のフォールバック）
   useEffect(() => {
     fetchEarthquakes();
-  }, [fetchEarthquakes, lastUpdate]);
+  }, [fetchEarthquakes]);
 
   useEffect(() => {
-    document.documentElement.lang = language;
+    document.documentElement.lang = language === 'easy_ja' ? 'ja' : language;
+    localStorage.setItem('disaster-app-lang', language);
   }, [language]);
+
+  // localStorage から言語設定を復元（CRITICAL #3: hydration mismatch 回避）
+  useEffect(() => {
+    const stored = localStorage.getItem('disaster-app-lang') as SupportedLanguage;
+    if (stored) setLanguage(stored);
+  }, []);
+
+  // タブキーボードナビゲーション（HIGH #7）
+  const handleTabKeyDown = useCallback((e: React.KeyboardEvent, currentIndex: number) => {
+    const tabKeys = ['earthquake', 'warning', 'emergency', 'shelter'] as const;
+    let newIndex = currentIndex;
+
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      newIndex = (currentIndex + 1) % tabKeys.length;
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      newIndex = (currentIndex - 1 + tabKeys.length) % tabKeys.length;
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      newIndex = 0;
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      newIndex = tabKeys.length - 1;
+    } else {
+      return;
+    }
+
+    setActiveTab(tabKeys[newIndex]);
+    const tabButton = document.querySelector(`[role="tab"][data-tab="${tabKeys[newIndex]}"]`) as HTMLElement;
+    tabButton?.focus();
+  }, []);
 
   useEffect(() => {
     // クライアントサイドでのみ実行
@@ -173,22 +239,15 @@ export default function Home() {
     setLastUpdate(new Date());
     // マウント後に地図表示をデフォルトに
     setEarthquakeView('map');
-
-    // 30秒ごとにデータを更新
-    const interval = setInterval(() => {
-      setLastUpdate(new Date());
-    }, 30000);
-
-    return () => clearInterval(interval);
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 緊急警報オーバーレイ */}
       <EmergencyAlert language={language} />
 
       {/* ヘッダー */}
-      <header className="bg-disaster-blue text-white p-4 shadow-lg sticky top-0 z-40">
+      <header className="bg-disaster-blue dark:bg-gray-800 text-white p-4 shadow-lg dark:shadow-gray-900/30 sticky top-0 z-40">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
             <EarthquakeIcon size={32} />
@@ -197,22 +256,31 @@ export default function Home() {
               <p className="text-xs md:text-sm opacity-80">{t('subtitle')}</p>
             </div>
           </div>
-          <LanguageSelector currentLanguage={language} onLanguageChange={(lang: string) => setLanguage(lang as SupportedLanguage)} />
+          <div className="flex items-center gap-3">
+            <ConnectionStatus mode={eventStream.mode} connected={eventStream.connected} language={language} />
+            <ThemeToggle
+              theme={theme}
+              onToggle={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')}
+            />
+            <LanguageSelector currentLanguage={language} onLanguageChange={(lang: string) => setLanguage(lang as SupportedLanguage)} />
+          </div>
         </div>
       </header>
 
       {/* タブナビゲーション（アイコン付き・アクセシビリティ強化） */}
-      <nav className="bg-white border-b sticky top-[72px] z-30 shadow-sm" aria-label={language === 'ja' ? 'メインナビゲーション' : 'Main navigation'}>
+      <nav className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-[72px] z-30 shadow-sm dark:shadow-gray-900/30" aria-label={language === 'ja' ? 'メインナビゲーション' : 'Main navigation'}>
         <div className="max-w-4xl mx-auto flex" role="tablist" aria-label={language === 'ja' ? '情報カテゴリ' : 'Information categories'}>
-          {(['earthquake', 'warning', 'emergency', 'shelter'] as TabType[]).map((tab) => (
+          {(['earthquake', 'warning', 'emergency', 'shelter'] as TabType[]).map((tab, index) => (
             <button
               key={tab}
               id={`tab-${tab}`}
+              data-tab={tab}
               onClick={() => setActiveTab(tab)}
+              onKeyDown={(e) => handleTabKeyDown(e, index)}
               className={`flex-1 py-3 px-2 md:px-4 text-center font-medium transition-colors flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                 activeTab === tab
-                  ? 'text-disaster-blue border-b-2 border-disaster-blue bg-blue-50'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                  ? 'text-disaster-blue border-b-2 border-disaster-blue bg-blue-50 dark:bg-blue-900/30'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700'
               }`}
               aria-selected={activeTab === tab}
               aria-controls={`tabpanel-${tab}`}
@@ -229,8 +297,16 @@ export default function Home() {
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto p-4">
         {/* 最終更新時刻 */}
-        <div className="text-right text-sm text-gray-500 mb-4 flex items-center justify-end gap-2" suppressHydrationWarning>
-          <span className="inline-block w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+        <div className="text-right text-sm text-gray-500 dark:text-gray-400 mb-4 flex items-center justify-end gap-2" suppressHydrationWarning>
+          <span
+            className={`inline-block w-2 h-2 rounded-full ${
+              eventStream.mode === 'sse' && eventStream.connected
+                ? 'bg-green-500 animate-pulse'
+                : eventStream.mode === 'polling'
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
+            }`}
+          />
           <span suppressHydrationWarning>
             {t('lastUpdate')}: {mounted && lastUpdate ? lastUpdate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'en-US') : '--:--:--'}
           </span>
@@ -248,13 +324,13 @@ export default function Home() {
             >
               {/* リスト/地図切り替えボタン */}
               <div className="flex justify-end" role="group" aria-label={language === 'ja' ? '表示切替' : 'View toggle'}>
-                <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden shadow-sm">
+                <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shadow-sm dark:shadow-gray-900/30">
                   <button
                     onClick={() => setEarthquakeView('list')}
                     className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                       earthquakeView === 'list'
                         ? 'bg-disaster-blue text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     aria-pressed={earthquakeView === 'list'}
                   >
@@ -268,7 +344,7 @@ export default function Home() {
                     className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                       earthquakeView === 'map'
                         ? 'bg-disaster-blue text-white'
-                        : 'bg-white text-gray-700 hover:bg-gray-50'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
                     }`}
                     aria-pressed={earthquakeView === 'map'}
                   >
@@ -282,10 +358,10 @@ export default function Home() {
 
               {/* エラー表示 */}
               {earthquakeError && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center gap-3" role="alert">
+                <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex items-center gap-3" role="alert">
                   <span className="text-2xl" aria-hidden="true">⚠️</span>
                   <div className="flex-1">
-                    <p className="text-amber-800 font-medium">{earthquakeError.message}</p>
+                    <p className="text-amber-800 dark:text-amber-200 font-medium">{earthquakeError.message}</p>
                   </div>
                   {earthquakeError.retryable && (
                     <button
@@ -312,7 +388,7 @@ export default function Home() {
               {/* 地図表示 */}
               {earthquakeView === 'map' &&
                 (earthquakeLoading ? (
-                  <div className="flex justify-center items-center h-64 bg-white rounded-lg shadow" role="status" aria-label={t('loading')}>
+                  <div className="flex justify-center items-center h-64 bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/30" role="status" aria-label={t('loading')}>
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-disaster-blue" aria-hidden="true"></div>
                     <span className="sr-only">{t('loading')}</span>
                   </div>
@@ -343,8 +419,8 @@ export default function Home() {
       </div>
 
       {/* フッター */}
-      <footer className="bg-gray-100 border-t mt-8 py-4">
-        <div className="max-w-4xl mx-auto px-4 text-center text-sm text-gray-600">
+      <footer className="bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 mt-8 py-4">
+        <div className="max-w-4xl mx-auto px-4 text-center text-sm text-gray-600 dark:text-gray-300">
           <p>{t('dataSource')}</p>
           <p className="mt-1">{t('disclaimer')}</p>
         </div>

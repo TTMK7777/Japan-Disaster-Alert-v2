@@ -38,8 +38,8 @@ class TranslatorService:
         """初期化"""
         from ..config import settings
 
-        # キャッシュ
-        self._cache = TranslationCache(settings.translation_cache_file)
+        # キャッシュ（DB永続化。起動時に await cache_init() が必要）
+        self._cache = TranslationCache()
 
         # AIプロバイダー
         self._ai = AIProvider(
@@ -57,6 +57,10 @@ class TranslatorService:
         self._safety_guide = SafetyGuideGenerator(self._ai, self._cache)
 
         self.timeout = settings.api_timeout
+
+    async def cache_init(self) -> None:
+        """翻訳キャッシュをDBから復元する（起動時に呼び出す）"""
+        await self._cache.init()
 
     # ------------------------------------------------------------------
     # 地名翻訳
@@ -93,7 +97,7 @@ class TranslatorService:
             try:
                 translated = await self._ai.translate_text(location, target_lang)
                 if translated:
-                    self._cache.set(cache_key, translated)
+                    await self._cache.set(cache_key, translated)
                     return translated
             except Exception as e:
                 logger.error(f"AI API翻訳エラー ({provider}): {e}", exc_info=True)
@@ -180,7 +184,7 @@ class TranslatorService:
             try:
                 translated = await self._ai.translate_text(text, target_lang)
                 if translated:
-                    self._cache.set(cache_key, translated)
+                    await self._cache.set(cache_key, translated)
                     return translated
             except Exception as e:
                 logger.error(f"翻訳エラー ({provider}): {e}", exc_info=True)
@@ -395,7 +399,7 @@ class TranslatorService:
                         "description": result.get("description", ""),
                         "action": result.get("action", ""),
                     }
-                    self._cache.set(cache_key, json.dumps(warning_result, ensure_ascii=False))
+                    await self._cache.set(cache_key, json.dumps(warning_result, ensure_ascii=False))
                     return warning_result
             except Exception as e:
                 logger.error(f"警報テキスト生成エラー ({provider}): {e}", exc_info=True)
@@ -502,8 +506,7 @@ Important:
     # ------------------------------------------------------------------
 
     async def close(self) -> None:
-        """保持しているリソースを解放する（HTTPクライアント・キャッシュフラッシュ）"""
-        self._cache.flush()
+        """保持しているリソースを解放する（HTTPクライアント等）"""
         await self._ai.close()
 
     # ------------------------------------------------------------------

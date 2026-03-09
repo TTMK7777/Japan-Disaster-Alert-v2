@@ -26,6 +26,7 @@ class ShelterService:
         self.DATA_DIR = settings.shelter_data_dir
         self._csv_path = settings.shelter_csv_path
         self._shelters_cache: list[ShelterInfo] = []
+        self._shelter_index: dict[str, ShelterInfo] = {}
         self._load_shelter_data()
 
     # 災害種別マッピング
@@ -67,6 +68,8 @@ class ShelterService:
         except Exception as e:
             logger.error(f"避難所データロードエラー: {e}", exc_info=True)
             self._shelters_cache = self._get_sample_shelters()
+        finally:
+            self._shelter_index = {s.id: s for s in self._shelters_cache}
 
     def _load_shelters_from_csv(self, csv_path: str) -> list[ShelterInfo]:
         """
@@ -312,10 +315,7 @@ class ShelterService:
         Returns:
             ShelterInfo: 避難所情報
         """
-        for shelter in self._shelters_cache:
-            if shelter.id == shelter_id:
-                return shelter
-        return None
+        return self._shelter_index.get(shelter_id)
 
     async def fetch_and_update_shelter_data(self) -> bool:
         """

@@ -19,6 +19,17 @@ class JMAService:
         self.timeout = settings.api_timeout
         # 都道府県コードマッピング（共通ユーティリティから取得）
         self.AREA_CODES = AREA_CODES
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def get_weather_forecast(self, area_code: str) -> Optional[WeatherInfo]:
         """
@@ -35,23 +46,23 @@ class JMAService:
         """
         url = f"{self.BASE_URL}/forecast/data/overview_forecast/{area_code}.json"
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
 
-                return WeatherInfo(
-                    area=data.get("targetArea", ""),
-                    area_code=area_code,
-                    publishing_office=data.get("publishingOffice", "気象庁"),
-                    report_datetime=data.get("reportDatetime", ""),
-                    headline=data.get("headlineText"),
-                    text=data.get("text", "")
-                )
-            except httpx.HTTPError as e:
-                logger.error(f"気象情報取得エラー: {e}", exc_info=True)
-                return None
+            return WeatherInfo(
+                area=data.get("targetArea", ""),
+                area_code=area_code,
+                publishing_office=data.get("publishingOffice", "気象庁"),
+                report_datetime=data.get("reportDatetime", ""),
+                headline=data.get("headlineText"),
+                text=data.get("text", "")
+            )
+        except httpx.HTTPError as e:
+            logger.error(f"気象情報取得エラー: {e}", exc_info=True)
+            return None
 
     async def get_earthquake_list(self, limit: int = 10) -> list[dict]:
         """
@@ -65,15 +76,15 @@ class JMAService:
         """
         url = f"{self.BASE_URL}/quake/data/list.json"
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                return data[:limit]
-            except httpx.HTTPError as e:
-                logger.error(f"地震情報取得エラー: {e}", exc_info=True)
-                return []
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            return data[:limit]
+        except httpx.HTTPError as e:
+            logger.error(f"地震情報取得エラー: {e}", exc_info=True)
+            return []
 
     async def get_current_alerts(self) -> list[DisasterAlert]:
         """

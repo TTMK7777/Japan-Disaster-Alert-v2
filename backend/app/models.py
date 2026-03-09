@@ -1,9 +1,11 @@
 """
 データモデル定義
 """
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
+
+ALLOWED_LANGUAGES = {"ja", "en", "zh", "zh-TW", "ko", "vi", "th", "id", "ms", "tl", "fr", "de", "it", "es", "ne", "easy_ja"}
 
 
 class HealthResponse(BaseModel):
@@ -151,6 +153,82 @@ class PushSubscription(BaseModel):
     """Web Pushサブスクリプション"""
     endpoint: str
     keys: dict[str, str]  # p256dh, auth
+
+
+class PushSubscriptionWithPreferences(BaseModel):
+    """Web Pushサブスクリプション + 通知設定"""
+    endpoint: str = Field(..., min_length=1, max_length=2048)
+    keys: dict[str, str]
+    language: str = Field(default="ja", max_length=10)
+    preferred_regions: list[str] = Field(default=[])
+    earthquake_threshold: int = Field(default=3, ge=1, le=7)
+    tsunami_alerts: bool = True
+    weather_alerts: bool = True
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, v: str) -> str:
+        if v not in ALLOWED_LANGUAGES:
+            raise ValueError(f"未対応の言語: {v}")
+        return v
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, v: str) -> str:
+        if not v.startswith("https://"):
+            raise ValueError("エンドポイントはhttps://で始まる必要があります")
+        return v
+
+    @field_validator("preferred_regions")
+    @classmethod
+    def validate_regions(cls, v: list[str]) -> list[str]:
+        for r in v:
+            if not r.isdigit() or len(r) != 6:
+                raise ValueError(f"不正な地域コード: {r}")
+        return v
+
+
+class PushPreferencesUpdate(BaseModel):
+    """通知設定更新リクエスト"""
+    endpoint: str = Field(..., min_length=1, max_length=2048)
+    language: Optional[str] = Field(default=None, max_length=10)
+    preferred_regions: Optional[list[str]] = None
+    earthquake_threshold: Optional[int] = Field(default=None, ge=1, le=7)
+    tsunami_alerts: Optional[bool] = None
+    weather_alerts: Optional[bool] = None
+
+    @field_validator("language")
+    @classmethod
+    def validate_language(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and v not in ALLOWED_LANGUAGES:
+            raise ValueError(f"未対応の言語: {v}")
+        return v
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, v: str) -> str:
+        if not v.startswith("https://"):
+            raise ValueError("エンドポイントはhttps://で始まる必要があります")
+        return v
+
+    @field_validator("preferred_regions")
+    @classmethod
+    def validate_regions(cls, v: Optional[list[str]]) -> Optional[list[str]]:
+        if v is not None:
+            for r in v:
+                if not r.isdigit() or len(r) != 6:
+                    raise ValueError(f"不正な地域コード: {r}")
+        return v
+
+
+class PushPreferencesResponse(BaseModel):
+    """通知設定レスポンス"""
+    endpoint: str
+    language: str
+    preferred_regions: list[str]
+    earthquake_threshold: int
+    tsunami_alerts: bool
+    weather_alerts: bool
 
 
 class PushUnsubscribeRequest(BaseModel):

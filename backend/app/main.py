@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
+from starlette.responses import Response, StreamingResponse
 from datetime import datetime
 from typing import Optional
 
@@ -15,6 +15,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from .config import settings
+from .database import init_db, close_db
 from .utils.logger import get_logger
 from .utils.error_handler import handle_errors
 
@@ -32,9 +33,12 @@ from .models import (
     VolcanoWarning,
     SafetyGuide,
     PushSubscription,
+    PushSubscriptionWithPreferences,
     PushUnsubscribeRequest,
     PushTestRequest,
     PushNotificationResponse,
+    PushPreferencesUpdate,
+    PushPreferencesResponse,
 )
 from .services.jma_service import JMAService
 from .services.p2p_service import P2PQuakeService
@@ -44,6 +48,7 @@ from .services.tsunami_service import TsunamiService
 from .services.volcano_service import VolcanoService
 from .services.shelter_service import ShelterService
 from .services.push_service import PushNotificationService
+from .services.event_manager import EventManager
 
 # サービスインスタンス
 jma_service = JMAService()
@@ -54,6 +59,7 @@ tsunami_service = TsunamiService()
 volcano_service = VolcanoService()
 shelter_service = ShelterService()
 push_service = PushNotificationService()
+event_manager = EventManager()
 
 
 @asynccontextmanager
@@ -61,8 +67,16 @@ async def lifespan(app: FastAPI):
     """アプリケーションのライフサイクル管理"""
     # 起動時
     logger.info("災害対応AIシステム起動中...")
+    await init_db()
+    await translator.cache_init()
+    await event_manager.start(p2p_service, tsunami_service)
     yield
     # 終了時: リソース解放
+    await event_manager.stop()
+    await close_db()
+    await jma_service.close()
+    await p2p_service.close()
+    await tsunami_service.close()
     await translator.close()
     logger.info("災害対応AIシステム終了")
 
@@ -542,12 +556,17 @@ async def get_disaster_types():
 @app.post("/api/v1/push/subscribe", response_model=PushNotificationResponse)
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def push_subscribe(request: Request, subscription: PushSubscription):
+async def push_subscribe(request: Request, subscription: PushSubscriptionWithPreferences):
     """
-    プッシュ通知のサブスクリプションを登録
+    プッシュ通知のサブスクリプションを登録（通知設定付き）
 
     - **endpoint**: Push Service のエンドポイントURL
     - **keys**: VAPID認証キー（p256dh, auth）
+    - **language**: 通知言語（デフォルト: ja）
+    - **preferred_regions**: 監視地域コードリスト（空=全国）
+    - **earthquake_threshold**: 通知する最低震度（1-7、デフォルト: 3）
+    - **tsunami_alerts**: 津波警報の通知有無（デフォルト: true）
+    - **weather_alerts**: 気象警報の通知有無（デフォルト: true）
     """
     if not push_service.is_enabled:
         raise HTTPException(
@@ -555,7 +574,19 @@ async def push_subscribe(request: Request, subscription: PushSubscription):
             detail="プッシュ通知サービスは現在利用できません。VAPID鍵が設定されていません。"
         )
 
-    result = await push_service.subscribe(subscription)
+    # PushSubscriptionWithPreferences から基本サブスクリプション情報を抽出
+    base_subscription = PushSubscription(
+        endpoint=subscription.endpoint,
+        keys=subscription.keys,
+    )
+    result = await push_service.subscribe(
+        base_subscription,
+        language=subscription.language,
+        preferred_regions=subscription.preferred_regions or None,
+        earthquake_threshold=subscription.earthquake_threshold,
+        tsunami_alerts=subscription.tsunami_alerts,
+        weather_alerts=subscription.weather_alerts,
+    )
     return PushNotificationResponse(
         success=result,
         message="サブスクリプションを登録しました" if result else "サブスクリプション登録に失敗しました",
@@ -616,6 +647,104 @@ async def push_test(request: Request, body: PushTestRequest):
         success=sent_count > 0,
         message=f"テスト通知を{sent_count}件送信しました",
         sent_count=sent_count,
+    )
+
+
+@app.put("/api/v1/push/preferences", response_model=PushNotificationResponse)
+@handle_errors
+@limiter.limit(settings.rate_limit_general)
+async def update_push_preferences(request: Request, body: PushPreferencesUpdate):
+    """
+    プッシュ通知の設定を更新
+
+    - **endpoint**: サブスクリプションのエンドポイントURL
+    - **language**: 通知言語（ja, en, zh等）
+    - **preferred_regions**: 監視地域コードリスト（空=全国）
+    - **earthquake_threshold**: 通知する最低震度（1-7）
+    - **tsunami_alerts**: 津波警報の通知有無
+    - **weather_alerts**: 気象警報の通知有無
+    """
+    # None以外のフィールドのみ更新対象にする
+    update_fields = {}
+    if body.language is not None:
+        update_fields["language"] = body.language
+    if body.preferred_regions is not None:
+        update_fields["preferred_regions"] = body.preferred_regions
+    if body.earthquake_threshold is not None:
+        update_fields["earthquake_threshold"] = body.earthquake_threshold
+    if body.tsunami_alerts is not None:
+        update_fields["tsunami_alerts"] = body.tsunami_alerts
+    if body.weather_alerts is not None:
+        update_fields["weather_alerts"] = body.weather_alerts
+
+    result = await push_service.update_preferences(body.endpoint, **update_fields)
+    return PushNotificationResponse(
+        success=result,
+        message="通知設定を更新しました" if result else "サブスクリプションが見つかりません",
+    )
+
+
+@app.post("/api/v1/push/preferences/query", response_model=PushPreferencesResponse)
+@handle_errors
+@limiter.limit(settings.rate_limit_general)
+async def get_push_preferences(request: Request, body: PushUnsubscribeRequest):
+    """
+    プッシュ通知の設定を取得
+
+    - **endpoint**: サブスクリプションのエンドポイントURL（リクエストボディで送信）
+    """
+    prefs = await push_service.get_preferences(body.endpoint)
+    if not prefs:
+        raise HTTPException(status_code=404, detail="サブスクリプションが見つかりません")
+    return PushPreferencesResponse(**prefs)
+
+
+@app.get("/api/v1/regions")
+@limiter.exempt
+async def get_available_regions():
+    """通知可能な地域一覧（47都道府県）を取得"""
+    from .utils.area_codes import AREA_CODES
+    return {code: name for name, code in AREA_CODES.items()}
+
+
+# ========================================
+# SSEイベントストリームエンドポイント
+# ========================================
+
+@app.get("/api/v1/events/stream")
+@limiter.exempt
+async def events_stream():
+    """
+    SSEイベントストリーム
+
+    リアルタイムで災害情報の更新を受信するためのServer-Sent Eventsエンドポイント。
+    地震情報・津波情報の変更を検出し、自動的にクライアントへ配信する。
+
+    イベント種別:
+    - earthquake: 地震情報の更新
+    - tsunami: 津波警報の更新
+    - heartbeat: 接続維持用ハートビート（30秒間隔）
+    """
+    try:
+        queue = await event_manager.connect()
+    except ConnectionError:
+        return Response(status_code=503, content="Too many SSE connections")
+
+    async def event_generator():
+        try:
+            async for message in event_manager.generate_stream(queue):
+                yield message
+        finally:
+            await event_manager.disconnect(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
     )
 
 

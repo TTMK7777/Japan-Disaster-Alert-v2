@@ -61,7 +61,7 @@ class SafetyGuideGenerator:
                 if result:
                     result["cached"] = False
                     # キャッシュに保存
-                    self._cache.set(cache_key, json.dumps(result, ensure_ascii=False))
+                    await self._cache.set(cache_key, json.dumps(result, ensure_ascii=False))
                     return result
             except Exception as e:
                 logger.error(f"安全ガイド生成エラー ({provider}): {e}", exc_info=True)

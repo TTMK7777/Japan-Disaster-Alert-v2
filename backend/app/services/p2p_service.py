@@ -16,6 +16,17 @@ class P2PQuakeService:
         from ..config import settings
         self.BASE_URL = settings.p2p_base_url
         self.timeout = settings.api_timeout
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     # 震度変換マッピング
     INTENSITY_MAP = {
@@ -59,22 +70,22 @@ class P2PQuakeService:
             "limit": limit
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, params=params, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
+        client = self._get_client()
+        try:
+            response = await client.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
 
-                earthquakes = []
-                for item in data:
-                    eq = self._parse_earthquake(item)
-                    if eq:
-                        earthquakes.append(eq)
+            earthquakes = []
+            for item in data:
+                eq = self._parse_earthquake(item)
+                if eq:
+                    earthquakes.append(eq)
 
-                return earthquakes
-            except httpx.HTTPError as e:
-                logger.error(f"P2P地震情報取得エラー: {e}", exc_info=True)
-                return []
+            return earthquakes
+        except httpx.HTTPError as e:
+            logger.error(f"P2P地震情報取得エラー: {e}", exc_info=True)
+            return []
 
     def _parse_earthquake(self, data: dict) -> Optional[EarthquakeInfo]:
         """
@@ -176,11 +187,11 @@ class P2PQuakeService:
             "limit": limit
         }
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, params=params, timeout=self.timeout)
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logger.error(f"体感報告取得エラー: {e}", exc_info=True)
-                return []
+        client = self._get_client()
+        try:
+            response = await client.get(url, params=params, timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"体感報告取得エラー: {e}", exc_info=True)
+            return []

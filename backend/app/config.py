@@ -7,7 +7,7 @@
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # CORS設定（環境変数 CORS_ORIGINS で上書き可能、カンマ区切り）
     cors_origins: str = "http://localhost:3000,http://localhost:3001"
     
+    # データベース設定（SQLite: 開発 / PostgreSQL: 本番）
+    database_url: str = f"sqlite+aiosqlite:///{Path(__file__).parent.parent / 'data' / 'app.db'}"
+
     # キャッシュ設定
     cache_dir: Path = Path(__file__).parent.parent / "data"
     translation_cache_file: Path = Path(__file__).parent.parent / "data" / "translation_cache.json"
@@ -76,12 +79,31 @@ class Settings(BaseSettings):
         """開発環境でのみリロードを有効化"""
         return self.environment != "production"
     
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+    )
 
 
 # グローバル設定インスタンス
 settings = Settings()
+
+# 起動時にAPIキー未設定を警告
+import logging as _logging
+
+_config_logger = _logging.getLogger(__name__)
+if not settings.anthropic_api_key and not settings.gemini_api_key:
+    _config_logger.warning(
+        "ANTHROPIC_API_KEY / GEMINI_API_KEY が両方とも未設定です。AI翻訳・生成機能は利用できません。"
+    )
+
+# 本番環境でCORSがlocalhostのみの場合に警告
+if settings.environment == "production":
+    _cors_origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    if all("localhost" in o or "127.0.0.1" in o for o in _cors_origins):
+        _config_logger.warning(
+            "本番環境でCORS許可オリジンがlocalhostのみです。"
+            "環境変数 CORS_ORIGINS に本番ドメインを設定してください。"
+        )
 

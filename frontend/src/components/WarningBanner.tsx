@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '@/config/api';
 
 interface Warning {
@@ -148,6 +148,35 @@ const translations: Record<string, Record<string, string>> = {
   },
 };
 
+// HIGH #11: PrefectureSelector をレンダー外に定義
+interface PrefectureSelectorProps {
+  selectedAreaCode: string;
+  onAreaCodeChange: (code: string) => void;
+  language: string;
+}
+
+function PrefectureSelector({ selectedAreaCode, onAreaCodeChange, language }: PrefectureSelectorProps) {
+  const label = translations[language]?.selectArea || translations.ja.selectArea;
+  return (
+    <div className="mb-4">
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
+        {label}
+      </label>
+      <select
+        value={selectedAreaCode}
+        onChange={(e) => onAreaCodeChange(e.target.value)}
+        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+      >
+        {PREFECTURES.map((pref) => (
+          <option key={pref.code} value={pref.code}>
+            {language === 'ja' || language === 'easy_ja' ? pref.ja : `${pref.en} (${pref.ja})`}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export default function WarningBanner({
   areaCode: initialAreaCode = '130000',
   language = 'ja',
@@ -157,6 +186,10 @@ export default function WarningBanner({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedAreaCode, setSelectedAreaCode] = useState(initialAreaCode);
+
+  // HIGH #10: onWarningsUpdate を ref で保持し deps から除外
+  const onWarningsUpdateRef = useRef(onWarningsUpdate);
+  onWarningsUpdateRef.current = onWarningsUpdate;
 
   const t = useCallback(
     (key: keyof typeof translations.ja) =>
@@ -175,9 +208,15 @@ export default function WarningBanner({
     setError(null);
 
     try {
+      // HIGH #9: AbortController でタイムアウトを設定
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/alerts?area_code=${selectedAreaCode}&lang=${language}`
+        `${API_BASE_URL}/api/v1/alerts?area_code=${selectedAreaCode}&lang=${language}`,
+        { signal: controller.signal }
       );
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error('Failed to fetch warnings');
@@ -185,14 +224,14 @@ export default function WarningBanner({
 
       const data = await response.json();
       setWarnings(data);
-      onWarningsUpdate?.(data);
+      onWarningsUpdateRef.current?.(data);
     } catch (err) {
       console.error('Warning fetch error:', err);
       setError(t('error'));
     } finally {
       setLoading(false);
     }
-  }, [selectedAreaCode, language, t, onWarningsUpdate]);
+  }, [selectedAreaCode, language, t]);
 
   useEffect(() => {
     fetchWarnings();
@@ -247,17 +286,17 @@ export default function WarningBanner({
 
   if (loading) {
     return (
-      <div className="p-4 bg-gray-100 rounded-lg animate-pulse">
-        <div className="h-6 bg-gray-300 rounded w-1/3 mb-2"></div>
-        <div className="h-4 bg-gray-300 rounded w-2/3"></div>
+      <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse">
+        <div className="h-6 bg-gray-300 dark:bg-gray-600 rounded w-1/3 mb-2"></div>
+        <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-2/3"></div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="p-4 bg-red-100 border border-red-300 rounded-lg">
-        <p className="text-red-700">{error}</p>
+      <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg">
+        <p className="text-red-700 dark:text-red-300">{error}</p>
         <button
           onClick={fetchWarnings}
           className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -268,36 +307,20 @@ export default function WarningBanner({
     );
   }
 
-  // 都道府県セレクター共通コンポーネント
-  const PrefectureSelector = () => (
-    <div className="mb-4">
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {t('selectArea')}
-      </label>
-      <select
-        value={selectedAreaCode}
-        onChange={(e) => setSelectedAreaCode(e.target.value)}
-        className="w-full p-2 border border-gray-300 rounded-lg text-gray-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-      >
-        {PREFECTURES.map((pref) => (
-          <option key={pref.code} value={pref.code}>
-            {language === 'ja' || language === 'easy_ja' ? pref.ja : `${pref.en} (${pref.ja})`}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-
   if (warnings.length === 0) {
     return (
       <div className="space-y-3">
-        <PrefectureSelector />
-        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+        <PrefectureSelector
+          selectedAreaCode={selectedAreaCode}
+          onAreaCodeChange={setSelectedAreaCode}
+          language={language}
+        />
+        <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
           <div className="flex items-center gap-2">
             <span className="text-2xl">✅</span>
             <div>
-              <h3 className="font-bold text-green-800">{t('title')} - {prefectureName}</h3>
-              <p className="text-green-700">{t('noWarnings')}</p>
+              <h3 className="font-bold text-green-800 dark:text-green-200">{t('title')} - {prefectureName}</h3>
+              <p className="text-green-700 dark:text-green-300">{t('noWarnings')}</p>
             </div>
           </div>
         </div>
@@ -307,8 +330,12 @@ export default function WarningBanner({
 
   return (
     <div className="space-y-3">
-      <PrefectureSelector />
-      <h3 className="font-bold text-lg text-gray-800">{t('title')} - {prefectureName}</h3>
+      <PrefectureSelector
+        selectedAreaCode={selectedAreaCode}
+        onAreaCodeChange={setSelectedAreaCode}
+        language={language}
+      />
+      <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{t('title')} - {prefectureName}</h3>
       {warnings.map((warning, index) => (
         <div
           key={`${warning.id}-${index}`}

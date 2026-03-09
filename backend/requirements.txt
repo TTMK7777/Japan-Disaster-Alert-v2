@@ -13,6 +13,13 @@ slowapi==0.1.9
 # 環境変数管理
 python-dotenv==1.0.1
 
+# 構造化ログ
+python-json-logger==3.2.1
+
+# データベース
+sqlalchemy[asyncio]==2.0.36
+aiosqlite==0.21.0
+
 # プッシュ通知
 pywebpush==2.0.1
 
@@ -20,4 +27,3 @@ pywebpush==2.0.1
 # テスト
 pytest==8.0.0
 pytest-asyncio==0.23.5
-httpx==0.28.1  # TestClientで使用

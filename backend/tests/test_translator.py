@@ -15,7 +15,6 @@ def mock_settings():
         mock.api_timeout = 10.0
         mock.ai_timeout_translate = 10.0
         mock.ai_timeout_generate = 30.0
-        mock.translation_cache_file.exists.return_value = False
         yield mock
 
 
@@ -42,9 +41,9 @@ async def test_translate_location_no_change(translator):
 @pytest.mark.asyncio
 async def test_translate_cache_hit(translator):
     """キャッシュヒットのテスト"""
-    # キャッシュを手動で設定（TranslationCache の set メソッド経由）
+    # キャッシュを手動で設定（インメモリdictに直接書き込み — DBは不要）
     cache_key = translator._get_cache_key("未知の地名", "en")
-    translator._cache.set(cache_key, "Unknown Place")
+    translator._cache._cache[cache_key] = "Unknown Place"
 
     # モックのAI翻訳メソッド（呼ばれてはいけない）
     translator._translate_with_ai = AsyncMock()

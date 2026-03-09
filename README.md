@@ -5,12 +5,16 @@ A multilingual disaster information system for Japan, providing real-time earthq
 ## Features
 
 - **Real-time Earthquake Data** — Live feeds from P2P earthquake network with intensity maps
+- **SSE Real-time Streaming** — Server-Sent Events for instant disaster updates with polling fallback
 - **JMA Weather Alerts** — Prefecture-level weather warnings via Japan Meteorological Agency API
 - **16-Language Support** — Covers the top 10 tourist-origin countries visiting Japan (2024), plus residents
-- **Hybrid Translation Engine** — Three-layer approach: static location mapping → AI translation (Gemini/Claude) → cache
+- **Hybrid Translation Engine** — Three-layer approach: static location mapping → AI translation (Gemini/Claude) → DB-backed cache
+- **Regional Notifications** — Prefecture-based push notification preferences with earthquake threshold filtering
 - **Shelter Finder** — Nearby evacuation shelter search based on current location
+- **Dark Mode** — Light / Dark / System theme with persistent preference and FOUT prevention
 - **PWA Ready** — Offline support via Service Worker with installable manifest
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
+- **Comprehensive Testing** — 125+ tests (Vitest unit, Playwright E2E, pytest backend)
 
 ## Supported Languages
 
@@ -37,15 +41,20 @@ A multilingual disaster information system for Japan, providing real-time earthq
 
 ### Backend
 - **Python 3.11+** with **FastAPI** and **Uvicorn**
+- **SQLAlchemy (async)** + **aiosqlite** — async database (PostgreSQL-ready)
 - **httpx** — async HTTP client for JMA and P2P APIs
 - **slowapi** — per-route rate limiting
+- **pywebpush** — Web Push notifications (VAPID)
+- **python-json-logger** — structured JSON logging (production)
 - **pydantic-settings** — environment-based configuration
 - **Gemini API / Claude API** — AI-powered translation fallback (optional)
 
 ### Frontend
 - **Next.js 15** with **React 19** and **TypeScript**
-- **Tailwind CSS** — utility-first styling
+- **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
+- **Vitest** + **React Testing Library** — unit testing (59 tests)
+- **Playwright** — E2E testing (28 tests)
 - **PWA** — Service Worker for offline capability
 
 ### Data Sources
@@ -118,6 +127,7 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values:
 | `SHELTER_CSV_PATH` | Path to GSI shelter CSV file | Optional |
 | `HOST` | Server bind address | No |
 | `PORT` | Server port | No |
+| `DATABASE_URL` | Database URL (default: SQLite in `data/app.db`) | No |
 | `NEXT_PUBLIC_API_URL` | Backend URL used by the frontend | No |
 
 > AI API keys are fully optional. The system works without them using the built-in static location translation table (75 locations x 15 languages).
@@ -139,6 +149,10 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values:
 | `/api/v1/push/subscribe` | POST | Register push notification subscription |
 | `/api/v1/push/unsubscribe` | POST | Remove push notification subscription |
 | `/api/v1/push/test` | POST | Send test notification (dev only) |
+| `/api/v1/push/preferences` | PUT | Update notification preferences |
+| `/api/v1/push/preferences/query` | POST | Query notification preferences |
+| `/api/v1/regions` | GET | Available prefecture region codes |
+| `/api/v1/events/stream` | GET | SSE real-time event stream |
 
 **Common query parameters:**
 - `lang` — language code (e.g., `en`, `ko`, `zh`)
@@ -154,24 +168,27 @@ Japan-Disaster-Alert-v2/
 │   │   ├── models.py                     # Pydantic data models
 │   │   ├── config.py                     # Environment-based settings
 │   │   ├── exceptions.py                 # Custom exception classes
+│   │   ├── database.py                   # Async SQLAlchemy engine/session
+│   │   ├── db_models.py                  # SQLAlchemy table definitions
 │   │   ├── services/
 │   │   │   ├── jma_service.py            # JMA weather API integration
 │   │   │   ├── p2p_service.py            # P2P earthquake API integration
+│   │   │   ├── event_manager.py          # SSE event management & broadcasting
 │   │   │   ├── translator.py             # Translation service (facade)
 │   │   │   ├── ai_provider.py            # AI API integration (Gemini/Claude)
-│   │   │   ├── translation_cache.py      # File-based translation cache
+│   │   │   ├── translation_cache.py      # DB-backed translation cache (L1 mem + L2 DB)
 │   │   │   ├── translation_templates.py  # Static multilingual templates
 │   │   │   ├── safety_guide.py           # AI safety guide generation
 │   │   │   ├── location_translations.py  # Static location name translations
 │   │   │   ├── shelter_service.py        # Evacuation shelter lookup (CSV/JSON)
-│   │   │   ├── push_service.py           # Web Push notification service
+│   │   │   ├── push_service.py           # Web Push + regional notifications (DB-backed)
 │   │   │   ├── tsunami_service.py        # Tsunami alert service
 │   │   │   ├── volcano_service.py        # Volcano alert service
 │   │   │   └── warning_service.py        # General warning aggregation
 │   │   └── utils/
 │   │       ├── area_codes.py             # JMA area code mapping
 │   │       ├── error_handler.py          # Unified error handling
-│   │       └── logger.py                 # Structured logging
+│   │       └── logger.py                 # Structured JSON logging
 │   ├── tests/
 │   ├── requirements.txt
 │   ├── run.py
@@ -180,9 +197,13 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
+│   │   │   └── __tests__/               # Vitest unit tests (59 tests)
+│   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
+│   │   ├── test/                         # Test setup (Vitest)
 │   │   └── types/                        # TypeScript type definitions
+│   ├── e2e/                              # Playwright E2E tests (28 tests)
 │   ├── public/
 │   │   ├── sw.js                         # Service Worker
 │   │   └── manifest.json                 # PWA manifest
@@ -195,13 +216,30 @@ Japan-Disaster-Alert-v2/
 
 ## Running Tests
 
+### Backend (pytest)
+
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pip install pytest pytest-asyncio pytest-mock
-pytest tests/ -v     # 31 tests
+pytest tests/ -v     # 38 tests
+```
+
+### Frontend (Vitest)
+
+```bash
+cd frontend
+npm install
+npx vitest run       # 59 unit tests
+```
+
+### E2E (Playwright)
+
+```bash
+cd frontend
+npx playwright install chromium
+npx playwright test   # 28 E2E tests
 ```
 
 ## Disclaimer

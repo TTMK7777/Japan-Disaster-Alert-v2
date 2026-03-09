@@ -157,16 +157,24 @@ body {
 }
 
 /* ========================================
-   ダークモード対応（将来用）
+   ダークモード対応（class ベース）
    ======================================== */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 17, 24, 39;
-    --background-end-rgb: 17, 24, 39;
-  }
+.dark {
+  --foreground-rgb: 255, 255, 255;
+  --background-start-rgb: 17, 24, 39;
+  --background-end-rgb: 17, 24, 39;
 }
+
+/* ダークモード: 震度別カラー */
+.dark .intensity-1 { background-color: #374151; color: #e5e7eb; }
+.dark .intensity-2 { background-color: #1e5f8a; color: white; }
+.dark .intensity-3 { background-color: #1a3a8f; color: white; }
+.dark .intensity-4 { background-color: #8a7a3a; color: white; }
+/* intensity-5 以上は既に暗い/濃い色のためダークモードでもそのまま使用 */
+
+/* ダークモード: 警報レベル別カラー */
+.dark .alert-advisory { background-color: #92400e; color: white; }
 
 /* ========================================
    アクセシビリティ：モーション軽減

@@ -17,6 +17,17 @@ class TsunamiService:
         from ..config import settings
         self.BASE_URL = settings.jma_base_url
         self.timeout = settings.api_timeout
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     # 津波警報レベルマッピング
     TSUNAMI_LEVELS = {
@@ -39,15 +50,15 @@ class TsunamiService:
         """
         url = f"{self.BASE_URL}/tsunami/data/list.json"
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                return self._parse_tsunami_list(data[:limit])
-            except httpx.HTTPError as e:
-                logger.error(f"津波情報取得エラー: {e}", exc_info=True)
-                return []
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            return self._parse_tsunami_list(data[:limit])
+        except httpx.HTTPError as e:
+            logger.error(f"津波情報取得エラー: {e}", exc_info=True)
+            return []
 
     def _parse_tsunami_list(self, data: list) -> list[TsunamiInfo]:
         """APIレスポンスを津波情報リストにパース"""
@@ -157,11 +168,11 @@ class TsunamiService:
         """
         url = f"{self.BASE_URL}/tsunami/data/{json_filename}"
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                return response.json()
-            except httpx.HTTPError as e:
-                logger.error(f"津波詳細情報取得エラー: {e}", exc_info=True)
-                return None
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"津波詳細情報取得エラー: {e}", exc_info=True)
+            return None
