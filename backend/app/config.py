@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         return self.environment != "production"
     
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(str(Path.home() / ".env.local"), ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
     )
