@@ -297,11 +297,14 @@ export default function WarningBanner({
                     : warning.title}
                 </h4>
               </div>
-              <p className="mt-1 text-sm opacity-90">
-                {language !== 'ja' && warning.description_translated
+              <div className="mt-1 text-sm opacity-90 space-y-1">
+                {(language !== 'ja' && warning.description_translated
                   ? warning.description_translated
-                  : warning.description}
-              </p>
+                  : warning.description
+                ).split('\n').map((line, i) => (
+                  <p key={i}>{line}</p>
+                ))}
+              </div>
               <p className="mt-2 text-xs opacity-75">
                 📍 {warning.area} | {t('issuedAt')}: {new Date(warning.issued_at).toLocaleString(
                   getLocale(language)

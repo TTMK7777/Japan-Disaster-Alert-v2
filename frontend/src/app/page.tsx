@@ -9,6 +9,8 @@ import WarningBanner from '@/components/WarningBanner';
 import EmergencyContacts from '@/components/EmergencyContacts';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import ThemeToggle from '@/components/ThemeToggle';
+import InstallBanner from '@/components/InstallBanner';
+import PushNotificationBanner from '@/components/PushNotificationBanner';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
 import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/translations';
 import { useEventStream } from '@/hooks/useEventStream';
@@ -242,7 +244,7 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <main id="main-content" className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 緊急警報オーバーレイ */}
       <EmergencyAlert language={language} />
 
@@ -327,7 +329,7 @@ export default function Home() {
                 <div className="inline-flex rounded-lg border border-gray-300 dark:border-gray-600 overflow-hidden shadow-sm dark:shadow-gray-900/30">
                   <button
                     onClick={() => setEarthquakeView('list')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
+                    className={`px-4 py-2.5 min-h-[44px] text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                       earthquakeView === 'list'
                         ? 'bg-disaster-blue text-white'
                         : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -341,7 +343,7 @@ export default function Home() {
                   </button>
                   <button
                     onClick={() => setEarthquakeView('map')}
-                    className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
+                    className={`px-4 py-2.5 min-h-[44px] text-sm font-medium transition-colors flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                       earthquakeView === 'map'
                         ? 'bg-disaster-blue text-white'
                         : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -405,8 +407,9 @@ export default function Home() {
           )}
 
           {activeTab === 'emergency' && (
-            <div id="tabpanel-emergency" role="tabpanel" aria-labelledby="tab-emergency" tabIndex={0}>
+            <div id="tabpanel-emergency" role="tabpanel" aria-labelledby="tab-emergency" tabIndex={0} className="space-y-4">
               <EmergencyContacts language={language} />
+              <PushNotificationBanner language={language} />
             </div>
           )}
 
@@ -417,6 +420,8 @@ export default function Home() {
           )}
         </ErrorBoundary>
       </div>
+
+      <InstallBanner language={language} />
 
       {/* フッター */}
       <footer className="bg-gray-100 dark:bg-gray-800 border-t dark:border-gray-700 mt-8 py-4">

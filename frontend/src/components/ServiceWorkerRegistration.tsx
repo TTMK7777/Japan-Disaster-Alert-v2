@@ -29,6 +29,9 @@ export default function ServiceWorkerRegistration() {
                     console.log('[App] Service Worker installed for the first time');
                   }
                 }
+                if (installingWorker.state === 'activated') {
+                  console.log('[SW] New version available, please refresh.');
+                }
               };
             }
           };

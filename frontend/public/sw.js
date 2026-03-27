@@ -2,7 +2,7 @@
 // Version: 1.0.0
 // オフライン対応とキャッシュ戦略
 
-const CACHE_NAME = 'disaster-alert-v1';
+const CACHE_NAME = 'disaster-alert-v2';
 const OFFLINE_URL = '/offline.html';
 
 // キャッシュするアセット
@@ -10,6 +10,8 @@ const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/offline.html',
+  '/icons/icon-192x192.png',
+  '/icons/icon-512x512.png',
 ];
 
 // キャッシュ戦略の設定
@@ -49,8 +51,14 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   console.log('[SW] Activating Service Worker...');
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
+    (async () => {
+      // Navigation Preload を有効化（対応ブラウザのみ）
+      if (self.registration.navigationPreload) {
+        await self.registration.navigationPreload.enable();
+      }
+
+      const cacheNames = await caches.keys();
+      await Promise.all(
         cacheNames
           .filter((name) => name !== CACHE_NAME)
           .map((name) => {
@@ -58,7 +66,7 @@ self.addEventListener('activate', (event) => {
             return caches.delete(name);
           })
       );
-    })
+    })()
   );
   // 即座にコントロールを取得
   self.clients.claim();

@@ -458,7 +458,8 @@ export default function ShelterMap({ language }: ShelterMapProps) {
             <button
               key={type}
               onClick={() => setFilterType(type)}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              aria-label={type === 'all' ? t('all') : type === 'earthquake' ? t('earthquakeFilter') : type === 'tsunami' ? t('tsunamiFilter') : type === 'flood' ? t('floodFilter') : t('fireFilter')}
+              className={`px-4 py-2.5 min-h-[44px] rounded-full text-sm font-medium transition-colors ${
                 filterType === type
                   ? 'bg-blue-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'

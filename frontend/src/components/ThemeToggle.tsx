@@ -12,7 +12,7 @@ export default function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
   return (
     <button
       onClick={onToggle}
-      className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition-colors text-sm"
+      className="flex items-center justify-center gap-1 p-2 min-h-[44px] min-w-[44px] rounded-lg bg-white/20 text-white border border-white/30 hover:bg-white/30 transition-colors text-sm"
       aria-label={`Theme: ${labels[theme]}`}
       title={`Theme: ${labels[theme]}`}
     >

@@ -99,6 +99,39 @@ class WarningService:
         "easy_ja": "{area}に {warning}が でています。",
     }
 
+    # 気象庁定義に基づく注意事項（警報コード別）
+    WARNING_GUIDANCE = {
+        "02": {"ja": "猛吹雪による交通障害、視界不良に警戒。外出を控え、車の運転は極力避けてください。", "en": "Beware of traffic disruption and poor visibility from blizzard. Stay indoors and avoid driving."},
+        "03": {"ja": "土砂災害、浸水、河川増水に警戒。崖や川の近くから離れ、早めの避難を。", "en": "Risk of landslides, flooding, and river overflow. Stay away from slopes and rivers. Evacuate early."},
+        "04": {"ja": "河川の増水や氾濫に警戒。河川敷や低地から離れてください。", "en": "Risk of river flooding and overflow. Stay away from riverbanks and low-lying areas."},
+        "05": {"ja": "暴風による飛来物、建物損壊に警戒。不要な外出を避け、頑丈な建物内に。", "en": "Risk of flying debris and building damage. Stay indoors in a sturdy building."},
+        "06": {"ja": "大雪による交通障害、建物倒壊に警戒。除雪時の事故にも注意。", "en": "Risk of traffic disruption and building collapse from heavy snow. Be careful when removing snow."},
+        "07": {"ja": "高波による沿岸施設被害、海岸浸食に警戒。海岸に近づかないでください。", "en": "Risk of coastal damage from high waves. Stay away from the coast."},
+        "08": {"ja": "高潮による浸水に警戒。沿岸低地から離れ、早めの避難を。", "en": "Risk of flooding from storm surge. Evacuate from low-lying coastal areas early."},
+        "10": {"ja": "土砂災害や浸水に注意。崖や水路の近くでは特に注意してください。", "en": "Watch for landslides and flooding. Be especially careful near slopes and waterways."},
+        "12": {"ja": "大雪による交通障害に注意。路面凍結、スリップ事故に気をつけて。", "en": "Watch for traffic disruption from snow. Be careful of icy roads and slipping."},
+        "13": {"ja": "吹雪による視界不良に注意。車の運転時は速度を落としてください。", "en": "Watch for poor visibility from blowing snow. Reduce speed when driving."},
+        "14": {"ja": "落雷、突風、急な強い雨、降ひょうに注意。屋外では建物内に避難を。", "en": "Watch for lightning, gusts, sudden heavy rain, and hail. Seek shelter indoors if outside."},
+        "15": {"ja": "強風による飛来物に注意。看板やトタン屋根の固定を確認してください。", "en": "Watch for flying objects from strong winds. Secure loose items and check signage."},
+        "16": {"ja": "高波に注意。海岸での釣りやレジャーは控えてください。", "en": "Watch for high waves. Avoid fishing and leisure activities on the coast."},
+        "17": {"ja": "融雪による土砂災害、浸水に注意。雪崩にも警戒してください。", "en": "Watch for landslides and flooding from snowmelt. Also beware of avalanches."},
+        "18": {"ja": "河川の増水に注意。河川敷や低地での活動を控えてください。", "en": "Watch for rising river levels. Avoid activities on riverbanks and in low-lying areas."},
+        "19": {"ja": "高潮に注意。満潮時刻前後は特に注意してください。", "en": "Watch for storm surge. Be especially careful around high tide."},
+        "20": {"ja": "濃霧による交通障害に注意。車は速度を落とし、フォグランプを使用してください。", "en": "Watch for traffic disruption from fog. Reduce speed and use fog lights."},
+        "21": {"ja": "空気の乾燥による火災に注意。火の取り扱いに十分注意してください。", "en": "Watch for fire risk due to dry air. Handle fire with extra caution."},
+        "22": {"ja": "なだれに注意。急斜面やなだれ危険箇所に近づかないでください。", "en": "Watch for avalanches. Stay away from steep slopes and avalanche-prone areas."},
+        "23": {"ja": "低温による農作物被害、水道管凍結に注意。防寒対策をしてください。", "en": "Watch for crop damage and frozen pipes from low temperatures. Take cold-weather precautions."},
+        "24": {"ja": "霜による農作物被害に注意。農業関係者は対策を。", "en": "Watch for crop damage from frost. Farmers should take protective measures."},
+        "25": {"ja": "着氷による送電線や船舶への被害に注意。", "en": "Watch for damage to power lines and vessels from icing."},
+        "26": {"ja": "着雪による送電線被害、交通障害に注意。", "en": "Watch for power line damage and traffic disruption from snow accretion."},
+        "32": {"ja": "数十年に一度の猛吹雪。命に関わる危険。ただちに頑丈な建物に避難してください。", "en": "Once-in-decades blizzard. Life-threatening danger. Seek shelter immediately."},
+        "33": {"ja": "数十年に一度の大雨。重大な災害の危険。ただちに命を守る行動をとってください。", "en": "Once-in-decades heavy rain. Serious disaster risk. Take immediate life-saving action."},
+        "35": {"ja": "数十年に一度の暴風。命に関わる危険。ただちに頑丈な建物に避難してください。", "en": "Once-in-decades storm. Life-threatening danger. Seek shelter immediately."},
+        "36": {"ja": "数十年に一度の大雪。重大な災害の危険。外出を控え、安全を確保してください。", "en": "Once-in-decades heavy snow. Serious disaster risk. Stay indoors and ensure safety."},
+        "37": {"ja": "数十年に一度の高波。命に関わる危険。沿岸部からただちに離れてください。", "en": "Once-in-decades high waves. Life-threatening danger. Move away from the coast immediately."},
+        "38": {"ja": "数十年に一度の高潮。命に関わる危険。ただちに高い場所に避難してください。", "en": "Once-in-decades storm surge. Life-threatening danger. Evacuate to high ground immediately."},
+    }
+
     # 都道府県コードマッピング（共通ユーティリティから取得）
     AREA_CODES = AREA_CODES
 
@@ -151,50 +184,80 @@ class WarningService:
         return template.format(area=area_name, warning=warning_name)
 
     def _parse_warnings(self, data: dict, area_code: str, lang: str = "ja") -> list[DisasterAlert]:
-        """APIレスポンスを警報リストにパース"""
-        alerts = []
+        """APIレスポンスを警報リストにパース（重複排除済み）"""
         report_datetime = data.get("reportDatetime", "")
 
-        # areaTypesから警報情報を抽出
         area_types = data.get("areaTypes", [])
         if not area_types:
-            return alerts
+            return []
 
-        # 最初のエリアタイプ（広域）から情報を取得
+        # 都道府県名をフォールバック用に取得
+        prefecture_name = self.AREA_CODES.get(
+            next((k for k, v in self.AREA_CODES.items() if v == area_code), ""), area_code
+        )
+        # reverse lookup: area_code -> prefecture name
+        for pref, code in self.AREA_CODES.items():
+            if code == area_code:
+                prefecture_name = pref
+                break
+
+        # 警報コード別にグループ化して重複排除
+        grouped: dict[str, list[str]] = {}  # code -> [area_name_ja, ...]
         for area_type in area_types:
             areas = area_type.get("areas", [])
             for area in areas:
-                area_name_ja = area.get("name", "")
-                area_name = self._get_area_name(area_name_ja, lang)
+                area_name_ja = area.get("name", "") or prefecture_name
                 warnings = area.get("warnings", [])
-
                 for warning in warnings:
                     code = warning.get("code", "")
                     status = warning.get("status", "")
-
-                    # 発表中の警報のみ処理
                     if status == "発表" and code in self.WARNING_CODES:
-                        warning_info = self.WARNING_CODES[code]
-                        warning_name = self._get_warning_name(code, lang)
-                        alert_id = f"{area_code}_{code}_{datetime.now().strftime('%Y%m%d%H%M')}"
+                        if code not in grouped:
+                            grouped[code] = []
+                        if area_name_ja not in grouped[code]:
+                            grouped[code].append(area_name_ja)
 
-                        # 日本語のタイトルと翻訳版の両方を保持
-                        title_ja = self._get_warning_name(code, "ja")
-                        title_translated = warning_name if lang != "ja" else None
-                        description = self._get_description(area_name, warning_name, lang)
+        # グループ化された警報をアラートに変換
+        alerts = []
+        for code, area_names_ja in grouped.items():
+            warning_info = self.WARNING_CODES[code]
+            warning_name = self._get_warning_name(code, lang)
+            title_ja = self._get_warning_name(code, "ja")
+            title_translated = warning_name if lang != "ja" else None
 
-                        alerts.append(DisasterAlert(
-                            id=alert_id,
-                            type=self._get_alert_type(warning_info["severity"]),
-                            title=title_ja,
-                            title_translated=title_translated,
-                            description=self._get_description(area_name_ja, title_ja, "ja"),
-                            description_translated=description if lang != "ja" else None,
-                            area=area_name,
-                            issued_at=report_datetime,
-                            expires_at=None,
-                            severity=warning_info["severity"]
-                        ))
+            # 対象地域をまとめて表示
+            combined_area_ja = "、".join(area_names_ja)
+            combined_area = ", ".join(self._get_area_name(a, lang) for a in area_names_ja)
+
+            description_ja = self._get_description(combined_area_ja, title_ja, "ja")
+            description_translated = self._get_description(combined_area, warning_name, lang) if lang != "ja" else None
+
+            # 気象庁定義に基づく注意事項を付加
+            guidance = self.WARNING_GUIDANCE.get(code, {})
+            guidance_text = guidance.get(lang, guidance.get("en", ""))
+            if guidance_text:
+                description_ja += f"\n⚠ {guidance.get('ja', '')}"
+                if description_translated:
+                    description_translated += f"\n⚠ {guidance_text}"
+
+            alert_id = f"{area_code}_{code}_{datetime.now().strftime('%Y%m%d')}"
+
+            alerts.append(DisasterAlert(
+                id=alert_id,
+                type=self._get_alert_type(warning_info["severity"]),
+                title=title_ja,
+                title_translated=title_translated,
+                description=description_ja,
+                description_translated=description_translated,
+                area=combined_area,
+                issued_at=report_datetime,
+                expires_at=None,
+                severity=warning_info["severity"]
+            ))
+
+        # 重要度順にソート (extreme > high > medium > low)
+        severity_order = {"extreme": 0, "high": 1, "medium": 2, "low": 3}
+        alerts.sort(key=lambda a: severity_order.get(a.severity, 4))
 
         return alerts
 
@@ -223,31 +286,38 @@ class WarningService:
         if not area_types:
             return []
 
-        # 1. 翻訳が必要な警報メタデータを収集
-        pending_items: list[dict] = []
+        # 1. 警報コード別にグループ化して重複排除
+        grouped: dict[str, list[str]] = {}
         for area_type in area_types:
             areas = area_type.get("areas", [])
             for area in areas:
                 area_name_ja = area.get("name", "")
                 warnings = area.get("warnings", [])
-
                 for warning in warnings:
                     code = warning.get("code", "")
                     status = warning.get("status", "")
-
                     if status == "発表" and code in self.WARNING_CODES:
-                        warning_info = self.WARNING_CODES[code]
-                        title_ja = self._get_warning_name(code, "ja")
-                        severity = warning_info.get("severity", "medium")
-                        alert_id = f"{area_code}_{code}_{datetime.now().strftime('%Y%m%d%H%M')}"
+                        if code not in grouped:
+                            grouped[code] = []
+                        if area_name_ja not in grouped[code]:
+                            grouped[code].append(area_name_ja)
 
-                        pending_items.append({
-                            "code": code,
-                            "title_ja": title_ja,
-                            "severity": severity,
-                            "alert_id": alert_id,
-                            "area_name_ja": area_name_ja,
-                        })
+        # グループ化された警報のメタデータを生成
+        pending_items: list[dict] = []
+        for code, area_names_ja in grouped.items():
+            warning_info = self.WARNING_CODES[code]
+            title_ja = self._get_warning_name(code, "ja")
+            severity = warning_info.get("severity", "medium")
+            alert_id = f"{area_code}_{code}_{datetime.now().strftime('%Y%m%d')}"
+            combined_area_ja = "、".join(area_names_ja)
+
+            pending_items.append({
+                "code": code,
+                "title_ja": title_ja,
+                "severity": severity,
+                "alert_id": alert_id,
+                "area_name_ja": combined_area_ja,
+            })
 
         if not pending_items:
             return []

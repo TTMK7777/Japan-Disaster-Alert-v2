@@ -12,9 +12,12 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Regional Notifications** — Prefecture-based push notification preferences with earthquake threshold filtering
 - **Shelter Finder** — Nearby evacuation shelter search based on current location
 - **Dark Mode** — Light / Dark / System theme with persistent preference and FOUT prevention
-- **PWA Ready** — Offline support via Service Worker with installable manifest
+- **PWA Ready** — Installable on Android/iOS with offline support, app icons, and install prompts
+- **Push Notifications** — Real-time earthquake/tsunami alerts via Web Push (VAPID)
+- **WCAG 2.1 AA** — Accessible: zoom enabled, skip links, 44px touch targets, safe-area support
+- **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 125+ tests (Vitest unit, Playwright E2E, pytest backend)
+- **Comprehensive Testing** — 100+ tests (Vitest unit 66, Playwright E2E 28, pytest backend 38)
 
 ## Supported Languages
 
@@ -53,7 +56,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Next.js 15** with **React 19** and **TypeScript**
 - **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
-- **Vitest** + **React Testing Library** — unit testing (59 tests)
+- **Vitest** + **React Testing Library** — unit testing (66 tests)
 - **Playwright** — E2E testing (28 tests)
 - **PWA** — Service Worker for offline capability
 
@@ -136,7 +139,8 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values:
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/` | GET | Health check |
+| `/` | GET | Simple health check |
+| `/api/v1/health` | GET | Detailed health check (P2P, JMA, DB, AI) |
 | `/api/v1/earthquakes` | GET | Latest earthquake data |
 | `/api/v1/weather/{area_code}` | GET | Weather info by prefecture code |
 | `/api/v1/alerts` | GET | Active weather warnings |
@@ -198,15 +202,17 @@ Japan-Disaster-Alert-v2/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
 │   │   │   └── __tests__/               # Vitest unit tests (59 tests)
-│   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme)
+│   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
 │   │   ├── test/                         # Test setup (Vitest)
 │   │   └── types/                        # TypeScript type definitions
 │   ├── e2e/                              # Playwright E2E tests (28 tests)
 │   ├── public/
-│   │   ├── sw.js                         # Service Worker
-│   │   └── manifest.json                 # PWA manifest
+│   │   ├── icons/                        # PWA icons (72-512px)
+│   │   ├── sw.js                         # Service Worker (v2)
+│   │   ├── manifest.json                 # PWA manifest
+│   │   └── favicon.ico                   # Favicon
 │   └── package.json
 ├── docs/
 ├── scripts/
@@ -223,7 +229,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -v     # 38 tests
+HOME=/tmp pytest tests/ -v     # 38 tests (HOME=/tmp avoids .env.local conflicts)
 ```
 
 ### Frontend (Vitest)
