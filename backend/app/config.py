@@ -30,12 +30,12 @@ class Settings(BaseSettings):
     
     # Claude API
     anthropic_api_key: Optional[str] = None
-    anthropic_api_version: str = "2023-06-01"
+    anthropic_api_version: str = "2024-10-22"
     anthropic_model: str = "claude-haiku-4-5-20251001"
 
     # Gemini API
     gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.0-flash-exp"
+    gemini_model: str = "gemini-2.0-flash"
 
     # 使用するAIプロバイダー（claude, gemini, auto）
     # auto: Gemini優先、なければClaude

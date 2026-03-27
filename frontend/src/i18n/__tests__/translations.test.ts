@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { LANGUAGES, translations, errorMessages, boundaryErrorMessages } from '../translations';
+import { LANGUAGES, translations, errorMessages, boundaryErrorMessages, getTranslation, getLocale, LOCALE_MAP } from '../translations';
 
 // 必要な翻訳キー一覧
 const REQUIRED_KEYS = [
@@ -18,6 +18,33 @@ const REQUIRED_KEYS = [
   'safetyTips',
   'dataSource',
   'disclaimer',
+];
+
+// Phase 1A: コンポーネント翻訳キー（全16言語で必須）
+const COMPONENT_KEYS = [
+  'earthquake.intensity',
+  'earthquake.depth',
+  'earthquake.mag',
+  'earthquake.tsunami',
+  'earthquake.noData',
+  'common.retry',
+  'map.intensity',
+  'map.magnitude',
+  'map.depth',
+  'map.time',
+  'map.tsunami',
+  'map.legend',
+  'map.noLocation',
+  'map.showImpact',
+  'warning.title',
+  'warning.noWarnings',
+  'warning.error',
+  'warning.issuedAt',
+  'warning.specialWarning',
+  'warning.severityWarning',
+  'warning.advisory',
+  'warning.selectArea',
+  'tsunami.findShelter',
 ];
 
 describe('translations', () => {
@@ -107,6 +134,62 @@ describe('translations', () => {
     const enKeys = Object.keys(translations['en']).sort();
 
     expect(jaKeys).toEqual(enKeys);
+  });
+
+  // Phase 1A: コンポーネント翻訳キーが全16言語に存在すること
+  it('コンポーネント翻訳キーが全16言語に存在する', () => {
+    const langCodes = LANGUAGES.map((l) => l.code);
+    const missing: string[] = [];
+
+    langCodes.forEach((code) => {
+      COMPONENT_KEYS.forEach((key) => {
+        if (!translations[code]?.[key]) {
+          missing.push(`${code}.${key}`);
+        }
+      });
+    });
+
+    if (missing.length > 0) {
+      console.warn('不足しているコンポーネント翻訳:', missing);
+    }
+    expect(missing).toEqual([]);
+  });
+
+  // イタリア語が英語フォールバックでないことを確認
+  it('イタリア語が独自の翻訳を持つ（英語フォールバックでない）', () => {
+    const itKeys = translations['it'];
+    const enKeys = translations['en'];
+
+    // コンポーネントキーでイタリア語が英語と異なることを確認
+    const keysToCheck = ['earthquake.depth', 'earthquake.intensity', 'warning.title', 'map.legend'];
+    keysToCheck.forEach((key) => {
+      expect(itKeys[key]).toBeDefined();
+      expect(itKeys[key]).not.toEqual(enKeys[key]);
+    });
+  });
+});
+
+describe('getTranslation', () => {
+  it('指定言語の翻訳を返す', () => {
+    expect(getTranslation('it', 'earthquake.depth')).toBe('Profondità');
+    expect(getTranslation('ja', 'earthquake.depth')).toBe('深さ');
+  });
+
+  it('未定義言語は英語にフォールバック', () => {
+    expect(getTranslation('xx', 'earthquake.depth')).toBe('Depth');
+  });
+});
+
+describe('getLocale', () => {
+  it('全16言語にBCP47ロケールが定義されている', () => {
+    const langCodes = LANGUAGES.map((l) => l.code);
+    langCodes.forEach((code) => {
+      expect(LOCALE_MAP[code]).toBeDefined();
+    });
+  });
+
+  it('イタリア語のロケールがit-ITである', () => {
+    expect(getLocale('it')).toBe('it-IT');
   });
 });
 

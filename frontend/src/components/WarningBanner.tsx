@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '@/config/api';
+import { getTranslation, getLocale } from '@/i18n/translations';
 
 interface Warning {
   id: string;
@@ -72,81 +73,19 @@ const PREFECTURES: { code: string; ja: string; en: string }[] = [
   { code: '471000', ja: '沖縄県', en: 'Okinawa' },
 ];
 
-// 多言語対応のテキスト
-const translations: Record<string, Record<string, string>> = {
-  ja: {
-    title: '警報・注意報',
-    noWarnings: '現在、警報・注意報は発表されていません',
-    loading: '読み込み中...',
-    error: '情報を取得できませんでした',
-    retry: '再試行',
-    issuedAt: '発表時刻',
-    specialWarning: '特別警報',
-    warning: '警報',
-    advisory: '注意報',
-    selectArea: '地域を選択',
-  },
-  en: {
-    title: 'Warnings & Advisories',
-    noWarnings: 'No warnings or advisories currently in effect',
-    loading: 'Loading...',
-    error: 'Failed to load information',
-    retry: 'Retry',
-    issuedAt: 'Issued at',
-    specialWarning: 'Special Warning',
-    warning: 'Warning',
-    advisory: 'Advisory',
-    selectArea: 'Select Area',
-  },
-  easy_ja: {
-    title: 'けいほう・ちゅういほう',
-    noWarnings: 'いま、けいほうは ありません',
-    loading: 'よみこみちゅう...',
-    error: 'じょうほうを とれませんでした',
-    retry: 'もういちど',
-    issuedAt: 'はっぴょう じかん',
-    specialWarning: 'とくべつ けいほう',
-    warning: 'けいほう',
-    advisory: 'ちゅういほう',
-    selectArea: 'ちいきを えらぶ',
-  },
-  zh: {
-    title: '警报・注意报',
-    noWarnings: '目前没有发布警报或注意报',
-    loading: '加载中...',
-    error: '无法获取信息',
-    retry: '重试',
-    issuedAt: '发布时间',
-    specialWarning: '特别警报',
-    warning: '警报',
-    advisory: '注意报',
-    selectArea: '选择地区',
-  },
-  ko: {
-    title: '경보・주의보',
-    noWarnings: '현재 경보나 주의보가 발령되지 않았습니다',
-    loading: '로딩 중...',
-    error: '정보를 가져올 수 없습니다',
-    retry: '재시도',
-    issuedAt: '발표 시간',
-    specialWarning: '특별 경보',
-    warning: '경보',
-    advisory: '주의보',
-    selectArea: '지역 선택',
-  },
-  vi: {
-    title: 'Cảnh báo & Chú ý',
-    noWarnings: 'Hiện không có cảnh báo nào',
-    loading: 'Đang tải...',
-    error: 'Không thể tải thông tin',
-    retry: 'Thử lại',
-    issuedAt: 'Phát hành lúc',
-    specialWarning: 'Cảnh báo đặc biệt',
-    warning: 'Cảnh báo',
-    advisory: 'Chú ý',
-    selectArea: 'Chọn khu vực',
-  },
-};
+// Translation keys mapped to centralized translations.ts
+const WARNING_KEYS = {
+  title: 'warning.title',
+  noWarnings: 'warning.noWarnings',
+  loading: 'loading',
+  error: 'warning.error',
+  retry: 'common.retry',
+  issuedAt: 'warning.issuedAt',
+  specialWarning: 'warning.specialWarning',
+  warning: 'warning.severityWarning',
+  advisory: 'warning.advisory',
+  selectArea: 'warning.selectArea',
+} as const;
 
 // HIGH #11: PrefectureSelector をレンダー外に定義
 interface PrefectureSelectorProps {
@@ -156,7 +95,7 @@ interface PrefectureSelectorProps {
 }
 
 function PrefectureSelector({ selectedAreaCode, onAreaCodeChange, language }: PrefectureSelectorProps) {
-  const label = translations[language]?.selectArea || translations.ja.selectArea;
+  const label = getTranslation(language, WARNING_KEYS.selectArea);
   return (
     <div className="mb-4">
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">
@@ -192,8 +131,8 @@ export default function WarningBanner({
   onWarningsUpdateRef.current = onWarningsUpdate;
 
   const t = useCallback(
-    (key: keyof typeof translations.ja) =>
-      translations[language]?.[key] || translations.ja[key],
+    (key: keyof typeof WARNING_KEYS) =>
+      getTranslation(language, WARNING_KEYS[key]),
     [language]
   );
 
@@ -365,7 +304,7 @@ export default function WarningBanner({
               </p>
               <p className="mt-2 text-xs opacity-75">
                 📍 {warning.area} | {t('issuedAt')}: {new Date(warning.issued_at).toLocaleString(
-                  language === 'ja' ? 'ja-JP' : 'en-US'
+                  getLocale(language)
                 )}
               </p>
             </div>

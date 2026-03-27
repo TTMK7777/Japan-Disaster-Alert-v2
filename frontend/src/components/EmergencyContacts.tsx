@@ -202,7 +202,240 @@ const contactsData: Record<string, {
       'หากไม่ทราบตำแหน่ง ให้อธิบายสถานที่ใกล้เคียง',
     ],
   },
-  // Fallback to English for other languages
+  id: {
+    title: 'Kontak Darurat',
+    subtitle: 'Gunakan saat bencana',
+    sections: [
+      {
+        title: 'Layanan Darurat',
+        contacts: [
+          { name: 'Polisi', number: '110', description: 'Kejahatan, kecelakaan', available: '24 jam' },
+          { name: 'Pemadam/Ambulans', number: '119', description: 'Kebakaran, darurat medis', available: '24 jam' },
+          { name: 'Penjaga Pantai', number: '118', description: 'Kecelakaan laut', available: '24 jam' },
+        ]
+      },
+      {
+        title: 'Dukungan Wisatawan',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Dukungan multibahasa 24 jam', available: '24 jam', languages: 'EN/CN/KO/JP' },
+          { name: 'Telepon Pesan Bencana', number: '171', description: 'Konfirmasi keselamatan', available: 'Saat bencana' },
+        ]
+      },
+    ],
+    tips: [
+      'Katakan "English please" jika membutuhkan dukungan bahasa Inggris',
+      '110 dan 119 gratis dari ponsel',
+      'Jika tidak tahu lokasi Anda, jelaskan bangunan terdekat',
+    ],
+  },
+  ms: {
+    title: 'Kenalan Kecemasan',
+    subtitle: 'Gunakan semasa bencana',
+    sections: [
+      {
+        title: 'Perkhidmatan Kecemasan',
+        contacts: [
+          { name: 'Polis', number: '110', description: 'Jenayah, kemalangan', available: '24 jam' },
+          { name: 'Bomba/Ambulans', number: '119', description: 'Kebakaran, kecemasan perubatan', available: '24 jam' },
+          { name: 'Pengawal Pantai', number: '118', description: 'Kemalangan laut', available: '24 jam' },
+        ]
+      },
+      {
+        title: 'Sokongan Pelancong',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Sokongan pelbagai bahasa 24 jam', available: '24 jam', languages: 'EN/CN/KO/JP' },
+          { name: 'Dail Mesej Bencana', number: '171', description: 'Pengesahan keselamatan', available: 'Semasa bencana' },
+        ]
+      },
+    ],
+    tips: [
+      'Katakan "English please" jika memerlukan sokongan bahasa Inggeris',
+      '110 dan 119 percuma dari telefon bimbit',
+      'Jika tidak tahu lokasi anda, terangkan bangunan berdekatan',
+    ],
+  },
+  tl: {
+    title: 'Emergency na Kontak',
+    subtitle: 'Gamitin kapag may sakuna',
+    sections: [
+      {
+        title: 'Emergency Services',
+        contacts: [
+          { name: 'Pulis', number: '110', description: 'Krimen, aksidente', available: '24 oras' },
+          { name: 'Bumbero/Ambulansya', number: '119', description: 'Sunog, medikal na emergency', available: '24 oras' },
+          { name: 'Coast Guard', number: '118', description: 'Aksidente sa dagat', available: '24 oras' },
+        ]
+      },
+      {
+        title: 'Suporta para sa Turista',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '24 oras na multilingual na suporta', available: '24 oras', languages: 'EN/CN/KO/JP' },
+          { name: 'Disaster Message Dial', number: '171', description: 'Kumpirmasyon ng kaligtasan', available: 'Kapag may sakuna' },
+        ]
+      },
+    ],
+    tips: [
+      'Sabihin ang "English please" kung kailangan ng suporta sa Ingles',
+      'Libre ang 110 at 119 mula sa cellphone',
+      'Kung hindi mo alam ang lokasyon mo, ilarawan ang mga malapit na gusali',
+    ],
+  },
+  ne: {
+    title: 'आपतकालीन सम्पर्क',
+    subtitle: 'विपद्को समयमा प्रयोग गर्नुहोस्',
+    sections: [
+      {
+        title: 'आपतकालीन सेवा',
+        contacts: [
+          { name: 'प्रहरी', number: '110', description: 'अपराध, दुर्घटना', available: '२४ घण्टा' },
+          { name: 'दमकल/एम्बुलेन्स', number: '119', description: 'आगलागी, चिकित्सा आपतकालीन', available: '२४ घण्टा' },
+          { name: 'तटरक्षक', number: '118', description: 'समुद्री दुर्घटना', available: '२४ घण्टा' },
+        ]
+      },
+      {
+        title: 'पर्यटक सहायता',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '२४ घण्टा बहुभाषिक सहायता', available: '२४ घण्टा', languages: 'EN/CN/KO/JP' },
+          { name: 'विपद् सन्देश डायल', number: '171', description: 'सुरक्षा पुष्टि', available: 'विपद्को समयमा' },
+        ]
+      },
+    ],
+    tips: [
+      'अंग्रेजी सहायता चाहिन्छ भने "English please" भन्नुहोस्',
+      '110 र 119 मोबाइलबाट निःशुल्क छन्',
+      'तपाईंको स्थान थाहा छैन भने नजिकको भवन वर्णन गर्नुहोस्',
+    ],
+  },
+  fr: {
+    title: 'Contacts d\'urgence',
+    subtitle: 'Utilisez en cas de catastrophe',
+    sections: [
+      {
+        title: 'Services d\'urgence',
+        contacts: [
+          { name: 'Police', number: '110', description: 'Crimes, accidents', available: '24h/24' },
+          { name: 'Pompiers/Ambulance', number: '119', description: 'Incendie, urgence m\u00e9dicale', available: '24h/24' },
+          { name: 'Garde c\u00f4ti\u00e8re', number: '118', description: 'Accidents en mer', available: '24h/24' },
+        ]
+      },
+      {
+        title: 'Assistance touristique',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Support multilingue 24h', available: '24h/24', languages: 'EN/CN/KO/JP' },
+          { name: 'Service de messages catastrophe', number: '171', description: 'Confirmation de s\u00e9curit\u00e9', available: 'En cas de catastrophe' },
+        ]
+      },
+    ],
+    tips: [
+      'Dites "English please" si vous avez besoin d\'aide en anglais',
+      '110 et 119 sont gratuits depuis un t\u00e9l\u00e9phone portable',
+      'Si vous ne connaissez pas votre emplacement, d\u00e9crivez les b\u00e2timents proches',
+    ],
+  },
+  de: {
+    title: 'Notfallkontakte',
+    subtitle: 'Bei Katastrophen verwenden',
+    sections: [
+      {
+        title: 'Notdienste',
+        contacts: [
+          { name: 'Polizei', number: '110', description: 'Verbrechen, Unf\u00e4lle', available: '24 Std.' },
+          { name: 'Feuerwehr/Rettung', number: '119', description: 'Brand, medizinischer Notfall', available: '24 Std.' },
+          { name: 'K\u00fcstenwache', number: '118', description: 'Seeunf\u00e4lle', available: '24 Std.' },
+        ]
+      },
+      {
+        title: 'Touristenhilfe',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Mehrsprachiger Support 24 Std.', available: '24 Std.', languages: 'EN/CN/KO/JP' },
+          { name: 'Katastrophen-Nachrichtendienst', number: '171', description: 'Sicherheitsbest\u00e4tigung', available: 'Bei Katastrophen' },
+        ]
+      },
+    ],
+    tips: [
+      'Sagen Sie "English please" wenn Sie englische Unterst\u00fctzung ben\u00f6tigen',
+      '110 und 119 sind kostenlos vom Mobiltelefon',
+      'Wenn Sie Ihren Standort nicht kennen, beschreiben Sie nahe Geb\u00e4ude',
+    ],
+  },
+  it: {
+    title: 'Contatti di emergenza',
+    subtitle: 'Utilizzare in caso di disastro',
+    sections: [
+      {
+        title: 'Servizi di emergenza',
+        contacts: [
+          { name: 'Polizia', number: '110', description: 'Crimini, incidenti', available: '24 ore' },
+          { name: 'Vigili del fuoco/Ambulanza', number: '119', description: 'Incendi, emergenze mediche', available: '24 ore' },
+          { name: 'Guardia costiera', number: '118', description: 'Incidenti in mare', available: '24 ore' },
+        ]
+      },
+      {
+        title: 'Assistenza turistica',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Supporto multilingue 24 ore', available: '24 ore', languages: 'EN/CN/KO/JP' },
+          { name: 'Servizio messaggi disastro', number: '171', description: 'Conferma sicurezza', available: 'Durante i disastri' },
+        ]
+      },
+    ],
+    tips: [
+      'Dite "English please" se avete bisogno di supporto in inglese',
+      '110 e 119 sono gratuiti dal cellulare',
+      'Se non conoscete la vostra posizione, descrivete gli edifici vicini',
+    ],
+  },
+  es: {
+    title: 'Contactos de emergencia',
+    subtitle: 'Usar durante desastres',
+    sections: [
+      {
+        title: 'Servicios de emergencia',
+        contacts: [
+          { name: 'Polic\u00eda', number: '110', description: 'Delitos, accidentes', available: '24 horas' },
+          { name: 'Bomberos/Ambulancia', number: '119', description: 'Incendios, emergencia m\u00e9dica', available: '24 horas' },
+          { name: 'Guardacostas', number: '118', description: 'Accidentes mar\u00edtimos', available: '24 horas' },
+        ]
+      },
+      {
+        title: 'Apoyo al turista',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Soporte multiling\u00fce 24h', available: '24 horas', languages: 'EN/CN/KO/JP' },
+          { name: 'L\u00ednea de mensajes de desastre', number: '171', description: 'Confirmaci\u00f3n de seguridad', available: 'Durante desastres' },
+        ]
+      },
+    ],
+    tips: [
+      'Diga "English please" si necesita ayuda en ingl\u00e9s',
+      '110 y 119 son gratuitos desde el m\u00f3vil',
+      'Si no conoce su ubicaci\u00f3n, describa los edificios cercanos',
+    ],
+  },
+  easy_ja: {
+    title: 'きんきゅう れんらくさき',
+    subtitle: 'さいがいの ときに つかって ください',
+    sections: [
+      {
+        title: 'きんきゅう でんわ',
+        contacts: [
+          { name: 'けいさつ', number: '110', description: 'じけん・じこ', available: '24じかん' },
+          { name: 'しょうぼう・きゅうきゅう', number: '119', description: 'かじ・きゅうきゅう', available: '24じかん' },
+          { name: 'かいじょうほあんちょう', number: '118', description: 'うみの じこ', available: '24じかん' },
+        ]
+      },
+      {
+        title: 'さいがい・かんこう そうだん',
+        contacts: [
+          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'がいこくじん むけ 24じかん たいおう', available: '24じかん', languages: 'EN/CN/KO/JP' },
+          { name: 'さいがいよう でんごん ダイヤル', number: '171', description: 'あんぴ かくにん', available: 'さいがいのとき' },
+        ]
+      },
+    ],
+    tips: [
+      'にほんごが はなせない ときは「English please」と いって ください',
+      'けいたいでんわ からでも 110、119は むりょうです',
+      'ばしょが わからない ときは ちかくの たてものを おしえて ください',
+    ],
+  },
 };
 
 // 電話アイコン

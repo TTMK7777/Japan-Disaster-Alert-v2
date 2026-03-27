@@ -2,6 +2,7 @@
 
 import { memo } from 'react';
 import type { Earthquake } from '@/types/earthquake';
+import { getTranslation } from '@/i18n/translations';
 
 // page.tsx の ApiError と互換の型
 interface ApiError {
@@ -62,7 +63,7 @@ const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }
       {/* ヘッダー（震度表示） */}
       <div className={`${getIntensityClass(eq.max_intensity)} px-4 py-2 flex justify-between items-center`}>
         <span className="font-bold text-lg">
-          {language === 'ja' ? '震度' : 'Int.'} {eq.max_intensity}
+          {getTranslation(language, 'earthquake.intensity')} {eq.max_intensity}
         </span>
         <span className="text-sm opacity-80">
           M{eq.magnitude}
@@ -80,15 +81,15 @@ const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }
 
         <div className="grid grid-cols-3 gap-2 text-sm">
           <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-            <div className="text-gray-500 dark:text-gray-400">{language === 'ja' ? '深さ' : 'Depth'}</div>
+            <div className="text-gray-500 dark:text-gray-400">{getTranslation(language, 'earthquake.depth')}</div>
             <div className="font-medium dark:text-gray-100">{eq.depth}km</div>
           </div>
           <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
-            <div className="text-gray-500 dark:text-gray-400">{language === 'ja' ? '規模' : 'Mag.'}</div>
+            <div className="text-gray-500 dark:text-gray-400">{getTranslation(language, 'earthquake.mag')}</div>
             <div className="font-medium dark:text-gray-100">M{eq.magnitude}</div>
           </div>
           <div className={`rounded p-2 ${hasTsunamiRisk(eq) ? 'bg-red-50 dark:bg-red-900/30' : 'bg-green-50 dark:bg-green-900/30'}`}>
-            <div className="text-gray-500 dark:text-gray-400">{language === 'ja' ? '津波' : 'Tsunami'}</div>
+            <div className="text-gray-500 dark:text-gray-400">{getTranslation(language, 'earthquake.tsunami')}</div>
             <div className={`font-medium ${hasTsunamiRisk(eq) ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
               {getDisplayTsunami(eq)}
             </div>
@@ -120,7 +121,7 @@ export default function EarthquakeList({ language, earthquakes, loading, error, 
             onClick={onRetry}
             className="px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
           >
-            {language === 'ja' ? '再試行' : 'Retry'}
+            {getTranslation(language, 'common.retry')}
           </button>
         )}
       </div>
@@ -130,7 +131,7 @@ export default function EarthquakeList({ language, earthquakes, loading, error, 
   if (earthquakes.length === 0) {
     return (
       <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-6 text-center text-gray-500 dark:text-gray-400">
-        {language === 'ja' ? '地震情報はありません' : 'No earthquake data'}
+        {getTranslation(language, 'earthquake.noData')}
       </div>
     );
   }

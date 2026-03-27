@@ -8,6 +8,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response, StreamingResponse
 from datetime import datetime
 from typing import Optional
+import time
+
+import httpx
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -15,7 +18,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from .config import settings
-from .database import init_db, close_db
+from .database import init_db, close_db, engine
 from .utils.logger import get_logger
 from .utils.error_handler import handle_errors
 
@@ -77,6 +80,8 @@ async def lifespan(app: FastAPI):
     await jma_service.close()
     await p2p_service.close()
     await tsunami_service.close()
+    await warning_service.close()
+    await volcano_service.close()
     await translator.close()
     logger.info("災害対応AIシステム終了")
 
@@ -170,6 +175,100 @@ async def root():
         version="1.0.0",
         timestamp=datetime.now().isoformat()
     )
+
+
+@app.get("/api/v1/health")
+@limiter.exempt
+async def health_check():
+    """
+    詳細ヘルスチェック
+
+    各外部サービスの到達性、データベース接続、AIプロバイダーの設定状況を確認する。
+    """
+    services = {}
+    overall_ok = True
+
+    # P2P Quake API チェック
+    try:
+        start = time.monotonic()
+        async with httpx.AsyncClient() as hc_client:
+            resp = await hc_client.get(
+                "https://api.p2pquake.net/v2/history?codes=551&limit=1",
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+        latency = round((time.monotonic() - start) * 1000)
+        services["p2p_quake"] = {"status": "ok", "latency_ms": latency}
+    except Exception:
+        services["p2p_quake"] = {"status": "error", "latency_ms": None}
+        overall_ok = False
+
+    # JMA API チェック
+    try:
+        start = time.monotonic()
+        async with httpx.AsyncClient() as hc_client:
+            resp = await hc_client.get(
+                "https://www.jma.go.jp/bosai/quake/data/list.json",
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+        latency = round((time.monotonic() - start) * 1000)
+        services["jma"] = {"status": "ok", "latency_ms": latency}
+    except Exception:
+        services["jma"] = {"status": "error", "latency_ms": None}
+        overall_ok = False
+
+    # データベースチェック
+    try:
+        from sqlalchemy import text
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        services["database"] = {"status": "ok"}
+    except Exception:
+        services["database"] = {"status": "error"}
+        overall_ok = False
+
+    # AIプロバイダーチェック
+    if settings.ai_provider == "auto":
+        if settings.gemini_api_key:
+            services["ai_provider"] = {"status": "ok", "provider": "gemini"}
+        elif settings.anthropic_api_key:
+            services["ai_provider"] = {"status": "ok", "provider": "claude"}
+        else:
+            services["ai_provider"] = {"status": "not_configured", "provider": None}
+    elif settings.ai_provider == "gemini":
+        if settings.gemini_api_key:
+            services["ai_provider"] = {"status": "ok", "provider": "gemini"}
+        else:
+            services["ai_provider"] = {"status": "not_configured", "provider": "gemini"}
+    elif settings.ai_provider == "claude":
+        if settings.anthropic_api_key:
+            services["ai_provider"] = {"status": "ok", "provider": "claude"}
+        else:
+            services["ai_provider"] = {"status": "not_configured", "provider": "claude"}
+    else:
+        services["ai_provider"] = {"status": "not_configured", "provider": settings.ai_provider}
+
+    # 全体ステータス判定
+    has_error = any(
+        s.get("status") == "error"
+        for key, s in services.items()
+        if key != "ai_provider"
+    )
+    ai_not_configured = services["ai_provider"]["status"] == "not_configured"
+
+    if has_error:
+        status = "unhealthy"
+    elif ai_not_configured:
+        status = "degraded"
+    else:
+        status = "healthy"
+
+    return {
+        "status": status,
+        "services": services,
+        "timestamp": datetime.now().isoformat(),
+    }
 
 
 @app.get("/api/v1/earthquakes", response_model=list[EarthquakeInfo])

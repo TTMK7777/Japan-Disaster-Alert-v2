@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { TsunamiIcon, SafeIcon } from './icons/DisasterIcons';
+import { getTranslation } from '@/i18n/translations';
 
 interface TsunamiAlertProps {
   warning: string;
@@ -81,6 +82,13 @@ const messages: Record<string, Record<string, { title: string; action: string; d
     th: { title: 'ไม่มีความเสี่ยงสึนามิ', action: 'ปลอดภัย' },
     id: { title: 'Tidak ada risiko tsunami', action: 'Aman' },
     easy_ja: { title: 'つなみの しんぱい なし', action: 'あんぜん です' },
+    'zh-TW': { title: '無海嘯風險', action: '安全' },
+    ms: { title: 'Tiada risiko tsunami', action: 'Selamat' },
+    tl: { title: 'Walang panganib ng tsunami', action: 'Ligtas' },
+    fr: { title: 'Pas de risque de tsunami', action: 'En sécurité' },
+    de: { title: 'Kein Tsunami-Risiko', action: 'Sicher' },
+    it: { title: 'Nessun rischio tsunami', action: 'Sicuro' },
+    es: { title: 'Sin riesgo de tsunami', action: 'Seguro' },
   },
   advisory: {
     ja: { title: '津波注意報', action: '海岸から離れてください', detail: '予想される津波の高さ: 1m以下' },
@@ -92,6 +100,13 @@ const messages: Record<string, Record<string, { title: string; action: string; d
     th: { title: 'คำเตือนสึนามิ', action: 'อยู่ห่างจากชายฝั่ง' },
     id: { title: 'Peringatan tsunami', action: 'Menjauhlah dari pantai' },
     easy_ja: { title: 'つなみ ちゅういほう', action: 'うみから はなれて', detail: 'たかさ: 1メートル いか' },
+    'zh-TW': { title: '海嘯注意報', action: '請遠離海岸', detail: '預計浪高: 1公尺以下' },
+    ms: { title: 'Nasihat tsunami', action: 'Menjauhi pantai', detail: 'Ketinggian dijangka: bawah 1m' },
+    tl: { title: 'Payo sa tsunami', action: 'Lumayo sa baybayin', detail: 'Inaasahang taas: wala pang 1m' },
+    fr: { title: 'Avis de tsunami', action: 'Éloignez-vous de la côte', detail: 'Hauteur prévue: moins de 1m' },
+    de: { title: 'Tsunami-Hinweis', action: 'Bleiben Sie von der Küste fern', detail: 'Erwartete Höhe: unter 1m' },
+    it: { title: 'Avviso tsunami', action: 'Allontanarsi dalla costa', detail: 'Altezza prevista: sotto 1m' },
+    es: { title: 'Aviso de tsunami', action: 'Aléjese de la costa', detail: 'Altura esperada: menos de 1m' },
   },
   warning: {
     ja: { title: '津波警報', action: '今すぐ高台へ避難！', detail: '予想される津波の高さ: 1〜3m' },
@@ -103,6 +118,13 @@ const messages: Record<string, Record<string, { title: string; action: string; d
     th: { title: 'เตือนภัยสึนามิ', action: 'อพยพไปที่สูงทันที!' },
     id: { title: 'PERINGATAN TSUNAMI', action: 'Evakuasi ke dataran tinggi SEKARANG!' },
     easy_ja: { title: 'つなみ けいほう', action: 'いますぐ たかい ところへ にげて！', detail: 'たかさ: 1〜3メートル' },
+    'zh-TW': { title: '海嘯警報', action: '立即撤離到高處！', detail: '預計浪高: 1-3公尺' },
+    ms: { title: 'AMARAN TSUNAMI', action: 'Pindah ke tempat tinggi SEKARANG!', detail: 'Ketinggian: 1-3m' },
+    tl: { title: 'BABALA SA TSUNAMI', action: 'Lumikas sa mataas na lugar NGAYON!', detail: 'Taas: 1-3m' },
+    fr: { title: 'ALERTE TSUNAMI', action: 'Évacuez vers les hauteurs MAINTENANT !', detail: 'Hauteur: 1-3m' },
+    de: { title: 'TSUNAMI-WARNUNG', action: 'Sofort auf Anhöhen evakuieren!', detail: 'Höhe: 1-3m' },
+    it: { title: 'ALLERTA TSUNAMI', action: 'Evacuare verso zone elevate ORA!', detail: 'Altezza: 1-3m' },
+    es: { title: 'ALERTA DE TSUNAMI', action: '¡Evacúe a zonas altas AHORA!', detail: 'Altura: 1-3m' },
   },
   major: {
     ja: { title: '大津波警報', action: '最大限の警戒！今すぐ避難！', detail: '予想される津波の高さ: 3m以上' },
@@ -114,6 +136,13 @@ const messages: Record<string, Record<string, { title: string; action: string; d
     th: { title: 'เตือนภัยสึนามิใหญ่', action: 'เตือนภัยสูงสุด! อพยพทันที!' },
     id: { title: 'PERINGATAN TSUNAMI BESAR', action: 'SIAGA MAKSIMUM! Evakuasi SEKARANG!' },
     easy_ja: { title: 'おおつなみ けいほう', action: 'いますぐ にげて！ たかい ところへ！', detail: 'たかさ: 3メートル いじょう' },
+    'zh-TW': { title: '大海嘯警報', action: '最高警戒！立即撤離！', detail: '預計浪高: 3公尺以上' },
+    ms: { title: 'AMARAN TSUNAMI BESAR', action: 'SIAGA MAKSIMUM! Pindah SEKARANG!', detail: 'Ketinggian: 3m+' },
+    tl: { title: 'BABALA SA MALAKING TSUNAMI', action: 'PINAKAMATAAS NA ALERTO! Lumikas NGAYON!', detail: 'Taas: 3m+' },
+    fr: { title: 'ALERTE TSUNAMI MAJEUR', action: 'ALERTE MAXIMALE ! Évacuez MAINTENANT !', detail: 'Hauteur: 3m+' },
+    de: { title: 'GROSSE TSUNAMI-WARNUNG', action: 'HÖCHSTE ALARMSTUFE! Sofort evakuieren!', detail: 'Höhe: 3m+' },
+    it: { title: 'ALLERTA TSUNAMI GRAVE', action: 'ALLERTA MASSIMA! Evacuare ORA!', detail: 'Altezza: 3m+' },
+    es: { title: 'ALERTA DE TSUNAMI MAYOR', action: '¡ALERTA MÁXIMA! ¡Evacúe AHORA!', detail: 'Altura: 3m+' },
   },
 };
 
@@ -197,9 +226,7 @@ export default function TsunamiAlert({ warning, language, compact = false, onFin
             } transition-colors`}
             onClick={() => onFindShelter?.()}
           >
-            {language === 'ja' ? '避難所を探す' :
-             language === 'easy_ja' ? 'ひなんじょを さがす' :
-             'Find Shelter'}
+            {getTranslation(language, 'tsunami.findShelter')}
           </button>
         </div>
       )}

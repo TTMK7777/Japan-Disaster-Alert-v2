@@ -28,6 +28,17 @@ class WarningService:
         self.BASE_URL = settings.jma_base_url
         self.timeout = settings.api_timeout
         self._translator = translator  # TranslatorServiceへの参照（遅延初期化）
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     @property
     def translator(self):
@@ -104,22 +115,22 @@ class WarningService:
         """
         url = f"{self.BASE_URL}/warning/data/warning/{area_code}.json"
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
 
-                # 静的マッピング対応言語の場合は従来通り
-                if lang in STATIC_LANGUAGES:
-                    return self._parse_warnings(data, area_code, lang)
+            # 静的マッピング対応言語の場合は従来通り
+            if lang in STATIC_LANGUAGES:
+                return self._parse_warnings(data, area_code, lang)
 
-                # 未対応言語の場合はClaude APIで動的生成
-                return await self._parse_warnings_with_ai(data, area_code, lang)
+            # 未対応言語の場合はClaude APIで動的生成
+            return await self._parse_warnings_with_ai(data, area_code, lang)
 
-            except httpx.HTTPError as e:
-                logger.error(f"警報情報取得エラー: {e}", exc_info=True)
-                return []
+        except httpx.HTTPError as e:
+            logger.error(f"警報情報取得エラー: {e}", exc_info=True)
+            return []
 
     def _get_warning_name(self, code: str, lang: str) -> str:
         """警報コードから指定言語の名前を取得"""
@@ -327,14 +338,14 @@ class WarningService:
                     logger.warning(f"{prefecture}の警報取得エラー: {e}")
                 return []
 
-        async with httpx.AsyncClient() as client:
-            tasks = [
-                fetch_prefecture(client, prefecture, area_code)
-                for prefecture, area_code in self.AREA_CODES.items()
-            ]
-            results = await asyncio.gather(*tasks)
-            for alerts in results:
-                all_alerts.extend(alerts)
+        client = self._get_client()
+        tasks = [
+            fetch_prefecture(client, prefecture, area_code)
+            for prefecture, area_code in self.AREA_CODES.items()
+        ]
+        results = await asyncio.gather(*tasks)
+        for alerts in results:
+            all_alerts.extend(alerts)
 
         return all_alerts
 

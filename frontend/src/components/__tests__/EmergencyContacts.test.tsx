@@ -68,11 +68,19 @@ describe('EmergencyContacts', () => {
 
   // 未対応言語はenにフォールバック
   it('未対応の言語はenにフォールバックする', () => {
-    render(<EmergencyContacts language="de" />);
+    render(<EmergencyContacts language="xx" />);
 
     // 英語にフォールバック
     expect(screen.getByText('Emergency Contacts')).toBeInTheDocument();
     expect(screen.getByText('Police')).toBeInTheDocument();
+  });
+
+  // ドイツ語表示テスト
+  it('ドイツ語で緊急連絡先を表示する', () => {
+    render(<EmergencyContacts language="de" />);
+
+    expect(screen.getByText('Notfallkontakte')).toBeInTheDocument();
+    expect(screen.getByText('Bei Katastrophen verwenden')).toBeInTheDocument();
   });
 
   // Japan Visitor Hotline が全言語で表示されること

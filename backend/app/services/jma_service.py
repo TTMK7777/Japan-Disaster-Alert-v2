@@ -64,28 +64,6 @@ class JMAService:
             logger.error(f"気象情報取得エラー: {e}", exc_info=True)
             return None
 
-    async def get_earthquake_list(self, limit: int = 10) -> list[dict]:
-        """
-        最新の地震情報一覧を取得
-
-        Args:
-            limit: 取得件数
-
-        Returns:
-            list: 地震情報リスト
-        """
-        url = f"{self.BASE_URL}/quake/data/list.json"
-
-        client = self._get_client()
-        try:
-            response = await client.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
-            return data[:limit]
-        except httpx.HTTPError as e:
-            logger.error(f"地震情報取得エラー: {e}", exc_info=True)
-            return []
-
     async def get_current_alerts(self) -> list[DisasterAlert]:
         """
         現在発令中の警報・注意報を取得

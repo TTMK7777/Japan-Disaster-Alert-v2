@@ -17,6 +17,17 @@ class VolcanoService:
         from ..config import settings
         self.BASE_URL = f"{settings.jma_base_url}/volcano"
         self.timeout = settings.api_timeout
+        self._client: Optional[httpx.AsyncClient] = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient()
+        return self._client
+
+    async def close(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     # 噴火警戒レベルの説明
     ALERT_LEVELS = {
@@ -60,15 +71,15 @@ class VolcanoService:
         """
         url = f"{self.BASE_URL}/const/volcano_list.json"
 
-        async with httpx.AsyncClient() as client:
-            try:
-                response = await client.get(url, timeout=self.timeout)
-                response.raise_for_status()
-                data = response.json()
-                return self._parse_volcano_list(data)
-            except httpx.HTTPError as e:
-                logger.error(f"火山一覧取得エラー: {e}", exc_info=True)
-                return []
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+            return self._parse_volcano_list(data)
+        except httpx.HTTPError as e:
+            logger.error(f"火山一覧取得エラー: {e}", exc_info=True)
+            return []
 
     def _parse_volcano_list(self, data: list) -> list[VolcanoInfo]:
         """APIレスポンスを火山情報リストにパース"""
@@ -132,12 +143,12 @@ class VolcanoService:
                     logger.warning(f"火山警報取得エラー ({volcano_code}): {e}")
                 return None
 
-        async with httpx.AsyncClient() as client:
-            tasks = [
-                fetch_warning(client, volcano_code)
-                for volcano_code in self.MONITORED_VOLCANOES
-            ]
-            results = await asyncio.gather(*tasks)
+        client = self._get_client()
+        tasks = [
+            fetch_warning(client, volcano_code)
+            for volcano_code in self.MONITORED_VOLCANOES
+        ]
+        results = await asyncio.gather(*tasks)
 
         return [w for w in results if w is not None]
 

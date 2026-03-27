@@ -7,6 +7,7 @@ import 'leaflet/dist/leaflet.css';
 import { IntensityBadge, IntensityScale } from './IntensityGauge';
 import TsunamiAlert, { TsunamiLevelIndicator } from './TsunamiAlert';
 import type { Earthquake } from '@/types/earthquake';
+import { getTranslation, getLocale } from '@/i18n/translations';
 
 interface EarthquakeMapProps {
   earthquakes: Earthquake[];
@@ -105,16 +106,17 @@ function getImpactRadius(magnitude: number, depth: number): number {
   return baseRadius * depthFactor * 1000; // メートルに変換
 }
 
-// 多言語テキスト
-const mapTranslations: Record<string, Record<string, string>> = {
-  intensity: { ja: '震度', en: 'Intensity', zh: '震度', ko: '진도', vi: 'Cường độ', ne: 'तीव्रता', easy_ja: 'しんど' },
-  magnitude: { ja: 'マグニチュード', en: 'Magnitude', zh: '震级', ko: '규모', vi: 'Độ lớn', ne: 'परिमाण', easy_ja: 'マグニチュード' },
-  depth: { ja: '深さ', en: 'Depth', zh: '深度', ko: '깊이', vi: 'Độ sâu', ne: 'गहिराई', easy_ja: 'ふかさ' },
-  time: { ja: '発生時刻', en: 'Time', zh: '发生时间', ko: '발생 시간', vi: 'Thời gian', ne: 'समय', easy_ja: 'じこく' },
-  tsunami: { ja: '津波', en: 'Tsunami', zh: '海啸', ko: '쓰나미', vi: 'Sóng thần', ne: 'सुनामी', easy_ja: 'つなみ' },
-  legend: { ja: '凡例', en: 'Legend', zh: '图例', ko: '범례', vi: 'Chú thích', ne: 'संकेत', easy_ja: 'めやす' },
-  noLocation: { ja: '位置情報なし', en: 'No location data', zh: '无位置信息', ko: '위치 정보 없음', vi: 'Không có vị trí', ne: 'स्थान छैन', easy_ja: 'ばしょの じょうほう なし' },
-};
+// Map translation keys to centralized translations
+const MAP_KEYS = {
+  intensity: 'map.intensity',
+  magnitude: 'map.magnitude',
+  depth: 'map.depth',
+  time: 'map.time',
+  tsunami: 'map.tsunami',
+  legend: 'map.legend',
+  noLocation: 'map.noLocation',
+  showImpact: 'map.showImpact',
+} as const;
 
 // 地図をフィットさせるコンポーネント
 function MapFitter({ earthquakes }: { earthquakes: Earthquake[] }) {
@@ -153,8 +155,8 @@ export default function EarthquakeMap({ earthquakes, language }: EarthquakeMapPr
     [earthquakes]
   );
 
-  const t = (key: keyof typeof mapTranslations) =>
-    mapTranslations[key][language as keyof typeof mapTranslations[typeof key]] || mapTranslations[key].en;
+  const t = (key: keyof typeof MAP_KEYS) =>
+    getTranslation(language, MAP_KEYS[key]);
 
   return (
     <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -168,7 +170,7 @@ export default function EarthquakeMap({ earthquakes, language }: EarthquakeMapPr
             className="rounded"
           />
           <span className="text-gray-700">
-            {language === 'ja' ? '影響範囲を表示' : language === 'easy_ja' ? 'えいきょう はんい' : 'Show impact area'}
+            {t('showImpact')}
           </span>
         </label>
 
@@ -257,7 +259,7 @@ export default function EarthquakeMap({ earthquakes, language }: EarthquakeMapPr
                 <div className="flex items-center gap-2 text-gray-600">
                   <span className="text-xs">{t('time')}:</span>
                   <span className="font-medium">
-                    {new Date(earthquake.time).toLocaleString(language === 'ja' ? 'ja-JP' : 'en-US', {
+                    {new Date(earthquake.time).toLocaleString(getLocale(language), {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',

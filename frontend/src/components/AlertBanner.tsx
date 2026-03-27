@@ -44,6 +44,42 @@ const alertMessages: Record<string, Record<string, { title: string; message: str
       title: 'つなみ けいほう',
       message: 'うみの ちかくの ひとは たかい ところに にげて',
     },
+    'zh-TW': {
+      title: '海嘯警報',
+      message: '沿海地區請立即撤離到高處',
+    },
+    th: {
+      title: 'เตือนภัยสึนามิ',
+      message: 'อพยพไปที่สูงทันที',
+    },
+    id: {
+      title: 'Peringatan Tsunami',
+      message: 'Segera evakuasi ke dataran tinggi',
+    },
+    ms: {
+      title: 'Amaran Tsunami',
+      message: 'Segera pindah ke tempat tinggi',
+    },
+    tl: {
+      title: 'Babala sa Tsunami',
+      message: 'Lumikas agad sa mataas na lugar',
+    },
+    fr: {
+      title: 'Alerte tsunami',
+      message: 'Évacuez immédiatement vers les hauteurs',
+    },
+    de: {
+      title: 'Tsunami-Warnung',
+      message: 'Sofort auf Anhöhen evakuieren',
+    },
+    it: {
+      title: 'Allerta tsunami',
+      message: 'Evacuare immediatamente verso zone elevate',
+    },
+    es: {
+      title: 'Alerta de tsunami',
+      message: 'Evacúe inmediatamente a zonas altas',
+    },
   },
   earthquake_large: {
     ja: {
@@ -73,6 +109,42 @@ const alertMessages: Record<string, Record<string, { title: string; message: str
     easy_ja: {
       title: 'じしん そくほう',
       message: 'つよい ゆれに きをつけて',
+    },
+    'zh-TW': {
+      title: '緊急地震速報',
+      message: '請警戒強烈搖晃',
+    },
+    th: {
+      title: 'เตือนภัยแผ่นดินไหวฉุกเฉิน',
+      message: 'ระวังแรงสั่นสะเทือน',
+    },
+    id: {
+      title: 'Peringatan Dini Gempa',
+      message: 'Waspadai guncangan kuat',
+    },
+    ms: {
+      title: 'Amaran Awal Gempa Bumi',
+      message: 'Berwaspada terhadap gegaran kuat',
+    },
+    tl: {
+      title: 'Babala sa Lindol',
+      message: 'Mag-ingat sa malakas na pagyanig',
+    },
+    fr: {
+      title: "Alerte sismique d'urgence",
+      message: 'Préparez-vous à de fortes secousses',
+    },
+    de: {
+      title: 'Erdbeben-Frühwarnung',
+      message: 'Starke Erschütterungen erwartet',
+    },
+    it: {
+      title: 'Allerta sismica di emergenza',
+      message: 'Attenzione a forti scosse',
+    },
+    es: {
+      title: 'Alerta sísmica de emergencia',
+      message: 'Espere fuertes sacudidas',
     },
   },
 };
