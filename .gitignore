@@ -79,7 +79,9 @@ playwright-report/
 
 # Database (generated)
 data/app.db
+**/data/app.db
 data/push_subscriptions.json
+**/data/push_subscriptions.json
 
 # Jupyter
 .ipynb_checkpoints/
