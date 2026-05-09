@@ -130,7 +130,7 @@ class ShelterService:
 
                         # 一意なIDを生成（施設名+緯度経度からハッシュ）
                         raw_id = f"{name}_{latitude}_{longitude}"
-                        shelter_id = f"csv_{hashlib.md5(raw_id.encode()).hexdigest()[:8]}"
+                        shelter_id = f"csv_{hashlib.sha256(raw_id.encode()).hexdigest()[:8]}"
 
                         shelters.append(ShelterInfo(
                             id=shelter_id,
