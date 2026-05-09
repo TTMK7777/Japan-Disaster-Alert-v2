@@ -13,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 import argparse
 from typing import Optional
+from urllib.parse import urlparse
 
 try:
     from github import Github
@@ -44,12 +45,17 @@ def get_repo_name_from_git() -> Optional[str]:
         if result.returncode == 0:
             url = result.stdout.strip()
             # https://github.com/owner/repo.git または git@github.com:owner/repo.git
-            if 'github.com' in url:
-                if url.startswith('git@'):
-                    repo = url.split(':')[1].replace('.git', '')
-                else:
-                    repo = url.split('github.com/')[1].replace('.git', '')
-                return repo
+            if url.startswith('git@'):
+                ssh_prefix = 'git@github.com:'
+                if url.startswith(ssh_prefix):
+                    repo = url[len(ssh_prefix):].replace('.git', '')
+                    return repo
+            else:
+                parsed = urlparse(url)
+                if parsed.hostname == 'github.com':
+                    repo = parsed.path.lstrip('/').replace('.git', '')
+                    if repo:
+                        return repo
     except Exception:
         pass
     return None
