@@ -50,7 +50,7 @@ from .services.warning_service import WarningService
 from .services.tsunami_service import TsunamiService
 from .services.volcano_service import VolcanoService
 from .services.shelter_service import ShelterService
-from .services.push_service import PushNotificationService
+from .services.push_service import PushNotificationService, TokenAuthError
 from .services.event_manager import EventManager
 
 # サービスインスタンス
@@ -678,7 +678,7 @@ async def push_subscribe(request: Request, subscription: PushSubscriptionWithPre
         endpoint=subscription.endpoint,
         keys=subscription.keys,
     )
-    result = await push_service.subscribe(
+    result, management_token = await push_service.subscribe(
         base_subscription,
         language=subscription.language,
         preferred_regions=subscription.preferred_regions or None,
@@ -689,7 +689,33 @@ async def push_subscribe(request: Request, subscription: PushSubscriptionWithPre
     return PushNotificationResponse(
         success=result,
         message="サブスクリプションを登録しました" if result else "サブスクリプション登録に失敗しました",
+        management_token=management_token if result else None,
     )
+
+
+def _token_auth_to_http(exc: TokenAuthError) -> HTTPException:
+    """TokenAuthError を HTTP ステータスにマップする
+
+    - locked: 429 (Too Many Requests)
+    - legacy: 403 (再 subscribe を促す)
+    - mismatch: 403 (汎用的エラーで not_found との列挙差を最小化)
+    - not_found: 404
+    """
+    reason = exc.reason
+    if reason == "locked":
+        return HTTPException(
+            status_code=429,
+            detail="Too many invalid token attempts. Please try again in 1 hour.",
+        )
+    if reason == "legacy":
+        return HTTPException(
+            status_code=403,
+            detail="Please re-subscribe with the new client to obtain a management token.",
+        )
+    if reason == "not_found":
+        return HTTPException(status_code=404, detail="Subscription not found")
+    # mismatch
+    return HTTPException(status_code=403, detail="Invalid management token")
 
 
 @app.post("/api/v1/push/unsubscribe", response_model=PushNotificationResponse)
@@ -707,7 +733,10 @@ async def push_unsubscribe(request: Request, body: PushUnsubscribeRequest):
             detail="プッシュ通知サービスは現在利用できません。VAPID鍵が設定されていません。"
         )
 
-    result = await push_service.unsubscribe(body.endpoint)
+    try:
+        result = await push_service.unsubscribe(body.endpoint, body.token)
+    except TokenAuthError as e:
+        raise _token_auth_to_http(e)
     return PushNotificationResponse(
         success=result,
         message="サブスクリプションを解除しました" if result else "指定されたサブスクリプションが見つかりません",
@@ -776,7 +805,10 @@ async def update_push_preferences(request: Request, body: PushPreferencesUpdate)
     if body.weather_alerts is not None:
         update_fields["weather_alerts"] = body.weather_alerts
 
-    result = await push_service.update_preferences(body.endpoint, **update_fields)
+    try:
+        result = await push_service.update_preferences(body.endpoint, body.token, **update_fields)
+    except TokenAuthError as e:
+        raise _token_auth_to_http(e)
     return PushNotificationResponse(
         success=result,
         message="通知設定を更新しました" if result else "サブスクリプションが見つかりません",
@@ -792,7 +824,10 @@ async def get_push_preferences(request: Request, body: PushUnsubscribeRequest):
 
     - **endpoint**: サブスクリプションのエンドポイントURL（リクエストボディで送信）
     """
-    prefs = await push_service.get_preferences(body.endpoint)
+    try:
+        prefs = await push_service.get_preferences(body.endpoint, body.token)
+    except TokenAuthError as e:
+        raise _token_auth_to_http(e)
     if not prefs:
         raise HTTPException(status_code=404, detail="サブスクリプションが見つかりません")
     return PushPreferencesResponse(**prefs)

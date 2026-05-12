@@ -29,6 +29,13 @@ class PushSubscriptionRow(Base):
     weather_alerts: Mapped[bool] = mapped_column(Boolean, default=True)
     updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # Wave 2 IDOR 根本修正: クライアントが保持する管理トークン
+    # secrets.token_urlsafe(32) で生成 (256bit), 操作系API は本値必須
+    # legacy row (NULL) は subscribe API 経由で再登録を促す
+    management_token: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+
 
 class TranslationCacheRow(Base):
     """翻訳キャッシュ"""

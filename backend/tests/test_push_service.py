@@ -16,7 +16,8 @@ from app.database import Base
 from app.db_models import PushSubscriptionRow
 from app.exceptions import PushNotificationError
 from app.models import PushSubscription
-from app.services.push_service import PushNotificationService
+from app.services import push_service as push_service_module
+from app.services.push_service import PushNotificationService, TokenAuthError
 
 
 # ---------------------------------------------------------------------------
@@ -36,10 +37,14 @@ async def db_session():
 
     test_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
-    # push_service モジュール内の async_session を差し替え
+    # push_service モジュール内の async_session を差し替え + token レート制限状態をリセット
+    push_service_module._TOKEN_FAILURES.clear()
+    push_service_module._TOKEN_LOCKOUTS.clear()
     with patch("app.services.push_service.async_session", test_session_factory):
         yield test_session_factory
 
+    push_service_module._TOKEN_FAILURES.clear()
+    push_service_module._TOKEN_LOCKOUTS.clear()
     await engine.dispose()
 
 
@@ -83,28 +88,34 @@ async def _seed_subscriptions(
 
 @pytest.mark.asyncio
 async def test_subscribe_new(db_session):
-    """新規サブスクリプションが登録される"""
+    """新規サブスクリプションが登録され、management_token が返却される"""
     service = _make_service()
     sub = PushSubscription(
         endpoint="https://push.example.com/sub1",
         keys={"p256dh": "key1", "auth": "auth1"},
     )
 
-    result = await service.subscribe(sub)
+    result, token = await service.subscribe(sub)
     assert result is True
+    assert isinstance(token, str)
+    assert len(token) >= 32  # token_urlsafe(32) は 43文字程度
     assert await service.get_subscription_count() == 1
 
 
 @pytest.mark.asyncio
 async def test_subscribe_update_existing(db_session):
-    """既存エンドポイントのキーが更新される"""
-    initial = [
-        {
-            "endpoint": "https://push.example.com/sub1",
-            "keys": {"p256dh": "old_key", "auth": "old_auth"},
-        }
-    ]
-    await _seed_subscriptions(db_session, initial)
+    """既存エンドポイントのキー・設定が更新され、既存トークンがそのまま返る"""
+    initial_token = "existing_management_token_for_test_12345"
+    # 既存行を token 付きで投入
+    async with db_session() as session:
+        row = PushSubscriptionRow(
+            endpoint="https://push.example.com/sub1",
+            key_p256dh="old_key",
+            key_auth="old_auth",
+            management_token=initial_token,
+        )
+        session.add(row)
+        await session.commit()
 
     service = _make_service()
     assert await service.get_subscription_count() == 1
@@ -113,8 +124,9 @@ async def test_subscribe_update_existing(db_session):
         endpoint="https://push.example.com/sub1",
         keys={"p256dh": "new_key", "auth": "new_auth"},
     )
-    result = await service.subscribe(sub)
+    result, token = await service.subscribe(sub)
     assert result is True
+    assert token == initial_token  # 同じ token が返る
     # 件数は増えない（更新のみ）
     assert await service.get_subscription_count() == 1
 
@@ -126,35 +138,181 @@ async def test_subscribe_update_existing(db_session):
         row = (await session.execute(stmt)).scalar_one()
         assert row.key_p256dh == "new_key"
         assert row.key_auth == "new_auth"
+        assert row.management_token == initial_token
 
-
-# ---------------------------------------------------------------------------
-# unsubscribe
-# ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_unsubscribe_existing(db_session):
-    """存在するサブスクリプションが正常に解除される"""
+async def test_subscribe_legacy_row_gets_token_backfilled(db_session):
+    """legacy row (token=null) に対する再 subscribe で token が補完される"""
     initial = [
         {
-            "endpoint": "https://push.example.com/sub1",
+            "endpoint": "https://push.example.com/legacy",
             "keys": {"p256dh": "k", "auth": "a"},
         }
     ]
     await _seed_subscriptions(db_session, initial)
 
     service = _make_service()
-    result = await service.unsubscribe("https://push.example.com/sub1")
+    sub = PushSubscription(
+        endpoint="https://push.example.com/legacy",
+        keys={"p256dh": "k2", "auth": "a2"},
+    )
+    result, token = await service.subscribe(sub)
+    assert result is True
+    assert isinstance(token, str)
+    assert len(token) >= 32
+
+
+# ---------------------------------------------------------------------------
+# unsubscribe (Wave 2: token 必須)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_unsubscribe_with_correct_token(db_session):
+    """正しい token を伴う解除は成功する"""
+    service = _make_service()
+    sub = PushSubscription(
+        endpoint="https://push.example.com/sub1",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    _, token = await service.subscribe(sub)
+    assert token is not None
+
+    result = await service.unsubscribe("https://push.example.com/sub1", token)
     assert result is True
     assert await service.get_subscription_count() == 0
 
 
 @pytest.mark.asyncio
-async def test_unsubscribe_nonexistent_returns_false(db_session):
-    """存在しないエンドポイントの解除で False が返る"""
+async def test_unsubscribe_with_wrong_token_raises_mismatch(db_session):
+    """不正な token は TokenAuthError(mismatch) を発生させ、行は残る"""
     service = _make_service()
-    result = await service.unsubscribe("https://push.example.com/not_found")
-    assert result is False
+    sub = PushSubscription(
+        endpoint="https://push.example.com/sub1",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    await service.subscribe(sub)
+
+    with pytest.raises(TokenAuthError) as exc_info:
+        await service.unsubscribe("https://push.example.com/sub1", "wrong_token_xxxxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    assert exc_info.value.reason == "mismatch"
+    # 行は残っているべき
+    assert await service.get_subscription_count() == 1
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_legacy_row_rejected(db_session):
+    """token=null の legacy row 操作は TokenAuthError(legacy) で拒否される"""
+    initial = [
+        {
+            "endpoint": "https://push.example.com/legacy",
+            "keys": {"p256dh": "k", "auth": "a"},
+        }
+    ]
+    await _seed_subscriptions(db_session, initial)
+
+    service = _make_service()
+    with pytest.raises(TokenAuthError) as exc_info:
+        await service.unsubscribe("https://push.example.com/legacy", "any_token")
+    assert exc_info.value.reason == "legacy"
+    # 行は残っているべき
+    assert await service.get_subscription_count() == 1
+
+
+@pytest.mark.asyncio
+async def test_unsubscribe_nonexistent_raises_not_found(db_session):
+    """存在しないエンドポイントは TokenAuthError(not_found)"""
+    service = _make_service()
+    with pytest.raises(TokenAuthError) as exc_info:
+        await service.unsubscribe("https://push.example.com/not_found", "any_token")
+    assert exc_info.value.reason == "not_found"
+
+
+@pytest.mark.asyncio
+async def test_token_rate_limit_locks_after_5_failures(db_session):
+    """token 不一致 5回でロックアウト発動 (TokenAuthError(locked))"""
+    service = _make_service()
+    sub = PushSubscription(
+        endpoint="https://push.example.com/rl",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    await service.subscribe(sub)
+
+    # 5回 mismatch を試行
+    for _ in range(5):
+        with pytest.raises(TokenAuthError) as exc_info:
+            await service.unsubscribe("https://push.example.com/rl", "wrong_xxxxxxxxxxxxxxxxxxxxxxxxxxx")
+        # 5回目までは mismatch、しきい値到達後の次の呼び出しから locked となる
+        assert exc_info.value.reason in ("mismatch", "locked")
+
+    # 6回目は必ず locked
+    with pytest.raises(TokenAuthError) as exc_info:
+        await service.unsubscribe("https://push.example.com/rl", "wrong_xxxxxxxxxxxxxxxxxxxxxxxxxxx")
+    assert exc_info.value.reason == "locked"
+
+
+# ---------------------------------------------------------------------------
+# update_preferences / get_preferences (Wave 2: token 必須)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_update_preferences_with_correct_token(db_session):
+    service = _make_service()
+    sub = PushSubscription(
+        endpoint="https://push.example.com/up1",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    _, token = await service.subscribe(sub)
+    assert token is not None
+
+    result = await service.update_preferences(
+        "https://push.example.com/up1", token, language="en"
+    )
+    assert result is True
+
+
+@pytest.mark.asyncio
+async def test_update_preferences_with_wrong_token(db_session):
+    service = _make_service()
+    sub = PushSubscription(
+        endpoint="https://push.example.com/up2",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    await service.subscribe(sub)
+
+    with pytest.raises(TokenAuthError) as exc_info:
+        await service.update_preferences(
+            "https://push.example.com/up2", "bad_token_xxxxxxxxxxxxxxxxxxxxx", language="en"
+        )
+    assert exc_info.value.reason == "mismatch"
+
+
+@pytest.mark.asyncio
+async def test_get_preferences_with_correct_token(db_session):
+    service = _make_service()
+    sub = PushSubscription(
+        endpoint="https://push.example.com/gp1",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    _, token = await service.subscribe(sub, language="ja")
+    assert token is not None
+
+    prefs = await service.get_preferences("https://push.example.com/gp1", token)
+    assert prefs is not None
+    assert prefs["endpoint"] == "https://push.example.com/gp1"
+
+
+@pytest.mark.asyncio
+async def test_get_preferences_with_wrong_token(db_session):
+    service = _make_service()
+    sub = PushSubscription(
+        endpoint="https://push.example.com/gp2",
+        keys={"p256dh": "k", "auth": "a"},
+    )
+    await service.subscribe(sub)
+
+    with pytest.raises(TokenAuthError):
+        await service.get_preferences("https://push.example.com/gp2", "wrong_xxxxxxxxxxxxxxxx")
 
 
 # ---------------------------------------------------------------------------

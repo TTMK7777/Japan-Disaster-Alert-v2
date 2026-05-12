@@ -191,6 +191,7 @@ class PushSubscriptionWithPreferences(BaseModel):
 class PushPreferencesUpdate(BaseModel):
     """通知設定更新リクエスト"""
     endpoint: str = Field(..., min_length=1, max_length=2048)
+    token: str = Field(..., min_length=1, max_length=64)  # Wave 2: management_token 必須
     language: Optional[str] = Field(default=None, max_length=10)
     preferred_regions: Optional[list[str]] = None
     earthquake_threshold: Optional[int] = Field(default=None, ge=1, le=7)
@@ -232,8 +233,13 @@ class PushPreferencesResponse(BaseModel):
 
 
 class PushUnsubscribeRequest(BaseModel):
-    """サブスクリプション解除リクエスト"""
-    endpoint: str
+    """サブスクリプション解除・設定問い合わせリクエスト
+
+    Wave 2 IDOR 根本修正: management_token 必須化。
+    /push/preferences/query でも本モデルを共用する。
+    """
+    endpoint: str = Field(..., min_length=1, max_length=2048)
+    token: str = Field(..., min_length=1, max_length=64)
 
 
 class PushTestRequest(BaseModel):
@@ -244,10 +250,15 @@ class PushTestRequest(BaseModel):
 
 
 class PushNotificationResponse(BaseModel):
-    """プッシュ通知レスポンス"""
+    """プッシュ通知レスポンス
+
+    Wave 2 IDOR 根本修正: subscribe 成功時のみ management_token を返却。
+    クライアントは localStorage 等に保管し、以降の操作 API に必須で添付する。
+    """
     success: bool
     message: str
     sent_count: int = 0
+    management_token: Optional[str] = None
 
 
 class SafetyGuide(BaseModel):
