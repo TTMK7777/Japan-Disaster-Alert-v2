@@ -110,13 +110,16 @@ class AIProvider:
             target_name = LANG_NAMES.get(target_lang, target_lang)
             url = (
                 f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+                f"{self.gemini_model}:generateContent"
             )
 
             client = self._get_client()
             response = await client.post(
                 url,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self.gemini_api_key,
+                },
                 json={
                     "contents": [{
                         "parts": [{
@@ -210,13 +213,16 @@ class AIProvider:
         try:
             url = (
                 f"https://generativelanguage.googleapis.com/v1beta/models/"
-                f"{self.gemini_model}:generateContent?key={self.gemini_api_key}"
+                f"{self.gemini_model}:generateContent"
             )
 
             client = self._get_client()
             response = await client.post(
                 url,
-                headers={"Content-Type": "application/json"},
+                headers={
+                    "Content-Type": "application/json",
+                    "x-goog-api-key": self.gemini_api_key,
+                },
                 json={
                     "contents": [{"parts": [{"text": prompt}]}],
                     "generationConfig": {
