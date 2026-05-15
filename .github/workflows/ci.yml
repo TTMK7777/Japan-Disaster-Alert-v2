@@ -23,8 +23,11 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - name: Install app dependencies
+        run: grep -v "^pytest" requirements.txt | pip install -r /dev/stdin
+
+      - name: Install test dependencies
+        run: pip install pytest==9.0.3 pytest-asyncio
 
       - name: Run tests
         run: pytest tests/ -v --asyncio-mode=auto

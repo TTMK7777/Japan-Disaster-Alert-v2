@@ -26,4 +26,4 @@ pywebpush==2.0.1
 # キャッシュ・スケジューラー（将来の拡張用）
 # テスト
 pytest==9.0.3
-pytest-asyncio==1.0.0
+pytest-asyncio==0.23.5
