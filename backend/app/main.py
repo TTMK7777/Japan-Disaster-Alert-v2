@@ -1,7 +1,7 @@
 """
 災害対応AIエージェントシステム - バックエンドAPI
 """
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query, Path
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -274,7 +274,7 @@ async def health_check():
 @app.get("/api/v1/earthquakes", response_model=list[EarthquakeInfo])
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_earthquakes(request: Request, limit: int = 10, lang: str = "ja"):
+async def get_earthquakes(request: Request, limit: int = Query(default=10, ge=1, le=100), lang: str = "ja"):
     """
     最新の地震情報を取得
 
@@ -315,7 +315,7 @@ async def get_earthquakes(request: Request, limit: int = 10, lang: str = "ja"):
 @app.get("/api/v1/weather/{area_code}", response_model=WeatherInfo)
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_weather(request: Request, area_code: str, lang: str = "ja"):
+async def get_weather(request: Request, area_code: str = Path(pattern=r"^\d{6}$"), lang: str = "ja"):
     """
     指定地域の天気情報を取得
 
@@ -336,7 +336,7 @@ async def get_weather(request: Request, area_code: str, lang: str = "ja"):
 @app.get("/api/v1/alerts", response_model=list[DisasterAlert])
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_alerts(request: Request, area_code: str = "130000", lang: str = "ja"):
+async def get_alerts(request: Request, area_code: str = Query(default="130000", pattern=r"^\d{6}$"), lang: str = "ja"):
     """
     現在発令中の警報・注意報を取得
 
@@ -402,8 +402,8 @@ async def get_nearby_shelters(
     request: Request,
     lat: float,
     lon: float,
-    radius: float = 5.0,
-    limit: int = 20,
+    radius: float = Query(default=5.0, ge=0.1, le=50.0),
+    limit: int = Query(default=20, ge=1, le=100),
     disaster_type: Optional[str] = None,
     lang: str = "ja"
 ):
@@ -445,7 +445,7 @@ async def get_shelter_disaster_types():
 @app.get("/api/v1/tsunami", response_model=list[TsunamiInfo])
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_tsunami_info(request: Request, limit: int = 10, lang: str = "ja"):
+async def get_tsunami_info(request: Request, limit: int = Query(default=10, ge=1, le=100), lang: str = "ja"):
     """
     津波情報を取得
 
