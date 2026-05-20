@@ -1,11 +1,57 @@
 """
 データモデル定義
 """
+import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
 ALLOWED_LANGUAGES = {"ja", "en", "zh", "zh-TW", "ko", "vi", "th", "id", "ms", "tl", "fr", "de", "it", "es", "ne", "easy_ja"}
+
+# H-2: location パラメータ サニタイズ用パターン
+# 英数字 + ASCII空白(改行除く) + 日本語(ひらがな/カタカナ/漢字/CJK記号) + ハイフン・カンマ・括弧のみ許可
+# プロンプトインジェクション対策: 改行・コロン・引用符・特殊記号・ピリオドは全て排除
+# (ピリオドは "Tokyo. Ignore previous" 型攻撃を防ぐため意図的に除外)
+LOCATION_PATTERN = re.compile(
+    r'^[A-Za-z0-9 \t\-,()　ぁ-ゟ゠-ヿ一-鿿]{1,100}$'
+)
+
+# H-3: SSRF 対策 - プッシュ通知エンドポイントの許可ドメイン
+# 主要なプッシュサービス (FCM/Mozilla/Microsoft/Apple) のみ許可
+ALLOWED_PUSH_DOMAINS = re.compile(
+    r'^https://('
+    r'fcm\.googleapis\.com'
+    r'|updates\.push\.services\.mozilla\.com'
+    r'|[a-z0-9\-]+\.notify\.windows\.com'
+    r'|[a-z0-9\-]+\.push\.apple\.com'
+    r'|web\.push\.apple\.com'
+    r')(/|$)',
+    re.IGNORECASE,
+)
+
+
+def validate_push_endpoint(v: str) -> str:
+    """H-3: プッシュ通知エンドポイントのドメイン検証 (SSRF 対策)
+
+    https:// で始まること & 許可ドメインに合致することを確認する。
+    """
+    if not v.startswith("https://"):
+        raise ValueError("エンドポイントはhttps://で始まる必要があります")
+    if not ALLOWED_PUSH_DOMAINS.match(v):
+        raise ValueError("不正なプッシュエンドポイント: 許可されていないドメインです")
+    return v
+
+
+def validate_location_str(v: Optional[str]) -> Optional[str]:
+    """H-2: location パラメータの検証 (プロンプトインジェクション対策)
+
+    None / 空文字列は許容、それ以外は LOCATION_PATTERN にマッチすることを要求する。
+    """
+    if v is None or v == "":
+        return v
+    if not LOCATION_PATTERN.match(v):
+        raise ValueError("不正な地域名: 使用できない文字が含まれています")
+    return v
 
 
 class HealthResponse(BaseModel):
@@ -175,9 +221,7 @@ class PushSubscriptionWithPreferences(BaseModel):
     @field_validator("endpoint")
     @classmethod
     def validate_endpoint(cls, v: str) -> str:
-        if not v.startswith("https://"):
-            raise ValueError("エンドポイントはhttps://で始まる必要があります")
-        return v
+        return validate_push_endpoint(v)
 
     @field_validator("preferred_regions")
     @classmethod
@@ -208,9 +252,7 @@ class PushPreferencesUpdate(BaseModel):
     @field_validator("endpoint")
     @classmethod
     def validate_endpoint(cls, v: str) -> str:
-        if not v.startswith("https://"):
-            raise ValueError("エンドポイントはhttps://で始まる必要があります")
-        return v
+        return validate_push_endpoint(v)
 
     @field_validator("preferred_regions")
     @classmethod
@@ -240,6 +282,11 @@ class PushUnsubscribeRequest(BaseModel):
     """
     endpoint: str = Field(..., min_length=1, max_length=2048)
     token: str = Field(..., min_length=1, max_length=64)
+
+    @field_validator("endpoint")
+    @classmethod
+    def validate_endpoint(cls, v: str) -> str:
+        return validate_push_endpoint(v)
 
 
 class PushTestRequest(BaseModel):

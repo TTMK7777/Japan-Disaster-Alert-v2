@@ -77,7 +77,8 @@ class SafetyGuideGenerator:
         severity: str,
     ) -> str:
         """安全ガイド生成用のプロンプトを構築"""
-        target_name = LANG_NAMES.get(target_lang, target_lang)
+        # H-1 defense in depth: 未知の target_lang を生で f-string に埋めない
+        target_name = LANG_NAMES.get(target_lang, "English")
 
         severity_context = {
             "low": "minor risk, general awareness needed",
