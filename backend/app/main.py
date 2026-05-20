@@ -25,6 +25,8 @@ from .utils.error_handler import handle_errors
 logger = get_logger(__name__)
 
 from .models import (
+    ALLOWED_LANGUAGES,
+    LOCATION_PATTERN,
     EarthquakeInfo,
     WeatherInfo,
     DisasterAlert,
@@ -43,6 +45,31 @@ from .models import (
     PushPreferencesUpdate,
     PushPreferencesResponse,
 )
+
+
+def _validate_lang(lang: str) -> str:
+    """H-1: lang/target_lang クエリパラメータ検証 (プロンプトインジェクション対策)
+
+    ALLOWED_LANGUAGES に含まれない言語コードは HTTP 400 で弾く。
+    詳細はサーバログのみに残し、レスポンスには汎用メッセージのみ返す。
+    """
+    if lang not in ALLOWED_LANGUAGES:
+        logger.warning("rejected unsupported lang parameter: %r", lang)
+        raise HTTPException(status_code=400, detail="未対応の言語コードです")
+    return lang
+
+
+def _validate_location(location: Optional[str]) -> Optional[str]:
+    """H-2: location クエリパラメータ検証 (プロンプトインジェクション対策)
+
+    None/空は許容、それ以外は LOCATION_PATTERN (英数字+日本語+一部記号) に合致を要求。
+    """
+    if location is None or location == "":
+        return None
+    if not LOCATION_PATTERN.match(location):
+        logger.warning("rejected malformed location parameter: %r", location)
+        raise HTTPException(status_code=400, detail="不正な地域名です")
+    return location
 from .services.jma_service import JMAService
 from .services.p2p_service import P2PQuakeService
 from .services.translator import TranslatorService
@@ -281,6 +308,7 @@ async def get_earthquakes(request: Request, limit: int = Query(default=10, ge=1,
     - **limit**: 取得件数（デフォルト: 10）
     - **lang**: 言語コード（ja, en, zh, ko, vi, ne, easy_ja）
     """
+    lang = _validate_lang(lang)
     earthquakes = await p2p_service.get_recent_earthquakes(limit=limit)
 
     # 多言語翻訳（ハイブリッド方式）
@@ -322,6 +350,7 @@ async def get_weather(request: Request, area_code: str = Path(pattern=r"^\d{6}$"
     - **area_code**: 地域コード（例: 130000=東京都）
     - **lang**: 言語コード
     """
+    lang = _validate_lang(lang)
     weather = await jma_service.get_weather_forecast(area_code)
 
     # 多言語翻訳
@@ -343,6 +372,7 @@ async def get_alerts(request: Request, area_code: str = Query(default="130000", 
     - **area_code**: 地域コード（例: 130000=東京都）
     - **lang**: 言語コード（ja, en, zh, ko, vi, easy_ja）
     """
+    lang = _validate_lang(lang)
     # 警報サービスに多言語翻訳が組み込まれているため直接取得
     alerts = await warning_service.get_warnings(area_code, lang)
     return alerts
@@ -357,6 +387,7 @@ async def get_special_warnings(request: Request, lang: str = "ja"):
 
     - **lang**: 言語コード
     """
+    lang = _validate_lang(lang)
     alerts = await warning_service.get_special_warnings()
 
     if lang != "ja":
@@ -381,6 +412,7 @@ async def translate_message(request: Request, text: str, target_lang: str = "en"
     - **text**: 翻訳するテキスト（最大5000文字）
     - **target_lang**: 翻訳先言語コード
     """
+    target_lang = _validate_lang(target_lang)
     if len(text) > settings.max_translate_text_length:
         raise HTTPException(
             status_code=400,
@@ -417,6 +449,7 @@ async def get_nearby_shelters(
     - **disaster_type**: 災害種別（earthquake, tsunami, flood等）
     - **lang**: 言語コード
     """
+    lang = _validate_lang(lang)
     shelters = shelter_service.get_nearby_shelters(
         lat=lat,
         lon=lon,
@@ -452,6 +485,7 @@ async def get_tsunami_info(request: Request, limit: int = Query(default=10, ge=1
     - **limit**: 取得件数
     - **lang**: 言語コード
     """
+    lang = _validate_lang(lang)
     tsunamis = await tsunami_service.get_tsunami_list(limit=limit)
 
     # 多言語翻訳
@@ -473,6 +507,7 @@ async def get_active_tsunami_warnings(request: Request, lang: str = "ja"):
 
     - **lang**: 言語コード
     """
+    lang = _validate_lang(lang)
     tsunamis = await tsunami_service.get_active_warnings()
 
     if lang != "ja":
@@ -508,6 +543,7 @@ async def get_volcano_warnings(request: Request, lang: str = "ja"):
 
     - **lang**: 言語コード
     """
+    lang = _validate_lang(lang)
     warnings = await volcano_service.get_volcano_warnings()
     return warnings
 
@@ -588,6 +624,11 @@ async def get_safety_guide(
     - /api/v1/safety-guide?disaster_type=earthquake&lang=en&severity=high
     - /api/v1/safety-guide?disaster_type=tsunami&lang=th&location=Osaka
     """
+    # H-1: 言語コード検証 (プロンプトインジェクション対策)
+    lang = _validate_lang(lang)
+    # H-2: location 検証 (プロンプトインジェクション対策)
+    location = _validate_location(location)
+
     # 災害種別の検証
     if disaster_type not in SUPPORTED_DISASTER_TYPES:
         raise HTTPException(

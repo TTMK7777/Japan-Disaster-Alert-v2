@@ -107,7 +107,8 @@ class AIProvider:
     async def _translate_with_gemini(self, text: str, target_lang: str) -> Optional[str]:
         """Gemini APIを使用して翻訳"""
         try:
-            target_name = LANG_NAMES.get(target_lang, target_lang)
+            # H-1 defense in depth: 未知の target_lang を生で f-string に埋めない
+            target_name = LANG_NAMES.get(target_lang, "English")
             url = (
                 f"https://generativelanguage.googleapis.com/v1beta/models/"
                 f"{self.gemini_model}:generateContent"
@@ -151,7 +152,8 @@ class AIProvider:
     async def _translate_with_claude(self, text: str, target_lang: str) -> Optional[str]:
         """Claude APIを使用して翻訳"""
         try:
-            target_name = LANG_NAMES.get(target_lang, target_lang)
+            # H-1 defense in depth: 未知の target_lang を生で f-string に埋めない
+            target_name = LANG_NAMES.get(target_lang, "English")
 
             client = self._get_client()
             response = await client.post(
