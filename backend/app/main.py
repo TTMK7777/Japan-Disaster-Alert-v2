@@ -32,6 +32,7 @@ from .models import (
     DisasterAlert,
     HealthResponse,
     TranslatedMessage,
+    TranslateRequest,
     ShelterInfo,
     TsunamiInfo,
     VolcanoInfo,
@@ -159,7 +160,13 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        
+
+        # HIGH-2 修正: CSP を付与。バックエンドは JSON API のみで HTML を返さないため
+        # スクリプト/スタイル系は全て deny し、frame-ancestors none で iframe 埋め込みも禁止。
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+        )
+
         # HTTPSを強制（本番環境のみ）
         if settings.environment == "production":
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
@@ -405,22 +412,25 @@ async def get_special_warnings(request: Request, lang: str = "ja"):
 @app.post("/api/v1/translate", response_model=TranslatedMessage)
 @handle_errors
 @limiter.limit(settings.rate_limit_translate)
-async def translate_message(request: Request, text: str, target_lang: str = "en"):
+async def translate_message(request: Request, body: TranslateRequest):
     """
-    テキストを指定言語に翻訳
+    テキストを指定言語に翻訳 (POST body 必須)
 
-    - **text**: 翻訳するテキスト（最大5000文字）
-    - **target_lang**: 翻訳先言語コード
+    HIGH-1 修正: text をクエリパラメータでなく POST body で受ける。
+    クエリだと URL/アクセスログ/プロキシログ/Referer に翻訳対象本文が平文で残る。
+
+    - **text**: 翻訳するテキスト（最大5000文字、body)
+    - **target_lang**: 翻訳先言語コード (body)
     """
-    target_lang = _validate_lang(target_lang)
-    if len(text) > settings.max_translate_text_length:
+    target_lang = _validate_lang(body.target_lang)
+    if len(body.text) > settings.max_translate_text_length:
         raise HTTPException(
             status_code=400,
             detail=f"テキストが長すぎます。最大{settings.max_translate_text_length}文字です。"
         )
-    translated = await translator.translate(text, target_lang)
+    translated = await translator.translate(body.text, target_lang)
     return TranslatedMessage(
-        original=text,
+        original=body.text,
         translated=translated,
         source_lang="ja",
         target_lang=target_lang

@@ -115,6 +115,16 @@ class TranslatedMessage(BaseModel):
     target_lang: str
 
 
+class TranslateRequest(BaseModel):
+    """翻訳リクエスト (HIGH-1: text をクエリでなく POST ボディで受ける)
+
+    text をクエリパラメータで受けるとサーバーログ/プロキシログ/ブラウザ履歴/Referer に
+    平文で残るため、必ずボディで受ける。
+    """
+    text: str = Field(..., min_length=1, max_length=5000)
+    target_lang: str = "en"
+
+
 class ShelterInfo(BaseModel):
     """避難所情報"""
     id: str

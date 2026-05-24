@@ -14,30 +14,71 @@ function urlBase64ToUint8Array(base64String: string): ArrayBuffer {
   return outputArray.buffer as ArrayBuffer;
 }
 
-// Wave 2 IDOR 根本修正: subscribe 時に発行される management_token を
-// localStorage に保管。unsubscribe/preferences 操作時に body に必須で含める。
-// 1ブラウザ=1subscription 前提のため単一キーで管理する。
+// HIGH-3 修正: management_token を localStorage から外す。
+//
+// 設計判断:
+//   - HttpOnly Cookie への完全移行は CORS/credentials/SameSite 設定の全面改修が必要なため
+//     別 PR で扱う (長期対応)。
+//   - 即時対応として 2 層構成にする:
+//       1) インメモリ (モジュールスコープ変数) を一次保管。JS から直接 export しない。
+//       2) sessionStorage を二次保管 (ページリロード復元用、タブ閉じれば消える)。
+//     localStorage を排除することで XSS で「過去のトークンを永続的に窃取」される
+//     最悪パターンを防ぐ。タブ生存中の XSS では sessionStorage は依然読めるが、
+//     CSP (HIGH-2) でインラインスクリプト/外部スクリプト注入の成立難度が上がっており、
+//     セッションスコープ化と組み合わせて攻撃面を大幅に縮小する。
+//   - localStorage に旧トークンがある場合は migrate して即削除する。
 const MANAGEMENT_TOKEN_KEY = 'push_management_token';
+
+let inMemoryToken: string | null = null;
 
 function getStoredManagementToken(): string | null {
   if (typeof window === 'undefined') return null;
+  if (inMemoryToken) return inMemoryToken;
   try {
-    return window.localStorage.getItem(MANAGEMENT_TOKEN_KEY);
-  } catch {
+    const fromSession = window.sessionStorage.getItem(MANAGEMENT_TOKEN_KEY);
+    if (fromSession) {
+      inMemoryToken = fromSession;
+      return fromSession;
+    }
+    // 旧バージョン互換: localStorage に残っていれば一度だけ吸い上げて削除する
+    const legacy = window.localStorage.getItem(MANAGEMENT_TOKEN_KEY);
+    if (legacy) {
+      try {
+        window.sessionStorage.setItem(MANAGEMENT_TOKEN_KEY, legacy);
+      } catch {
+        // sessionStorage 不可でもインメモリには載せる
+      }
+      try {
+        window.localStorage.removeItem(MANAGEMENT_TOKEN_KEY);
+      } catch {
+        // 削除失敗は致命でない
+      }
+      inMemoryToken = legacy;
+      return legacy;
+    }
     return null;
+  } catch {
+    return inMemoryToken;
   }
 }
 
 function setStoredManagementToken(token: string | null): void {
   if (typeof window === 'undefined') return;
+  inMemoryToken = token;
   try {
     if (token) {
-      window.localStorage.setItem(MANAGEMENT_TOKEN_KEY, token);
+      window.sessionStorage.setItem(MANAGEMENT_TOKEN_KEY, token);
     } else {
+      window.sessionStorage.removeItem(MANAGEMENT_TOKEN_KEY);
+    }
+    // localStorage には書かない。残骸がある場合は除去する。
+    try {
       window.localStorage.removeItem(MANAGEMENT_TOKEN_KEY);
+    } catch {
+      // 無視
     }
   } catch {
-    // localStorage 不可 (private mode等) は無視
+    // sessionStorage 不可 (private mode等) でもインメモリには保持されている
   }
 }
 
