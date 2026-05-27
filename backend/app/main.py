@@ -1,7 +1,7 @@
 """
 災害対応AIエージェントシステム - バックエンドAPI
 """
-from fastapi import FastAPI, HTTPException, Request, Query, Path
+from fastapi import FastAPI, HTTPException, Request, Query, Path, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -9,6 +9,7 @@ from starlette.responses import Response, StreamingResponse
 from datetime import datetime
 from typing import Optional
 import time
+import secrets
 
 import httpx
 
@@ -71,6 +72,25 @@ def _validate_location(location: Optional[str]) -> Optional[str]:
         logger.warning("rejected malformed location parameter: %r", location)
         raise HTTPException(status_code=400, detail="不正な地域名です")
     return location
+def _require_admin_token(request: Request) -> None:
+    """HIGH-3 修正: 管理トークン認証 (push/test 等の開発用エンドポイントを保護)
+
+    settings.admin_api_key が設定されている場合: Authorization: Bearer <token> を検証。
+    未設定の場合: 503 を返し、エンドポイントの利用を拒否する。
+    比較には secrets.compare_digest を使用しタイミング攻撃を防ぐ。
+    """
+    expected = settings.admin_api_key
+    if not expected:
+        raise HTTPException(
+            status_code=503,
+            detail="管理APIキーが設定されていません。ADMIN_API_KEY 環境変数を設定してください。"
+        )
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip()
+    if not token or not secrets.compare_digest(token, expected):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
 from .services.jma_service import JMAService
 from .services.p2p_service import P2PQuakeService
 from .services.translator import TranslatorService
@@ -797,13 +817,18 @@ async def push_unsubscribe(request: Request, body: PushUnsubscribeRequest):
 @app.post("/api/v1/push/test", response_model=PushNotificationResponse)
 @handle_errors
 @limiter.limit("5/minute")
-async def push_test(request: Request, body: PushTestRequest):
+async def push_test(
+    request: Request,
+    body: PushTestRequest,
+    _: None = Depends(_require_admin_token),  # HIGH-3 修正: 管理トークン認証
+):
     """
     テスト通知を送信（開発用）
 
     - **title**: 通知タイトル（デフォルト: テスト通知）
     - **body**: 通知本文
     - **url**: クリック時のURL
+    - Authorization: Bearer <ADMIN_API_KEY> ヘッダーが必要
     """
     if settings.environment == "production":
         raise HTTPException(
@@ -897,8 +922,8 @@ async def get_available_regions():
 # ========================================
 
 @app.get("/api/v1/events/stream")
-@limiter.exempt
-async def events_stream():
+@limiter.limit("5/minute")  # HIGH-2 修正: per-IP レート制限追加 (接続開始頻度を制限)
+async def events_stream(request: Request):
     """
     SSEイベントストリーム
 
