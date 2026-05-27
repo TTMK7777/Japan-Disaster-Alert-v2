@@ -62,6 +62,10 @@ class Settings(BaseSettings):
     shelter_data_dir: Path = Path(__file__).parent.parent / "data" / "shelters"
     shelter_csv_path: str = ""  # 国土地理院CSVファイルパス（空の場合はサンプルデータを使用）
 
+    # 管理APIキー（/api/v1/push/test 等の開発用エンドポイントを保護）
+    # 本番以外の環境で push/test を使用する場合は ADMIN_API_KEY を設定してください
+    admin_api_key: Optional[str] = None
+
     # プッシュ通知設定（VAPID）
     vapid_public_key: str = ""
     vapid_private_key: str = ""
