@@ -94,3 +94,14 @@ temp/
 credentials.json
 secrets.json
 .credentials.json
+
+# Internal development notes / reports (not for public repo)
+memory.md
+knowledge.md
+todo.md
+HANDOVER.md
+CLAUDE_CODE_REFACTOR_PLAN.md
+CODE_REVIEW_AND_REFACTORING_REPORT.md
+CODE_REVIEW_REFACTORING_REPORT.md
+REFACTORING_COMPLETE.md
+REFACTORING_REPORT.md
