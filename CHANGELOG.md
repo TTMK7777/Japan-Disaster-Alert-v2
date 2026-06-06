@@ -27,7 +27,7 @@
 - WCAG 2.1 AA 対応: ズーム有効化、スキップリンク、44px タッチターゲット、safe-area 対応
 - 津波・火山警報、AI 安全ガイド、対応言語一覧などの API エンドポイント群
 - エンドポイント別レート制限（slowapi）とリクエストサイズ制限（1MB）
-- 包括的テスト: pytest（バックエンド 38 件）、Vitest（ユニット 66 件）、Playwright（E2E 28 件）
+- 包括的テスト: pytest（バックエンド 56 件）、Vitest（ユニット 66 件）、Playwright（E2E 28 件）
 - GitHub Actions CI（pytest + Vitest）、Dependabot 自動マージ
 
 ### Changed

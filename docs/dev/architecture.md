@@ -61,7 +61,7 @@ flowchart LR
 | `app/utils/area_codes.py` | JMA エリアコードマッピング |
 | `app/utils/error_handler.py` | 統一エラーハンドリング |
 | `app/utils/logger.py` | 構造化 JSON ログ（本番）/ プレーンテキスト（開発） |
-| `backend/tests/` | pytest テスト（38 件） |
+| `backend/tests/` | pytest テスト（56 件） |
 | `backend/run.py` | 開発用 Uvicorn 起動スクリプト（`0.0.0.0:8000`、reload 有効） |
 
 ### フロントエンド (`frontend/`)
