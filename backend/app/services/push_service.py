@@ -98,6 +98,36 @@ class PushNotificationService:
 
     MAX_CONCURRENT_PUSH = 10
 
+    # 災害種別に応じた通知タイトル
+    ALERT_TITLES = {
+        "ja": {
+            "earthquake": "地震情報",
+            "tsunami": "津波警報",
+            "flood": "洪水警報",
+            "typhoon": "台風情報",
+            "volcano": "噴火警報",
+            "landslide": "土砂災害警戒",
+            "fire": "火災情報",
+            "weather": "気象警報",
+        },
+        "en": {
+            "earthquake": "Earthquake Alert",
+            "tsunami": "Tsunami Warning",
+            "flood": "Flood Warning",
+            "typhoon": "Typhoon Alert",
+            "volcano": "Volcanic Alert",
+            "landslide": "Landslide Warning",
+            "fire": "Fire Alert",
+            "weather": "Weather Warning",
+        },
+    }
+
+    # 重要度に応じたタイトルプレフィックス
+    SEVERITY_PREFIXES = {
+        "ja": {"extreme": "[緊急] ", "high": "[警報] ", "medium": "[注意] ", "low": ""},
+        "en": {"extreme": "[EMERGENCY] ", "high": "[WARNING] ", "medium": "[ADVISORY] ", "low": ""},
+    }
+
     def __init__(self):
         self._vapid_public_key = settings.vapid_public_key
         self._vapid_private_key = settings.vapid_private_key
@@ -409,6 +439,102 @@ class PushNotificationService:
             logger.error(f"サブスクリプション解除エラー: {e}")
             raise PushNotificationError(f"サブスクリプション解除に失敗しました: {e}")
 
+    def _require_enabled(self) -> None:
+        """プッシュ通知が利用不可の場合に PushNotificationError を送出する"""
+        if self.is_enabled:
+            return
+        if not PYWEBPUSH_AVAILABLE:
+            raise PushNotificationError(
+                "pywebpush がインストールされていません。"
+                "'pip install pywebpush' を実行してください。"
+            )
+        raise PushNotificationError(
+            "VAPID鍵が設定されていません。"
+            "環境変数 VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CLAIMS_EMAIL を設定してください。"
+        )
+
+    def _build_alert_title(self, alert_type: str, severity: str, lang: str) -> str:
+        """災害種別と重要度から通知タイトルを生成する"""
+        titles = self.ALERT_TITLES.get(lang, self.ALERT_TITLES["en"])
+        title = titles.get(alert_type, "災害情報 / Disaster Alert")
+        prefixes = self.SEVERITY_PREFIXES["ja"] if lang == "ja" else self.SEVERITY_PREFIXES["en"]
+        return prefixes.get(severity, "") + title
+
+    @staticmethod
+    def _build_payload(title: str, body: str, url: str) -> str:
+        """Web Push 通知ペイロード（JSON文字列）を生成する"""
+        return json.dumps({
+            "title": title,
+            "body": body,
+            "url": url,
+            "tag": "disaster-alert",
+            "icon": "/icons/icon-192x192.png",
+            "badge": "/icons/badge-72x72.png",
+        }, ensure_ascii=False)
+
+    async def _dispatch_push(self, targets: list[dict], payload: str) -> int:
+        """ペイロードを全送信先に並列送信し、無効サブスクリプションをDBから削除する
+
+        Args:
+            targets: {"endpoint": ..., "keys": {...}} のリスト
+            payload: 送信するJSONペイロード
+
+        Returns:
+            int: 送信成功数
+        """
+        vapid_claims = {
+            "sub": f"mailto:{self._vapid_claims_email}",
+        }
+        _sem = asyncio.Semaphore(self.MAX_CONCURRENT_PUSH)
+
+        async def _send_one(sub_info: dict) -> tuple[bool, Optional[str]]:
+            async with _sem:
+                try:
+                    # webpush は同期APIのため to_thread でイベントループをブロックしない
+                    await asyncio.to_thread(
+                        webpush,
+                        subscription_info={
+                            "endpoint": sub_info["endpoint"],
+                            "keys": sub_info["keys"],
+                        },
+                        data=payload,
+                        vapid_private_key=self._vapid_private_key,
+                        vapid_claims=vapid_claims,
+                    )
+                    return (True, None)
+                except WebPushException as e:
+                    response = getattr(e, "response", None)
+                    if response is not None and getattr(response, "status_code", None) in (404, 410):
+                        logger.info(f"無効なサブスクリプション削除: {sub_info['endpoint'][:50]}...")
+                        return (False, sub_info["endpoint"])
+                    logger.error(f"プッシュ送信エラー: {e}")
+                    return (False, None)
+                except Exception as e:
+                    logger.error(f"予期せぬプッシュ送信エラー: {e}")
+                    return (False, None)
+
+        results = await asyncio.gather(*[_send_one(sub) for sub in targets])
+
+        sent_count = sum(1 for success, _ in results if success)
+        failed_endpoints: list[str] = [
+            ep for success, ep in results if not success and ep is not None
+        ]
+
+        # 無効なサブスクリプションをDBから削除
+        if failed_endpoints:
+            try:
+                async with async_session() as session:
+                    stmt = delete(PushSubscriptionRow).where(
+                        PushSubscriptionRow.endpoint.in_(failed_endpoints)
+                    )
+                    await session.execute(stmt)
+                    await session.commit()
+                logger.info(f"無効なサブスクリプション{len(failed_endpoints)}件を削除")
+            except Exception as e:
+                logger.error(f"無効サブスクリプション削除エラー: {e}")
+
+        return sent_count
+
     async def send_notification(
         self,
         title: str,
@@ -431,29 +557,9 @@ class PushNotificationService:
         Raises:
             PushNotificationError: VAPID未設定またはpywebpush未インストール時
         """
-        if not self.is_enabled:
-            if not PYWEBPUSH_AVAILABLE:
-                raise PushNotificationError(
-                    "pywebpush がインストールされていません。"
-                    "'pip install pywebpush' を実行してください。"
-                )
-            raise PushNotificationError(
-                "VAPID鍵が設定されていません。"
-                "環境変数 VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CLAIMS_EMAIL を設定してください。"
-            )
+        self._require_enabled()
 
-        payload = json.dumps({
-            "title": title,
-            "body": body,
-            "url": url,
-            "tag": "disaster-alert",
-            "icon": "/icons/icon-192x192.png",
-            "badge": "/icons/badge-72x72.png",
-        }, ensure_ascii=False)
-
-        vapid_claims = {
-            "sub": f"mailto:{self._vapid_claims_email}",
-        }
+        payload = self._build_payload(title, body, url)
 
         targets: list[dict] = []
         if subscription:
@@ -483,55 +589,7 @@ class PushNotificationService:
             logger.warning("送信先のサブスクリプションがありません")
             return 0
 
-        _sem = asyncio.Semaphore(self.MAX_CONCURRENT_PUSH)
-
-        async def _send_one(sub_info: dict) -> tuple[bool, Optional[str]]:
-            async with _sem:
-                try:
-                    await asyncio.to_thread(
-                        webpush,
-                        subscription_info={
-                            "endpoint": sub_info["endpoint"],
-                            "keys": sub_info["keys"],
-                        },
-                        data=payload,
-                        vapid_private_key=self._vapid_private_key,
-                        vapid_claims=vapid_claims,
-                    )
-                    return (True, None)
-                except WebPushException as e:
-                    status_code = getattr(e, "response", None)
-                    if status_code and hasattr(status_code, "status_code"):
-                        sc = status_code.status_code
-                        if sc in (404, 410):
-                            logger.info(f"無効なサブスクリプション削除: {sub_info['endpoint'][:50]}...")
-                            return (False, sub_info["endpoint"])
-                    logger.error(f"プッシュ送信エラー: {e}")
-                    return (False, None)
-                except Exception as e:
-                    logger.error(f"予期せぬプッシュ送信エラー: {e}")
-                    return (False, None)
-
-        results = await asyncio.gather(*[_send_one(sub) for sub in targets])
-
-        sent_count = sum(1 for success, _ in results if success)
-        failed_endpoints: list[str] = [
-            ep for success, ep in results if not success and ep is not None
-        ]
-
-        # 無効なサブスクリプションをDBから削除
-        if failed_endpoints:
-            try:
-                async with async_session() as session:
-                    stmt = delete(PushSubscriptionRow).where(
-                        PushSubscriptionRow.endpoint.in_(failed_endpoints)
-                    )
-                    await session.execute(stmt)
-                    await session.commit()
-                logger.info(f"無効なサブスクリプション{len(failed_endpoints)}件を削除")
-            except Exception as e:
-                logger.error(f"無効サブスクリプション削除エラー: {e}")
-
+        sent_count = await self._dispatch_push(targets, payload)
         logger.info(f"プッシュ通知送信完了: {sent_count}/{len(targets)}件成功")
         return sent_count
 
@@ -554,40 +612,7 @@ class PushNotificationService:
         Returns:
             int: 送信成功数
         """
-        # 災害種別に応じたタイトル生成
-        alert_titles = {
-            "ja": {
-                "earthquake": "地震情報",
-                "tsunami": "津波警報",
-                "flood": "洪水警報",
-                "typhoon": "台風情報",
-                "volcano": "噴火警報",
-                "landslide": "土砂災害警戒",
-                "fire": "火災情報",
-            },
-            "en": {
-                "earthquake": "Earthquake Alert",
-                "tsunami": "Tsunami Warning",
-                "flood": "Flood Warning",
-                "typhoon": "Typhoon Alert",
-                "volcano": "Volcanic Alert",
-                "landslide": "Landslide Warning",
-                "fire": "Fire Alert",
-            },
-        }
-
-        titles = alert_titles.get(lang, alert_titles["en"])
-        title = titles.get(alert_type, f"災害情報 / Disaster Alert")
-
-        # 重要度に応じてタイトルにプレフィックスを付与
-        severity_prefix = {
-            "extreme": "[緊急] " if lang == "ja" else "[EMERGENCY] ",
-            "high": "[警報] " if lang == "ja" else "[WARNING] ",
-            "medium": "[注意] " if lang == "ja" else "[ADVISORY] ",
-            "low": "",
-        }
-        title = severity_prefix.get(severity, "") + title
-
+        title = self._build_alert_title(alert_type, severity, lang)
         safe_alert_type = alert_type if alert_type in VALID_ALERT_TYPES else "unknown"
         return await self.send_notification(
             title=title,
@@ -619,66 +644,11 @@ class PushNotificationService:
         Returns:
             int: 送信成功数
         """
-        if not self.is_enabled:
-            if not PYWEBPUSH_AVAILABLE:
-                raise PushNotificationError(
-                    "pywebpush がインストールされていません。"
-                    "'pip install pywebpush' を実行してください。"
-                )
-            raise PushNotificationError(
-                "VAPID鍵が設定されていません。"
-                "環境変数 VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_CLAIMS_EMAIL を設定してください。"
-            )
+        self._require_enabled()
 
-        # 災害種別に応じたタイトル生成
-        alert_titles = {
-            "ja": {
-                "earthquake": "地震情報",
-                "tsunami": "津波警報",
-                "flood": "洪水警報",
-                "typhoon": "台風情報",
-                "volcano": "噴火警報",
-                "landslide": "土砂災害警戒",
-                "fire": "火災情報",
-                "weather": "気象警報",
-            },
-            "en": {
-                "earthquake": "Earthquake Alert",
-                "tsunami": "Tsunami Warning",
-                "flood": "Flood Warning",
-                "typhoon": "Typhoon Alert",
-                "volcano": "Volcanic Alert",
-                "landslide": "Landslide Warning",
-                "fire": "Fire Alert",
-                "weather": "Weather Warning",
-            },
-        }
-
-        titles = alert_titles.get(lang, alert_titles["en"])
-        title = titles.get(alert_type, f"災害情報 / Disaster Alert")
-
-        # 重要度に応じてタイトルにプレフィックスを付与
-        severity_prefix = {
-            "extreme": "[緊急] " if lang == "ja" else "[EMERGENCY] ",
-            "high": "[警報] " if lang == "ja" else "[WARNING] ",
-            "medium": "[注意] " if lang == "ja" else "[ADVISORY] ",
-            "low": "",
-        }
-        title = severity_prefix.get(severity, "") + title
-
+        title = self._build_alert_title(alert_type, severity, lang)
         safe_alert_type = alert_type if alert_type in VALID_ALERT_TYPES else "unknown"
-        payload = json.dumps({
-            "title": title,
-            "body": message,
-            "url": f"/?alert={safe_alert_type}",
-            "tag": "disaster-alert",
-            "icon": "/icons/icon-192x192.png",
-            "badge": "/icons/badge-72x72.png",
-        }, ensure_ascii=False)
-
-        vapid_claims = {
-            "sub": f"mailto:{self._vapid_claims_email}",
-        }
+        payload = self._build_payload(title, message, f"/?alert={safe_alert_type}")
 
         # DBから全サブスクリプションを取得しフィルタリング
         targets: list[dict] = []
@@ -723,55 +693,7 @@ class PushNotificationService:
             logger.info(f"地域セグメント通知: 対象サブスクリプションなし (地域: {affected_areas})")
             return 0
 
-        _sem = asyncio.Semaphore(self.MAX_CONCURRENT_PUSH)
-
-        async def _send_one(sub_info: dict) -> tuple[bool, Optional[str]]:
-            async with _sem:
-                try:
-                    await asyncio.to_thread(
-                        webpush,
-                        subscription_info={
-                            "endpoint": sub_info["endpoint"],
-                            "keys": sub_info["keys"],
-                        },
-                        data=payload,
-                        vapid_private_key=self._vapid_private_key,
-                        vapid_claims=vapid_claims,
-                    )
-                    return (True, None)
-                except WebPushException as e:
-                    status_code = getattr(e, "response", None)
-                    if status_code and hasattr(status_code, "status_code"):
-                        sc = status_code.status_code
-                        if sc in (404, 410):
-                            logger.info(f"無効なサブスクリプション削除: {sub_info['endpoint'][:50]}...")
-                            return (False, sub_info["endpoint"])
-                    logger.error(f"プッシュ送信エラー: {e}")
-                    return (False, None)
-                except Exception as e:
-                    logger.error(f"予期せぬプッシュ送信エラー: {e}")
-                    return (False, None)
-
-        results = await asyncio.gather(*[_send_one(sub) for sub in targets])
-
-        sent_count = sum(1 for success, _ in results if success)
-        failed_endpoints: list[str] = [
-            ep for success, ep in results if not success and ep is not None
-        ]
-
-        # 無効なサブスクリプションをDBから削除
-        if failed_endpoints:
-            try:
-                async with async_session() as session:
-                    stmt = delete(PushSubscriptionRow).where(
-                        PushSubscriptionRow.endpoint.in_(failed_endpoints)
-                    )
-                    await session.execute(stmt)
-                    await session.commit()
-                logger.info(f"無効なサブスクリプション{len(failed_endpoints)}件を削除")
-            except Exception as e:
-                logger.error(f"無効サブスクリプション削除エラー: {e}")
-
+        sent_count = await self._dispatch_push(targets, payload)
         logger.info(
             f"地域セグメント通知送信完了: {sent_count}/{len(targets)}件成功 "
             f"(対象地域: {affected_areas})"

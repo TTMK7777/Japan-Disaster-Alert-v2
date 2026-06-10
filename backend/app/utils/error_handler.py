@@ -4,7 +4,6 @@
 統一されたエラーハンドリングを提供するデコレータを定義します。
 すべてのエンドポイントで一貫したエラー処理を実現します。
 """
-import os
 from functools import wraps
 from fastapi import HTTPException
 from typing import Callable, Any

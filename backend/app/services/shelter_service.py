@@ -4,7 +4,6 @@
 """
 import csv
 import hashlib
-import httpx
 import math
 import json
 from typing import Optional
@@ -16,10 +15,11 @@ logger = get_logger(__name__)
 
 
 class ShelterService:
-    """避難所データを管理するサービス"""
+    """避難所データを管理するサービス
 
-    # 国土地理院の避難所データURL
-    GSI_SHELTER_URL = "https://www.geospatial.jp/ckan/dataset/hinanbasho"
+    データソース: 国土地理院の指定緊急避難場所データ
+    https://www.geospatial.jp/ckan/dataset/hinanbasho
+    """
 
     def __init__(self):
         from ..config import settings

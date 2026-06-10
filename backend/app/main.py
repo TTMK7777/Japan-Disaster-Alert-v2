@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response, StreamingResponse
 from datetime import datetime
 from typing import Optional
+import asyncio
 import time
 import secrets
 
@@ -105,7 +106,9 @@ from .services.event_manager import EventManager
 jma_service = JMAService()
 p2p_service = P2PQuakeService()
 translator = TranslatorService()
-warning_service = WarningService()
+# translator を共有し、WarningService 内部での TranslatorService 重複生成
+# (キャッシュ・HTTPクライアントの二重持ち) を防ぐ
+warning_service = WarningService(translator)
 tsunami_service = TsunamiService()
 volcano_service = VolcanoService()
 shelter_service = ShelterService()
@@ -231,6 +234,31 @@ async def root():
     )
 
 
+async def _check_external_service(client: httpx.AsyncClient, url: str) -> dict:
+    """外部APIの到達性とレイテンシを計測する（ヘルスチェック用）"""
+    try:
+        start = time.monotonic()
+        resp = await client.get(url, timeout=5.0)
+        resp.raise_for_status()
+        return {"status": "ok", "latency_ms": round((time.monotonic() - start) * 1000)}
+    except Exception:
+        return {"status": "error", "latency_ms": None}
+
+
+def _ai_provider_status() -> dict:
+    """AIプロバイダーの設定状況を判定する（ヘルスチェック用）"""
+    if settings.ai_provider == "auto":
+        if settings.gemini_api_key:
+            return {"status": "ok", "provider": "gemini"}
+        if settings.anthropic_api_key:
+            return {"status": "ok", "provider": "claude"}
+        return {"status": "not_configured", "provider": None}
+    api_keys = {"gemini": settings.gemini_api_key, "claude": settings.anthropic_api_key}
+    if api_keys.get(settings.ai_provider):
+        return {"status": "ok", "provider": settings.ai_provider}
+    return {"status": "not_configured", "provider": settings.ai_provider}
+
+
 @app.get("/api/v1/health")
 @limiter.exempt
 async def health_check():
@@ -240,37 +268,17 @@ async def health_check():
     各外部サービスの到達性、データベース接続、AIプロバイダーの設定状況を確認する。
     """
     services = {}
-    overall_ok = True
 
-    # P2P Quake API チェック
-    try:
-        start = time.monotonic()
-        async with httpx.AsyncClient() as hc_client:
-            resp = await hc_client.get(
-                "https://api.p2pquake.net/v2/history?codes=551&limit=1",
-                timeout=5.0,
-            )
-            resp.raise_for_status()
-        latency = round((time.monotonic() - start) * 1000)
-        services["p2p_quake"] = {"status": "ok", "latency_ms": latency}
-    except Exception:
-        services["p2p_quake"] = {"status": "error", "latency_ms": None}
-        overall_ok = False
-
-    # JMA API チェック
-    try:
-        start = time.monotonic()
-        async with httpx.AsyncClient() as hc_client:
-            resp = await hc_client.get(
-                "https://www.jma.go.jp/bosai/quake/data/list.json",
-                timeout=5.0,
-            )
-            resp.raise_for_status()
-        latency = round((time.monotonic() - start) * 1000)
-        services["jma"] = {"status": "ok", "latency_ms": latency}
-    except Exception:
-        services["jma"] = {"status": "error", "latency_ms": None}
-        overall_ok = False
+    # P2P Quake API / JMA API チェック（並列実行）
+    async with httpx.AsyncClient() as hc_client:
+        services["p2p_quake"], services["jma"] = await asyncio.gather(
+            _check_external_service(
+                hc_client, "https://api.p2pquake.net/v2/history?codes=551&limit=1"
+            ),
+            _check_external_service(
+                hc_client, "https://www.jma.go.jp/bosai/quake/data/list.json"
+            ),
+        )
 
     # データベースチェック
     try:
@@ -280,28 +288,9 @@ async def health_check():
         services["database"] = {"status": "ok"}
     except Exception:
         services["database"] = {"status": "error"}
-        overall_ok = False
 
     # AIプロバイダーチェック
-    if settings.ai_provider == "auto":
-        if settings.gemini_api_key:
-            services["ai_provider"] = {"status": "ok", "provider": "gemini"}
-        elif settings.anthropic_api_key:
-            services["ai_provider"] = {"status": "ok", "provider": "claude"}
-        else:
-            services["ai_provider"] = {"status": "not_configured", "provider": None}
-    elif settings.ai_provider == "gemini":
-        if settings.gemini_api_key:
-            services["ai_provider"] = {"status": "ok", "provider": "gemini"}
-        else:
-            services["ai_provider"] = {"status": "not_configured", "provider": "gemini"}
-    elif settings.ai_provider == "claude":
-        if settings.anthropic_api_key:
-            services["ai_provider"] = {"status": "ok", "provider": "claude"}
-        else:
-            services["ai_provider"] = {"status": "not_configured", "provider": "claude"}
-    else:
-        services["ai_provider"] = {"status": "not_configured", "provider": settings.ai_provider}
+    services["ai_provider"] = _ai_provider_status()
 
     # 全体ステータス判定
     has_error = any(
@@ -380,8 +369,12 @@ async def get_weather(request: Request, area_code: str = Path(pattern=r"^\d{6}$"
     lang = _validate_lang(lang)
     weather = await jma_service.get_weather_forecast(area_code)
 
+    # 取得失敗時に None のまま返すと response_model 検証で 500 になるため 404 を返す
+    if weather is None:
+        raise HTTPException(status_code=404, detail="天気情報が見つかりません")
+
     # 多言語翻訳
-    if lang != "ja" and weather:
+    if lang != "ja":
         weather.text_translated = await translator.translate(
             weather.text, target_lang=lang
         )

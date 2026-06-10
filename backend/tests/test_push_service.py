@@ -362,6 +362,28 @@ async def test_send_notification_disabled_raises(db_session):
 
 
 # ---------------------------------------------------------------------------
+# _build_alert_title (共通化されたタイトル生成)
+# ---------------------------------------------------------------------------
+
+def test_build_alert_title_ja_with_severity_prefix():
+    """日本語タイトルに重要度プレフィックスが付与される"""
+    service = _make_service()
+    assert service._build_alert_title("earthquake", "extreme", "ja") == "[緊急] 地震情報"
+    assert service._build_alert_title("tsunami", "high", "ja") == "[警報] 津波警報"
+    assert service._build_alert_title("flood", "low", "ja") == "洪水警報"
+
+
+def test_build_alert_title_en_and_fallback():
+    """非日本語は英語タイトル、未知の災害種別はフォールバック"""
+    service = _make_service()
+    assert service._build_alert_title("earthquake", "high", "en") == "[WARNING] Earthquake Alert"
+    # 未対応言語は英語にフォールバック
+    assert service._build_alert_title("tsunami", "medium", "vi") == "[ADVISORY] Tsunami Warning"
+    # 未知の災害種別は汎用タイトル
+    assert service._build_alert_title("unknown_type", "low", "ja") == "災害情報 / Disaster Alert"
+
+
+# ---------------------------------------------------------------------------
 # get_subscription_count
 # ---------------------------------------------------------------------------
 
