@@ -4,7 +4,7 @@ SQLAlchemy テーブル定義
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .database import Base
@@ -43,10 +43,7 @@ class TranslationCacheRow(Base):
     __tablename__ = "translation_cache"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    # unique=True, index=True で一意インデックスが作られるため追加の Index 定義は不要
     cache_key: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     value: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-    __table_args__ = (
-        Index("ix_translation_cache_key", "cache_key"),
-    )

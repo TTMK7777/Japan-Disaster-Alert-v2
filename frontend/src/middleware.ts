@@ -9,6 +9,10 @@ import type { NextRequest } from 'next/server';
  * - nonce 値を x-nonce リクエストヘッダー経由でページコンポーネントへ伝達
  * - HSTS は本番環境のみ付与 (開発/プロキシ構成での意図しない接続障害を回避)
  */
+// フロントエンドが fetch / EventSource(SSE) で直接接続するバックエンド API のオリジン。
+// connect-src に含めないと地震データ取得・SSE 接続が CSP でブロックされる。
+const API_ORIGIN = new URL(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000').origin;
+
 function generateNonce(): string {
   // Web Crypto API は Edge Runtime / Node.js 双方で利用可能
   const buf = new Uint8Array(16);
@@ -29,7 +33,7 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",  // CSS-in-JS / Tailwind インライン style は許容
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://api.p2pquake.net https://www.jma.go.jp",
+    `connect-src 'self' ${API_ORIGIN} https://api.p2pquake.net https://www.jma.go.jp`,
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",

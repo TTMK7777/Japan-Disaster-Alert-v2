@@ -173,14 +173,15 @@ class TranslatorService:
         if template_translation:
             return template_translation
 
+        # キャッシュを確認（AIプロバイダー未設定でもDB復元済みキャッシュは使える）
+        cache_key = self._cache.make_key(text, target_lang)
+        cached = self._cache.get(cache_key)
+        if cached:
+            return cached
+
         # AI APIで翻訳
         provider = self._ai.get_active_provider()
         if provider:
-            cache_key = self._cache.make_key(text, target_lang)
-            cached = self._cache.get(cache_key)
-            if cached:
-                return cached
-
             try:
                 translated = await self._ai.translate_text(text, target_lang)
                 if translated:
@@ -196,6 +197,11 @@ class TranslatorService:
         """
         テンプレートを使用した翻訳を試行
 
+        日本語テンプレートと完全一致する定型文のみテンプレート翻訳を返す。
+        旧実装のキーワード部分一致は「大雨警報」が津波警報テンプレートに
+        誤マッチする等の誤訳や、プレースホルダー未展開文字列の返却を
+        引き起こすため廃止した。
+
         Args:
             text: 翻訳するテキスト
             target_lang: 翻訳先言語
@@ -205,28 +211,13 @@ class TranslatorService:
         """
         for _template_key, translations in TEMPLATES.items():
             ja_template = translations.get("ja", "")
-            if any(keyword in text for keyword in self._extract_keywords(ja_template)):
-                if target_lang in translations:
-                    return translations[target_lang]
+            # プレースホルダーを含むテンプレートは完全一致し得ないためスキップ
+            if not ja_template or "{" in ja_template:
+                continue
+            if text == ja_template:
+                return translations.get(target_lang)
 
         return None
-
-    @staticmethod
-    def _extract_keywords(template: str) -> list[str]:
-        """
-        テンプレートからキーワードを抽出
-
-        Args:
-            template: テンプレート文字列
-
-        Returns:
-            キーワードリスト
-        """
-        keywords = []
-        for word in ["地震", "津波", "避難", "警報", "注意報"]:
-            if word in template:
-                keywords.append(word)
-        return keywords
 
     # ------------------------------------------------------------------
     # テンプレート

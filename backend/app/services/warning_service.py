@@ -191,15 +191,11 @@ class WarningService:
         if not area_types:
             return []
 
-        # 都道府県名をフォールバック用に取得
-        prefecture_name = self.AREA_CODES.get(
-            next((k for k, v in self.AREA_CODES.items() if v == area_code), ""), area_code
+        # 都道府県名をフォールバック用に取得 (reverse lookup: area_code -> 都道府県名)
+        prefecture_name = next(
+            (pref for pref, code in self.AREA_CODES.items() if code == area_code),
+            area_code,
         )
-        # reverse lookup: area_code -> prefecture name
-        for pref, code in self.AREA_CODES.items():
-            if code == area_code:
-                prefecture_name = pref
-                break
 
         # 警報コード別にグループ化して重複排除
         grouped: dict[str, list[str]] = {}  # code -> [area_name_ja, ...]

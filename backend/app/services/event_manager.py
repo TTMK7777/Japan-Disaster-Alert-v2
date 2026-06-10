@@ -24,6 +24,8 @@ class EventManager:
         self._lock = asyncio.Lock()
         self._running = False
         self._task: Optional[asyncio.Task] = None
+        self._p2p_service = None
+        self._tsunami_service = None
         # 差分検出用の最終データ
         self._last_earthquake_ids: set[str] = set()
         self._last_tsunami_ids: set[str] = set()
@@ -59,6 +61,14 @@ class EventManager:
                     queue.put_nowait(message)
                     alive.append(queue)
                 except asyncio.QueueFull:
+                    # 受信が追いつかないクライアントはリストから外すだけでは
+                    # generate_stream 側が待ち続けてしまうため、
+                    # 1件取り出して sentinel(None) を入れストリーム終了を通知する
+                    try:
+                        queue.get_nowait()
+                        queue.put_nowait(None)
+                    except (asyncio.QueueEmpty, asyncio.QueueFull):
+                        pass
                     logger.warning("キュー満杯のSSEクライアントを切断")
             self._clients = alive
 
@@ -82,6 +92,7 @@ class EventManager:
                 await self._task
             except asyncio.CancelledError:
                 pass
+            self._task = None
         logger.info("SSEイベント監視停止")
 
     async def _monitor_loop(self) -> None:
@@ -153,6 +164,9 @@ class EventManager:
             while True:
                 try:
                     message = await asyncio.wait_for(queue.get(), timeout=60)
+                    if message is None:
+                        # broadcast() からの切断通知 (キュー満杯時の sentinel)
+                        break
                     yield message
                 except asyncio.TimeoutError:
                     # キープアライブコメントを送信

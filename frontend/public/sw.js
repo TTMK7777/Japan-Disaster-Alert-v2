@@ -238,8 +238,9 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     clients.matchAll({ type: 'window' }).then((clientList) => {
       // 既存のウィンドウがあればフォーカス
+      // 注意: client.url は絶対URL（https://host/...）なのでパス名で比較する
       for (const client of clientList) {
-        if (client.url === '/' && 'focus' in client) {
+        if (new URL(client.url).pathname === '/' && 'focus' in client) {
           return client.focus();
         }
       }

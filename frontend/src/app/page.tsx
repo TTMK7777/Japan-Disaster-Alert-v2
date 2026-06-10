@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, Component, ReactNode } from 'react';
+import { useState, useEffect, useCallback, Component, ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import LanguageSelector from '@/components/LanguageSelector';
 import EarthquakeList from '@/components/EarthquakeList';
@@ -12,7 +12,7 @@ import ThemeToggle from '@/components/ThemeToggle';
 import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
-import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/translations';
+import { translations, errorMessages, boundaryErrorMessages, getLocale, LANGUAGES } from '@/i18n/translations';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import type { SupportedLanguage } from '@/i18n/types';
@@ -198,16 +198,20 @@ export default function Home() {
     fetchEarthquakes();
   }, [fetchEarthquakes]);
 
+  // localStorage から言語設定を復元（CRITICAL #3: hydration mismatch 回避）
+  // 注意: 永続化エフェクトより先に宣言しないと、マウント時に保存済みの言語が
+  // デフォルトの 'ja' で上書きされてしまう
+  useEffect(() => {
+    const stored = localStorage.getItem('disaster-app-lang');
+    if (stored && LANGUAGES.some((l) => l.code === stored)) {
+      setLanguage(stored as SupportedLanguage);
+    }
+  }, []);
+
   useEffect(() => {
     document.documentElement.lang = language === 'easy_ja' ? 'ja' : language;
     localStorage.setItem('disaster-app-lang', language);
   }, [language]);
-
-  // localStorage から言語設定を復元（CRITICAL #3: hydration mismatch 回避）
-  useEffect(() => {
-    const stored = localStorage.getItem('disaster-app-lang') as SupportedLanguage;
-    if (stored) setLanguage(stored);
-  }, []);
 
   // タブキーボードナビゲーション（HIGH #7）
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, currentIndex: number) => {
@@ -310,7 +314,7 @@ export default function Home() {
             }`}
           />
           <span suppressHydrationWarning>
-            {t('lastUpdate')}: {mounted && lastUpdate ? lastUpdate.toLocaleTimeString(language === 'ja' ? 'ja-JP' : 'en-US') : '--:--:--'}
+            {t('lastUpdate')}: {mounted && lastUpdate ? lastUpdate.toLocaleTimeString(getLocale(language)) : '--:--:--'}
           </span>
         </div>
 
@@ -358,8 +362,8 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* エラー表示 */}
-              {earthquakeError && (
+              {/* エラー表示（地図表示時のみ。リスト表示時は EarthquakeList が同一のエラーUIを描画するため二重表示を避ける） */}
+              {earthquakeView === 'map' && earthquakeError && (
                 <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex items-center gap-3" role="alert">
                   <span className="text-2xl" aria-hidden="true">⚠️</span>
                   <div className="flex-1">
