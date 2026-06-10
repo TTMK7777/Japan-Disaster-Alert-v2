@@ -211,6 +211,24 @@ const translations: Record<string, Record<string, string>> = {
     es: 'Lleno',
     easy_ja: 'いっぱい',
   },
+  unknown: {
+    ja: '不明',
+    en: 'Unknown',
+    zh: '未知',
+    'zh-TW': '未知',
+    ko: '알 수 없음',
+    vi: 'Không rõ',
+    th: 'ไม่ทราบ',
+    id: 'Tidak diketahui',
+    ms: 'Tidak diketahui',
+    tl: 'Hindi alam',
+    ne: 'अज्ञात',
+    fr: 'Inconnu',
+    de: 'Unbekannt',
+    it: 'Sconosciuto',
+    es: 'Desconocido',
+    easy_ja: 'わからない',
+  },
   barrierFree: { ja: 'バリアフリー', en: 'Barrier-free', zh: '无障碍', 'zh-TW': '無障礙', ko: '배리어프리', vi: 'Kh\u00f4ng r\u00e0o c\u1ea3n', th: 'ไร้อุปสรรค', id: 'Bebas hambatan', ms: 'Tanpa halangan', tl: 'Walang hadlang', ne: 'अवरोधमुक्त', fr: 'Accessible', de: 'Barrierefrei', it: 'Senza barriere', es: 'Sin barreras', easy_ja: 'くるまいす OK' },
   petFriendly: { ja: 'ペット可', en: 'Pets OK', zh: '可携带宠物', 'zh-TW': '可攜帶寵物', ko: '반려동물 가능', vi: 'Cho ph\u00e9p th\u00fa c\u01b0ng', th: 'สัตว์เลี้ยงได้', id: 'Hewan peliharaan OK', ms: 'Haiwan peliharaan OK', tl: 'Pets OK', ne: 'पाल्तु जनावर ठीक', fr: 'Animaux accept\u00e9s', de: 'Haustiere erlaubt', it: 'Animali ammessi', es: 'Mascotas OK', easy_ja: 'ペット OK' },
   medical: { ja: '医療設備', en: 'Medical', zh: '医疗设施', 'zh-TW': '醫療設施', ko: '의료시설', vi: 'Y t\u1ebf', th: 'การแพทย์', id: 'Medis', ms: 'Perubatan', tl: 'Medikal', ne: 'चिकित्सा', fr: 'M\u00e9dical', de: 'Medizinisch', it: 'Medico', es: 'M\u00e9dico', easy_ja: 'いしゃ あり' },
@@ -370,7 +388,7 @@ export default function ShelterMap({ language }: ShelterMapProps) {
 
   const t = useCallback(
     (key: keyof typeof translations) =>
-      translations[key][language as keyof typeof translations[typeof key]] || translations[key].en,
+      translations[key]?.[language] || translations[key]?.en || key,
     [language]
   );
 

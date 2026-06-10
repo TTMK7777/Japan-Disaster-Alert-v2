@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { EarthquakeIcon, TsunamiIcon, AlertIcon } from './icons/DisasterIcons';
+import { getLocale } from '@/i18n/translations';
 
 interface EmergencyAlertProps {
   language: string;
@@ -127,23 +128,6 @@ export default function EmergencyAlert({ language, onDismiss }: EmergencyAlertPr
     }
   }, []);
 
-  // 自動解除カウントダウン（注意報のみ）
-  useEffect(() => {
-    if (activeAlert?.level === 'advisory' && isVisible) {
-      setCountdown(30);
-      const timer = setInterval(() => {
-        setCountdown((prev) => {
-          if (prev === null || prev <= 1) {
-            handleDismiss();
-            return null;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [activeAlert, isVisible]);
-
   const handleDismiss = useCallback(() => {
     setIsVisible(false);
     setTimeout(() => {
@@ -151,6 +135,25 @@ export default function EmergencyAlert({ language, onDismiss }: EmergencyAlertPr
       onDismiss?.();
     }, 300);
   }, [onDismiss]);
+
+  // 自動解除カウントダウン（注意報のみ）
+  useEffect(() => {
+    if (activeAlert?.level === 'advisory' && isVisible) {
+      setCountdown(30);
+      const timer = setInterval(() => {
+        setCountdown((prev) => (prev === null ? null : prev - 1));
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [activeAlert, isVisible]);
+
+  // カウントダウン完了で自動解除（setState updater内での副作用を避ける）
+  useEffect(() => {
+    if (countdown !== null && countdown <= 0) {
+      setCountdown(null);
+      handleDismiss();
+    }
+  }, [countdown, handleDismiss]);
 
   // テスト用：警報をトリガー
   const triggerTestAlert = (type: 'earthquake' | 'tsunami', level: 'advisory' | 'warning' | 'emergency') => {
@@ -275,9 +278,7 @@ export default function EmergencyAlert({ language, onDismiss }: EmergencyAlertPr
               {activeAlert.title[language] || activeAlert.title.en}
             </h2>
             <p className={`text-sm ${style.message} opacity-80`}>
-              {new Date(activeAlert.timestamp).toLocaleTimeString(
-                language === 'ja' ? 'ja-JP' : 'en-US'
-              )}
+              {new Date(activeAlert.timestamp).toLocaleTimeString(getLocale(language))}
             </p>
           </div>
         </div>

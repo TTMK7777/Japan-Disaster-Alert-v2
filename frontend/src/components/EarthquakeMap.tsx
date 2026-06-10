@@ -5,7 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { IntensityBadge, IntensityScale } from './IntensityGauge';
-import TsunamiAlert, { TsunamiLevelIndicator } from './TsunamiAlert';
+import TsunamiAlert from './TsunamiAlert';
 import type { Earthquake } from '@/types/earthquake';
 import { getTranslation, getLocale } from '@/i18n/translations';
 

@@ -18,6 +18,13 @@ const REQUIRED_KEYS = [
   'safetyTips',
   'dataSource',
   'disclaimer',
+  // 接続状態インジケーター（ConnectionStatus）・テーマ表示用
+  'realtime',
+  'polling',
+  'disconnected',
+  'darkMode',
+  'lightMode',
+  'systemMode',
 ];
 
 // Phase 1A: コンポーネント翻訳キー（全16言語で必須）
