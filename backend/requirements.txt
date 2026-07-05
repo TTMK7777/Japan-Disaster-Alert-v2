@@ -25,6 +25,6 @@ pywebpush==2.0.1
 
 # キャッシュ・スケジューラー（将来の拡張用）
 # テスト
-# 注意: pytest-asyncio 0.23.x は pytest 9 系と互換性がないため pytest は 8 系に固定する
-pytest==8.3.4
-pytest-asyncio==0.23.8
+# pytest 9 系へ更新 (GHSA-6w46-j5rx-g56g)。pytest-asyncio は pytest<10,>=8.4 を許容する 1.4.0 に同時更新
+pytest==9.0.3
+pytest-asyncio==1.4.0
