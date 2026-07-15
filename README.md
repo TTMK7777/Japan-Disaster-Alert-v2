@@ -206,7 +206,8 @@ Japan-Disaster-Alert-v2/
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
 │   │   ├── test/                         # Test setup (Vitest)
-│   │   └── types/                        # TypeScript type definitions
+│   │   ├── types/                        # TypeScript type definitions
+│   │   └── middleware.ts                 # Nonce-based CSP middleware (Edge Runtime)
 │   ├── e2e/                              # Playwright E2E tests (28 tests)
 │   ├── public/
 │   │   ├── icons/                        # PWA icons (72-512px)
