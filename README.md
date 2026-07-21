@@ -201,7 +201,7 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
-│   │   │   └── __tests__/               # Vitest unit tests (59 tests)
+│   │   │   └── __tests__/               # Vitest unit tests (66 tests)
 │   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
@@ -238,7 +238,7 @@ HOME=/tmp pytest tests/ -v     # 38 tests (HOME=/tmp avoids .env.local conflicts
 ```bash
 cd frontend
 npm install
-npx vitest run       # 59 unit tests
+npx vitest run       # 66 unit tests
 ```
 
 ### E2E (Playwright)
