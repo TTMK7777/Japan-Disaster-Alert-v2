@@ -8,7 +8,19 @@
 ## [Unreleased]
 
 ### Added
-- Phase 7「コードドクター」: フロントエンド・バックエンド一括レビュー（未着手）
+- pip-audit 脆弱性ゲートのワークフローを追加（#50）
+  ※ 現状は呼び出し先の再利用ワークフローを解決できず未稼働。修正までゲートとして機能していない
+
+### Security
+- 依存関係の脆弱性修正: postcss 8.5.23（GHSA-r28c-9q8g-f849）、sharp 0.35.3 override（GHSA-f88m-g3jw-g9cj）、
+  @babel/core 7.29.6 override（GHSA-4x5r-pxfx-6jf8）、pytest 9.0.3 + pytest-asyncio 1.4.0（GHSA-6w46-j5rx-g56g）、
+  next / undici / esbuild の Dependabot 更新（#44-#48, #52-#55）
+
+### Changed
+- ドキュメント棚卸し: 公開リリース向けの索引・構成整備、ローカルパスの汎化、アーカイブ文書へのバナー付与（#41, #43, #49, #51）
+- テスト件数の実測反映: pytest バックエンド 86 件（CI 実測、2026-07-27 時点）
+
+> 未着手: Phase 7「コードドクター」（フロントエンド・バックエンド一括レビュー）
 
 ## [1.0.0] - 2026-06-06
 

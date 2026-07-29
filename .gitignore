@@ -77,9 +77,12 @@ htmlcov/
 test-results/
 playwright-report/
 
-# Database (generated)
-data/app.db
-data/push_subscriptions.json
+# Database (generated) -- パターン先頭以外に "/" を含むため、リポルート起点にアンカーされる。
+# 実際の生成先は backend/data/ 配下なので、階層に依存しない形で無視する。
+**/data/app.db
+**/data/push_subscriptions.json
+*.sqlite
+*.sqlite3
 
 # Jupyter
 .ipynb_checkpoints/
