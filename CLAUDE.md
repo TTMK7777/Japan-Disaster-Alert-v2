@@ -19,5 +19,16 @@
 - ユーザー向け文字列は16言語対応必須（`frontend/src/i18n/`）
 - Backend例外は `backend/app/exceptions.py` に定義
 
-## Testing
-- Backend: `cd backend && pytest tests/ -v`
+## Testing / Proof
+変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
+
+| 層 | コマンド | 件数（2026-07-27 CI 実測） |
+|----|----------|------|
+| Backend unit | `cd backend && pytest tests/ -v` | 86 |
+| Frontend unit | `cd frontend && npm run test:run` | 66 |
+| Frontend E2E | `cd frontend && npm run test:e2e` | 28（CI 未実行） |
+| Lint | `cd frontend && npm run lint` | - |
+| Build | `cd frontend && npm run build` | - |
+
+- `asyncio_mode = "auto"` は `backend/pyproject.toml` で設定済み（`--asyncio-mode=auto` の明示は不要）
+- backend の pytest は `HOME=/tmp` を付けると `.env.local` との干渉を避けられる
