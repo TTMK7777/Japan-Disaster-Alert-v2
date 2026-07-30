@@ -13,6 +13,7 @@ import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
 import { translations, errorMessages, boundaryErrorMessages, getLocale, LANGUAGES } from '@/i18n/translations';
+import { getBrowserLanguages, resolveInitialLanguage } from '@/i18n/detectLanguage';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import type { SupportedLanguage } from '@/i18n/types';
@@ -122,6 +123,8 @@ interface ApiError {
 
 export default function Home() {
   const [language, setLanguage] = useState<SupportedLanguage>('ja');
+  // 初期言語の決定（localStorage 復元 or ブラウザ言語推定）が完了したか
+  const [languageResolved, setLanguageResolved] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>('earthquake');
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [earthquakeView, setEarthquakeView] = useState<EarthquakeViewType>('list');
@@ -198,20 +201,27 @@ export default function Home() {
     fetchEarthquakes();
   }, [fetchEarthquakes]);
 
-  // localStorage から言語設定を復元（CRITICAL #3: hydration mismatch 回避）
+  // 表示言語の決定（CRITICAL #3: hydration mismatch 回避のためマウント後に行う）
+  // 優先順位: ①利用者が明示選択して保存した言語 ②ブラウザの言語設定からの推定
   // 注意: 永続化エフェクトより先に宣言しないと、マウント時に保存済みの言語が
   // デフォルトの 'ja' で上書きされてしまう
   useEffect(() => {
-    const stored = localStorage.getItem('disaster-app-lang');
-    if (stored && LANGUAGES.some((l) => l.code === stored)) {
-      setLanguage(stored as SupportedLanguage);
-    }
+    // 初回訪問（保存値なし）では、訪日客に16言語のリストから自国語を探させないため
+    // ブラウザの言語設定から推定する。該当なしは英語。判定ロジックは i18n/detectLanguage
+    setLanguage(
+      resolveInitialLanguage(localStorage.getItem('disaster-app-lang'), getBrowserLanguages())
+    );
+    setLanguageResolved(true);
   }, []);
 
   useEffect(() => {
     document.documentElement.lang = language === 'easy_ja' ? 'ja' : language;
-    localStorage.setItem('disaster-app-lang', language);
-  }, [language]);
+    // 初期解決が済むまでは保存しない。SSR 既定値の 'ja' を「利用者の明示選択」として
+    // 書き込むと、次回以降ブラウザ言語の推定が効かなくなる
+    if (languageResolved) {
+      localStorage.setItem('disaster-app-lang', language);
+    }
+  }, [language, languageResolved]);
 
   // タブキーボードナビゲーション（HIGH #7）
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, currentIndex: number) => {
