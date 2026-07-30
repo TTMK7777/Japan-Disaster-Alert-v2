@@ -14,6 +14,10 @@ from ..models import DisasterAlert
 from ..utils.logger import get_logger
 from ..utils.area_codes import AREA_CODES, get_area_code
 from .warning_guidance import resolve_guidance
+from .warning_names import (
+    DESCRIPTION_TEMPLATES as WARNING_DESCRIPTION_TEMPLATES,
+    WARNING_NAMES,
+)
 
 logger = get_logger(__name__)
 
@@ -49,38 +53,10 @@ class WarningService:
             self._translator = TranslatorService()
         return self._translator
 
-    # 警報・注意報コードマッピング（多言語対応）
-    WARNING_CODES = {
-        "02": {"ja": "暴風雪警報", "en": "Blizzard Warning", "zh": "暴风雪警报", "ko": "폭풍설 경보", "vi": "Cảnh báo bão tuyết", "easy_ja": "ふぶき けいほう", "severity": "high"},
-        "03": {"ja": "大雨警報", "en": "Heavy Rain Warning", "zh": "大雨警报", "ko": "호우 경보", "vi": "Cảnh báo mưa lớn", "easy_ja": "おおあめ けいほう", "severity": "high"},
-        "04": {"ja": "洪水警報", "en": "Flood Warning", "zh": "洪水警报", "ko": "홍수 경보", "vi": "Cảnh báo lũ lụt", "easy_ja": "こうずい けいほう", "severity": "high"},
-        "05": {"ja": "暴風警報", "en": "Storm Warning", "zh": "暴风警报", "ko": "폭풍 경보", "vi": "Cảnh báo bão", "easy_ja": "ぼうふう けいほう", "severity": "high"},
-        "06": {"ja": "大雪警報", "en": "Heavy Snow Warning", "zh": "大雪警报", "ko": "대설 경보", "vi": "Cảnh báo tuyết lớn", "easy_ja": "おおゆき けいほう", "severity": "high"},
-        "07": {"ja": "波浪警報", "en": "High Waves Warning", "zh": "海浪警报", "ko": "파랑 경보", "vi": "Cảnh báo sóng lớn", "easy_ja": "なみ けいほう", "severity": "high"},
-        "08": {"ja": "高潮警報", "en": "Storm Surge Warning", "zh": "风暴潮警报", "ko": "해일 경보", "vi": "Cảnh báo triều cường", "easy_ja": "たかしお けいほう", "severity": "high"},
-        "10": {"ja": "大雨注意報", "en": "Heavy Rain Advisory", "zh": "大雨注意报", "ko": "호우 주의보", "vi": "Chú ý mưa lớn", "easy_ja": "おおあめ ちゅういほう", "severity": "medium"},
-        "12": {"ja": "大雪注意報", "en": "Heavy Snow Advisory", "zh": "大雪注意报", "ko": "대설 주의보", "vi": "Chú ý tuyết lớn", "easy_ja": "おおゆき ちゅういほう", "severity": "medium"},
-        "13": {"ja": "風雪注意報", "en": "Wind Snow Advisory", "zh": "风雪注意报", "ko": "풍설 주의보", "vi": "Chú ý gió tuyết", "easy_ja": "ふうせつ ちゅういほう", "severity": "medium"},
-        "14": {"ja": "雷注意報", "en": "Thunder Advisory", "zh": "雷电注意报", "ko": "뇌우 주의보", "vi": "Chú ý sấm sét", "easy_ja": "かみなり ちゅういほう", "severity": "medium"},
-        "15": {"ja": "強風注意報", "en": "Strong Wind Advisory", "zh": "强风注意报", "ko": "강풍 주의보", "vi": "Chú ý gió mạnh", "easy_ja": "つよいかぜ ちゅういほう", "severity": "medium"},
-        "16": {"ja": "波浪注意報", "en": "High Waves Advisory", "zh": "海浪注意报", "ko": "파랑 주의보", "vi": "Chú ý sóng lớn", "easy_ja": "なみ ちゅういほう", "severity": "medium"},
-        "17": {"ja": "融雪注意報", "en": "Snowmelt Advisory", "zh": "融雪注意报", "ko": "융설 주의보", "vi": "Chú ý tan tuyết", "easy_ja": "ゆきどけ ちゅういほう", "severity": "medium"},
-        "18": {"ja": "洪水注意報", "en": "Flood Advisory", "zh": "洪水注意报", "ko": "홍수 주의보", "vi": "Chú ý lũ lụt", "easy_ja": "こうずい ちゅういほう", "severity": "medium"},
-        "19": {"ja": "高潮注意報", "en": "Storm Surge Advisory", "zh": "风暴潮注意报", "ko": "해일 주의보", "vi": "Chú ý triều cường", "easy_ja": "たかしお ちゅういほう", "severity": "medium"},
-        "20": {"ja": "濃霧注意報", "en": "Dense Fog Advisory", "zh": "浓雾注意报", "ko": "짙은 안개 주의보", "vi": "Chú ý sương mù dày", "easy_ja": "きり ちゅういほう", "severity": "low"},
-        "21": {"ja": "乾燥注意報", "en": "Dry Air Advisory", "zh": "干燥注意报", "ko": "건조 주의보", "vi": "Chú ý không khí khô", "easy_ja": "かんそう ちゅういほう", "severity": "low"},
-        "22": {"ja": "なだれ注意報", "en": "Avalanche Advisory", "zh": "雪崩注意报", "ko": "눈사태 주의보", "vi": "Chú ý lở tuyết", "easy_ja": "なだれ ちゅういほう", "severity": "medium"},
-        "23": {"ja": "低温注意報", "en": "Low Temperature Advisory", "zh": "低温注意报", "ko": "저온 주의보", "vi": "Chú ý nhiệt độ thấp", "easy_ja": "さむさ ちゅういほう", "severity": "low"},
-        "24": {"ja": "霜注意報", "en": "Frost Advisory", "zh": "霜冻注意报", "ko": "서리 주의보", "vi": "Chú ý sương giá", "easy_ja": "しも ちゅういほう", "severity": "low"},
-        "25": {"ja": "着氷注意報", "en": "Icing Advisory", "zh": "结冰注意报", "ko": "착빙 주의보", "vi": "Chú ý đóng băng", "easy_ja": "こおり ちゅういほう", "severity": "low"},
-        "26": {"ja": "着雪注意報", "en": "Snow Accretion Advisory", "zh": "积雪注意报", "ko": "착설 주의보", "vi": "Chú ý tuyết bám", "easy_ja": "ゆき ちゅういほう", "severity": "low"},
-        "32": {"ja": "暴風雪特別警報", "en": "Blizzard Emergency Warning", "zh": "暴风雪特别警报", "ko": "폭풍설 특별 경보", "vi": "Cảnh báo khẩn cấp bão tuyết", "easy_ja": "ふぶき とくべつけいほう", "severity": "extreme"},
-        "33": {"ja": "大雨特別警報", "en": "Heavy Rain Emergency Warning", "zh": "大雨特别警报", "ko": "호우 특별 경보", "vi": "Cảnh báo khẩn cấp mưa lớn", "easy_ja": "おおあめ とくべつけいほう", "severity": "extreme"},
-        "35": {"ja": "暴風特別警報", "en": "Storm Emergency Warning", "zh": "暴风特别警报", "ko": "폭풍 특별 경보", "vi": "Cảnh báo khẩn cấp bão", "easy_ja": "ぼうふう とくべつけいほう", "severity": "extreme"},
-        "36": {"ja": "大雪特別警報", "en": "Heavy Snow Emergency Warning", "zh": "大雪特别警报", "ko": "대설 특별 경보", "vi": "Cảnh báo khẩn cấp tuyết lớn", "easy_ja": "おおゆき とくべつけいほう", "severity": "extreme"},
-        "37": {"ja": "波浪特別警報", "en": "High Waves Emergency Warning", "zh": "海浪特别警报", "ko": "파랑 특별 경보", "vi": "Cảnh báo khẩn cấp sóng lớn", "easy_ja": "なみ とくべつけいほう", "severity": "extreme"},
-        "38": {"ja": "高潮特別警報", "en": "Storm Surge Emergency Warning", "zh": "风暴潮特别警报", "ko": "해일 특별 경보", "vi": "Cảnh báo khẩn cấp triều cường", "easy_ja": "たかしお とくべつけいほう", "severity": "extreme"},
-    }
+    # 警報・注意報コードマッピング（16言語）
+    # 実体は warning_names.py（災害種別 × 警報レベル の合成で生成）。
+    # 移行前の6言語の文面は tests/test_warning_names.py で全件突合して保証している。
+    WARNING_CODES = WARNING_NAMES
 
     # 地域名翻訳
     AREA_TRANSLATIONS = {
@@ -90,15 +66,9 @@ class WarningService:
         "小笠原諸島": {"en": "Ogasawara Islands", "zh": "小笠原诸岛", "ko": "오가사와라 제도", "vi": "Quần đảo Ogasawara", "easy_ja": "おがさわらしょとう"},
     }
 
-    # 説明文テンプレート
-    DESCRIPTION_TEMPLATES = {
-        "ja": "{area}に{warning}が発表されています。",
-        "en": "{warning} has been issued for {area}.",
-        "zh": "{area}发布了{warning}。",
-        "ko": "{area}에 {warning}이(가) 발령되었습니다.",
-        "vi": "{warning} đã được ban hành cho {area}.",
-        "easy_ja": "{area}に {warning}が でています。",
-    }
+    # 説明文テンプレート（16言語）— 実体は warning_names.py
+    DESCRIPTION_TEMPLATES = WARNING_DESCRIPTION_TEMPLATES
+
 
     # 気象庁定義に基づく注意事項（警報コード別）
     WARNING_GUIDANCE = {
