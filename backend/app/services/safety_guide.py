@@ -9,7 +9,8 @@ from typing import Optional
 
 from .ai_provider import AIProvider
 from .translation_cache import TranslationCache
-from .translation_templates import LANG_NAMES, DISASTER_TYPES
+from .safety_guide_fallback import build_fallback_guide
+from .translation_templates import LANG_NAMES
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -119,23 +120,14 @@ Important guidelines:
         location: Optional[str],
         severity: str,
     ) -> dict:
-        """フォールバック用の基本安全ガイド（日本語）"""
-        disaster_name = DISASTER_TYPES.get(disaster_type, {}).get("ja", disaster_type)
+        """
+        フォールバック用の基本安全ガイド（AI 非依存・16言語）
 
-        return {
-            "title": f"{disaster_name}の安全ガイド",
-            "summary": f"{disaster_name}が発生した場合の安全対策です。落ち着いて行動してください。",
-            "immediate_actions": [
-                "身の安全を確保してください",
-                "最新の情報を確認してください",
-                "必要に応じて避難してください",
-            ],
-            "preparation_tips": [
-                "非常用持ち出し袋を準備しておきましょう",
-                "避難場所を確認しておきましょう",
-            ],
-            "evacuation_info": "市区町村の指示に従って避難してください",
-            "emergency_contacts": "警察: 110 / 消防・救急: 119 / 海上保安庁: 118",
-            "additional_notes": "正確な情報は公式発表をご確認ください",
-            "cached": False,
-        }
+        以前は日本語のみを返していたため、AI が使えない状況（APIキー未設定 /
+        通信断 / レート制限）で外国人向けアプリが日本語しか出さない状態だった。
+        停電時こそがこのアプリの本番であることを踏まえ、静的な多言語辞書から返す。
+
+        文言は `safety_guide_fallback.SAFETY_GUIDE_FALLBACK` を参照。
+        location / severity は静的ガイドでは使用しない（AI 生成時のみ反映される）。
+        """
+        return build_fallback_guide(disaster_type, target_lang)
