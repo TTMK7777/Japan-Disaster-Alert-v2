@@ -17,6 +17,7 @@ Japan Disaster Alert のドキュメントハブです。読者のロール別�
 ### 開発者 (Developers)
 内部構造やコントリビュートを行う方:
 - [アーキテクチャ](dev/architecture.md) — コンポーネント構成とデータフロー
+- [要件と実装のギャップ分析](dev/requirements-gap-2026.md) — 訪日客ニーズに対する現状実装の差分と優先度
 - [用語集](glossary.md) — プロジェクト固有用語の定義
 - [コントリビューションガイド](../CONTRIBUTING.md) — 開発フロー・コーディング規約
 - [変更履歴 / CHANGELOG](../CHANGELOG.md) — リリースごとの変更点
@@ -38,6 +39,8 @@ Japan Disaster Alert のドキュメントハブです。読者のロール別�
 | [plan.md](../plan.md) | Explanation | フェーズ計画・決定事項ログ |
 | [PROJECT_PLAN.md](../PROJECT_PLAN.md) | Explanation | 詳細プロジェクト計画 |
 | [docs/research/JMA_API_UPDATE_2026.md](research/JMA_API_UPDATE_2026.md) | Reference | JMA API 更新調査 (2026) |
+| [docs/research/inbound-disaster-needs-2026.md](research/inbound-disaster-needs-2026.md) | Reference | 訪日外国人の災害時ニーズ調査（公的調査の棚卸し） |
+| [docs/dev/requirements-gap-2026.md](dev/requirements-gap-2026.md) | Explanation | 要件と実装のギャップ分析・優先度提案 |
 | [docs/strategy/differentiation-and-social-impact.md](strategy/differentiation-and-social-impact.md) | Explanation | 差別化戦略・社会貢献方針 |
 
 ## 質問・不具合報告 (Support)
