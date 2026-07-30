@@ -25,7 +25,7 @@
 | 層 | コマンド | 件数（2026-07-30 実測） |
 |----|----------|------|
 | Backend unit | `cd backend && pytest tests/ -v` | 508 |
-| Frontend unit | `cd frontend && npm run test:run` | 84 |
+| Frontend unit | `cd frontend && npm run test:run` | 102 |
 | Frontend E2E | `cd frontend && npm run test:e2e` | 28（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
@@ -63,3 +63,20 @@ cd frontend && npm run build && npm run start   # http://localhost:3000
 ```
 
 抽出結果を Bash に直接 print すると端末が cp932 で落ちるため、**ファイルに書いて Read する**。
+
+なお `--window-size=460` を指定しても headless の `innerWidth` は 512 になる（最小幅）。
+`--screenshot` は指定幅で切り取るため、**スクショの右端が切れていても実際のはみ出しとは限らない**。
+レイアウトを疑うときは `document.documentElement.scrollWidth` と `window.innerWidth` を実測する。
+
+## CSP の制約（`public/` の静的 HTML を書くとき必ず踏む）
+
+`src/middleware.ts` の CSP は `script-src 'self' 'nonce-...'` で、**`unsafe-inline` を含まない**。
+
+- **インライン `<script>` は実行されない。** 同一オリジンの外部ファイル（`<script src="/foo.js">`）にする
+- **`onclick` 等のイベントハンドラ属性も実行されない。** `addEventListener` を使う
+- **Service Worker はレスポンスヘッダごとキャッシュする**ため、オフライン時も CSP は効いたまま。
+  「オフラインなら CSP は無いだろう」は誤り
+- `style-src` には `'unsafe-inline'` があるのでインライン `<style>` は使える
+
+実例: `public/offline.html` を最初インラインスクリプトで書いたところ、言語切替が動かず
+行動指示が空欄で表示された（`src/__tests__/offline-page.test.ts` に再発防止テストあり）。
