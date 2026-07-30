@@ -335,3 +335,6 @@ class SafetyGuide(BaseModel):
     additional_notes: Optional[str] = None  # 補足情報
     generated_at: str  # 生成日時
     cached: bool = False  # キャッシュから取得したかどうか
+    # AI 生成ではなく静的な多言語フォールバックを返したかどうか
+    # （APIキー未設定・通信断・レート制限時。クライアントが「基本ガイド」と示せるようにする）
+    fallback: bool = False

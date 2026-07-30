@@ -22,16 +22,24 @@
 ## Testing / Proof
 変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
 
-| 層 | コマンド | 件数（backend=2026-07-27 CI 実測 / frontend=2026-07-30 ローカル実測） |
+| 層 | コマンド | 件数（2026-07-30 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 86 |
+| Backend unit | `cd backend && pytest tests/ -v` | 304 |
 | Frontend unit | `cd frontend && npm run test:run` | 84 |
 | Frontend E2E | `cd frontend && npm run test:e2e` | 28（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
 
 - `asyncio_mode = "auto"` は `backend/pyproject.toml` で設定済み（`--asyncio-mode=auto` の明示は不要）
-- backend の pytest は `HOME=/tmp` を付けると `.env.local` との干渉を避けられる
+- **backend の pytest はホームディレクトリを退避して実行する。** `app/config.py` の `Settings` は
+  `env_file=(Path.home() / ".env.local", ".env")` を読み、pydantic-settings は既定で extra を禁止するため、
+  ホームの `.env.local` に無関係なキー（他プロジェクトの API キー等）があると**収集段階で全件エラーになる**。
+  - **Windows では `HOME=/tmp` は効かない**（`Path.home()` は `USERPROFILE` を見る）。
+    `USERPROFILE=<空ディレクトリ> HOME=<空ディレクトリ> pytest tests/ -q` とする
+  - CI はクリーンな環境なので素の `pytest tests/ -v` で通る
+- **レート制限のあるエンドポイントをテストするときは limiter を無効化する。**
+  `monkeypatch.setattr(limiter, "enabled", False)`（`app.main.limiter`）。
+  例: `/api/v1/safety-guide` は 10回/分 のため、パラメトライズすると 429 で落ちる
 - **`npm run lint` は proof に使えない**: ESLint が未設定のため対話プロンプト（設定方式の選択）に入って停止する。型チェックは上記の `tsc --noEmit` を使う
 - `npx` は環境の deny 対象。リポジトリ定義の npm script（`npm run test:run` 等）か `node ./node_modules/...` を直接呼ぶ
 

@@ -701,7 +701,8 @@ async def get_safety_guide(
         emergency_contacts=guide_data.get("emergency_contacts"),
         additional_notes=guide_data.get("additional_notes"),
         generated_at=datetime.now().isoformat(),
-        cached=guide_data.get("cached", False)
+        cached=guide_data.get("cached", False),
+        fallback=guide_data.get("fallback", False)
     )
 
 
