@@ -17,7 +17,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **WCAG 2.1 AA** — Accessible: zoom enabled, skip links, 44px touch targets, safe-area support
 - **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 416 tests (pytest backend 304, Vitest unit 84, Playwright E2E 28)
+- **Comprehensive Testing** — 509 tests (pytest backend 397, Vitest unit 84, Playwright E2E 28)
 
 ## Supported Languages
 
@@ -230,7 +230,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -v               # 304 tests
+pytest tests/ -v               # 397 tests
 # On Windows, or if your home ~/.env.local has unrelated keys:
 #   USERPROFILE=<empty dir> HOME=<empty dir> pytest tests/ -q
 ```
