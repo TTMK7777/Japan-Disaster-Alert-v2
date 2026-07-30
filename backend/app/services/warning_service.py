@@ -13,6 +13,7 @@ from datetime import datetime
 from ..models import DisasterAlert
 from ..utils.logger import get_logger
 from ..utils.area_codes import AREA_CODES, get_area_code
+from .warning_guidance import resolve_guidance
 
 logger = get_logger(__name__)
 
@@ -229,8 +230,9 @@ class WarningService:
             description_translated = self._get_description(combined_area, warning_name, lang) if lang != "ja" else None
 
             # 気象庁定義に基づく注意事項を付加
+            # ja/en はコード別文面、他の14言語は災害グループ別の文面（warning_guidance 参照）
             guidance = self.WARNING_GUIDANCE.get(code, {})
-            guidance_text = guidance.get(lang, guidance.get("en", ""))
+            guidance_text = resolve_guidance(code, lang, self.WARNING_GUIDANCE)
             if guidance_text:
                 description_ja += f"\n⚠ {guidance.get('ja', '')}"
                 if description_translated:
