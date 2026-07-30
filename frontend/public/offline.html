@@ -1,231 +1,220 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>オフライン - 災害対応AI</title>
+  <title>Offline - Japan Disaster Alert</title>
+  <!--
+    オフライン時に Service Worker が返すページ（sw.js の OFFLINE_URL）。
+
+    停電・低回線で開かれる前提なので、単なる「オフラインです」ではなく
+    **その場で使える最小限の行動ガイド**を16言語で持つ。
+    公的調査では災害時に訪日客が困ったことの1位が「停電で情報が得られなかった」
+    67.0%、ニーズ1位が「充電ポイント」50.8% で、端末の電池が乏しい状況が既定。
+
+    - 外部リソースを一切読まない（フォント・画像・スクリプトすべて自己完結）
+    - ブラウザ言語から自動で言語を選ぶ（src/i18n/detectLanguage.ts と同じ方針）
+    - 言語コードの一覧は src/i18n/translations.ts の LANGUAGES と一致させる
+      （ずれると offline.test.ts が落ちる）
+  -->
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
+      /* 予防的な折り返し指定。タイ語・中国語・日本語は単語間に空白が無く、
+         狭い画面で長い一続きの文字列がはみ出しうる。
+         （overflow-x: hidden は不具合を隠すので使わない） */
+      overflow-wrap: anywhere;
     }
 
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Hiragino Sans', sans-serif;
-      background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 100%);
+      background: #0f172a;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: center;
-      padding: 20px;
-      color: white;
+      padding: 20px 16px 40px;
+      color: #f8fafc;
     }
 
     .container {
-      max-width: 400px;
+      max-width: 460px;
+      width: 100%;
+    }
+
+    header {
       text-align: center;
+      margin-bottom: 24px;
     }
 
     .icon {
-      font-size: 80px;
-      margin-bottom: 24px;
-      animation: pulse 2s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.1); opacity: 0.8; }
+      font-size: 56px;
+      margin-bottom: 12px;
     }
 
     h1 {
-      font-size: 24px;
-      margin-bottom: 16px;
+      font-size: 22px;
+      margin-bottom: 8px;
       font-weight: 700;
     }
 
     .message {
-      font-size: 16px;
-      opacity: 0.9;
-      margin-bottom: 32px;
+      font-size: 15px;
+      opacity: 0.85;
       line-height: 1.6;
     }
 
     .lang-switch {
       display: flex;
       justify-content: center;
-      gap: 8px;
-      margin-bottom: 32px;
+      gap: 6px;
+      margin: 20px 0 24px;
       flex-wrap: wrap;
     }
 
     .lang-btn {
-      padding: 8px 16px;
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 8px;
-      background: transparent;
-      color: white;
-      font-size: 14px;
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      color: #f8fafc;
+      padding: 7px 12px;
+      border-radius: 999px;
+      font-size: 13px;
       cursor: pointer;
-      transition: all 0.3s;
+      min-height: 36px;
     }
 
     .lang-btn:hover, .lang-btn.active {
-      background: rgba(255,255,255,0.2);
-      border-color: white;
+      background: rgba(255, 255, 255, 0.3);
+      border-color: rgba(255, 255, 255, 0.6);
     }
 
-    .retry-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 16px 32px;
-      background: white;
-      color: #1e3a8a;
-      border: none;
+    .guide {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.18);
       border-radius: 12px;
-      font-size: 18px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-
-    .retry-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 20px rgba(0,0,0,0.2);
-    }
-
-    .retry-btn:active {
-      transform: translateY(0);
-    }
-
-    .emergency-info {
-      margin-top: 48px;
-      padding: 20px;
-      background: rgba(255,255,255,0.1);
-      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
       text-align: left;
     }
 
-    .emergency-info h2 {
+    .guide h2 {
       font-size: 16px;
       margin-bottom: 12px;
+      font-weight: 700;
+    }
+
+    .steps {
+      list-style: none;
+      counter-reset: step;
+    }
+
+    .steps li {
+      counter-increment: step;
+      position: relative;
+      padding-left: 32px;
+      margin-bottom: 12px;
+      font-size: 15px;
+      line-height: 1.55;
+    }
+
+    .steps li:last-child {
+      margin-bottom: 0;
+    }
+
+    .steps li::before {
+      content: counter(step);
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #ef4444;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 700;
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: center;
     }
 
     .emergency-list {
       list-style: none;
-      font-size: 14px;
-      opacity: 0.9;
+      font-size: 15px;
+      line-height: 1.9;
     }
 
-    .emergency-list li {
-      padding: 6px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.1);
+    .emergency-list strong {
+      font-variant-numeric: tabular-nums;
     }
 
-    .emergency-list li:last-child {
-      border-bottom: none;
+    .retry-btn {
+      display: block;
+      width: 100%;
+      background: #2563eb;
+      border: none;
+      color: white;
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    .retry-btn:hover {
+      background: #1d4ed8;
     }
 
     @media (prefers-reduced-motion: reduce) {
-      .icon {
-        animation: none;
-      }
+      * { animation: none !important; transition: none !important; }
     }
   </style>
 </head>
 <body>
   <div class="container">
-    <div class="icon" aria-hidden="true">📡</div>
+    <header>
+      <div class="icon" aria-hidden="true">📡</div>
+      <h1 id="title">You are offline</h1>
+      <p class="message" id="message">
+        No internet connection. The steps below work without a network.
+      </p>
+    </header>
 
-    <h1 id="title">オフラインです</h1>
-    <p class="message" id="message">
-      インターネットに接続されていません。<br>
-      接続を確認して、もう一度お試しください。
-    </p>
+    <div class="lang-switch" id="lang-switch" role="group" aria-label="Language"></div>
 
-    <div class="lang-switch">
-      <button class="lang-btn active" onclick="setLang('ja')">日本語</button>
-      <button class="lang-btn" onclick="setLang('en')">English</button>
-      <button class="lang-btn" onclick="setLang('zh')">中文</button>
-      <button class="lang-btn" onclick="setLang('ko')">한국어</button>
-      <button class="lang-btn" onclick="setLang('vi')">Tiếng Việt</button>
-    </div>
+    <section class="guide" aria-labelledby="guide-title">
+      <h2 id="guide-title">What to do now</h2>
+      <!--
+        JS が動かない場合でも読めるよう、英語の行動指示を静的に入れておく
+        （offline.js が言語に応じて差し替える）。空にしてはいけない。
+      -->
+      <ol class="steps">
+        <li id="step1">Protect yourself. Cover your head and move away from things that can fall.</li>
+        <li id="step2">When the shaking stops, turn off fire. If you are near the sea, move to higher ground.</li>
+        <li id="step3">Evacuate following official instructions. Do not decide alone.</li>
+      </ol>
+    </section>
 
-    <button class="retry-btn" onclick="retry()">
-      <span>🔄</span>
-      <span id="retry-text">再接続</span>
-    </button>
-
-    <div class="emergency-info">
-      <h2 id="emergency-title">📞 緊急連絡先</h2>
+    <section class="guide" aria-labelledby="emergency-title">
+      <h2 id="emergency-title">Emergency numbers</h2>
       <ul class="emergency-list">
-        <li>🚔 警察: 110</li>
-        <li>🚒 消防・救急: 119</li>
-        <li>🌊 海上保安庁: 118</li>
-        <li>📱 災害用伝言ダイヤル: 171</li>
+        <li>🚔 <span id="label-police">Police</span>: <strong>110</strong></li>
+        <li>🚒 <span id="label-fire">Fire &amp; Ambulance</span>: <strong>119</strong></li>
+        <li>🌊 <span id="label-coast">Coast Guard</span>: <strong>118</strong></li>
+        <li>📱 <span id="label-hotline">Japan Visitor Hotline (24h)</span>: <strong>050-3816-2787</strong></li>
       </ul>
-    </div>
+    </section>
+
+    <!-- onclick 属性は CSP（script-src に 'unsafe-inline' が無い）で実行されない。
+         ハンドラは offline.js で addEventListener する -->
+    <button class="retry-btn" id="retry-btn" type="button">
+      🔄 <span id="retry-text">Reconnect</span>
+    </button>
   </div>
 
-  <script>
-    const translations = {
-      ja: {
-        title: 'オフラインです',
-        message: 'インターネットに接続されていません。<br>接続を確認して、もう一度お試しください。',
-        retry: '再接続',
-        emergency: '緊急連絡先'
-      },
-      en: {
-        title: 'You are offline',
-        message: 'No internet connection.<br>Please check your connection and try again.',
-        retry: 'Reconnect',
-        emergency: 'Emergency Contacts'
-      },
-      zh: {
-        title: '您处于离线状态',
-        message: '没有网络连接。<br>请检查连接后重试。',
-        retry: '重新连接',
-        emergency: '紧急联系方式'
-      },
-      ko: {
-        title: '오프라인 상태입니다',
-        message: '인터넷에 연결되어 있지 않습니다.<br>연결을 확인하고 다시 시도해 주세요.',
-        retry: '다시 연결',
-        emergency: '긴급 연락처'
-      },
-      vi: {
-        title: 'Bạn đang ngoại tuyến',
-        message: 'Không có kết nối internet.<br>Vui lòng kiểm tra kết nối và thử lại.',
-        retry: 'Kết nối lại',
-        emergency: 'Liên hệ khẩn cấp'
-      }
-    };
-
-    function setLang(lang) {
-      const t = translations[lang];
-      document.getElementById('title').textContent = t.title;
-      document.getElementById('message').innerHTML = t.message;
-      document.getElementById('retry-text').textContent = t.retry;
-      document.getElementById('emergency-title').innerHTML = '📞 ' + t.emergency;
-
-      // Update active button
-      document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
-      event.target.classList.add('active');
-    }
-
-    function retry() {
-      window.location.reload();
-    }
-
-    // Check connection status
-    window.addEventListener('online', () => {
-      window.location.reload();
-    });
-  </script>
+  <script src="/offline.js"></script>
 </body>
 </html>
