@@ -84,9 +84,20 @@ class Settings(BaseSettings):
         return self.environment != "production"
     
     model_config = SettingsConfigDict(
-        env_file=(str(Path.home() / ".env.local"), ".env"),
+        # このリポジトリ内の env ファイルだけを読む。
+        # 以前は `Path.home() / ".env.local"`（ユーザーのグローバル env）も読んでいたが、
+        # 防災アプリが他プロジェクトの API キーまで読み込む構成は最小権限に反する。
+        # 実際 2026-07-30 に、そこに入っていた無関係なキーが下記 extra の既定値
+        # （forbid）と噛み合って ValidationError を起こし、エラーメッセージが
+        # `input_value=<実際の値>` を平文で出力してキー9件が露出した。
+        env_file=(".env.local", ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # 未知のキーは黙って捨てる。
+        # 既定の "forbid" に戻すと、env ファイルに無関係な行が1つあるだけで
+        # 起動が落ち、そのエラーに秘密値が載る（本番ログでも同じことが起きる）。
+        # 回帰テスト: tests/test_config_secret_leak.py
+        extra="ignore",
     )
 
 

@@ -17,7 +17,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **WCAG 2.1 AA** — Accessible: zoom enabled, skip links, 44px touch targets, safe-area support
 - **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 638 tests (pytest backend 508, Vitest unit 102, Playwright E2E 28)
+- **Comprehensive Testing** — 649 tests (pytest backend 519, Vitest unit 102, Playwright E2E 28)
 
 ## Supported Languages
 
@@ -112,7 +112,11 @@ chmod +x scripts/start_dev.sh
 
 ## Environment Variables
 
-Copy `backend/.env.example` to `backend/.env` and fill in the values:
+Copy `backend/.env.example` to `backend/.env` and fill in the values.
+
+> Only env files **inside this repository** (`backend/.env.local`, `backend/.env`) are read.
+> Files in your home directory are never loaded, so unrelated credentials from other
+> projects cannot end up in this application's settings or in its error messages.
 
 | Variable | Description | Required |
 |----------|-------------|----------|
@@ -230,9 +234,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -v               # 508 tests
-# On Windows, or if your home ~/.env.local has unrelated keys:
-#   USERPROFILE=<empty dir> HOME=<empty dir> pytest tests/ -q
+pytest tests/ -v               # 519 tests
 ```
 
 ### Frontend (Vitest)
