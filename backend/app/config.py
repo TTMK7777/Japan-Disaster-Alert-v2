@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Optional
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# backend/ ディレクトリ。env ファイルの探索をここに固定し、
+# 起動時のカレントディレクトリに依存しないようにする（下の model_config 参照）
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+
 
 class Settings(BaseSettings):
     """アプリケーション設定"""
@@ -84,13 +88,19 @@ class Settings(BaseSettings):
         return self.environment != "production"
     
     model_config = SettingsConfigDict(
-        # このリポジトリ内の env ファイルだけを読む。
-        # 以前は `Path.home() / ".env.local"`（ユーザーのグローバル env）も読んでいたが、
-        # 防災アプリが他プロジェクトの API キーまで読み込む構成は最小権限に反する。
-        # 実際 2026-07-30 に、そこに入っていた無関係なキーが下記 extra の既定値
-        # （forbid）と噛み合って ValidationError を起こし、エラーメッセージが
-        # `input_value=<実際の値>` を平文で出力してキー9件が露出した。
-        env_file=(".env.local", ".env"),
+        # backend ディレクトリ内の env ファイルだけを読む。
+        #
+        # 1) ユーザーのホーム配下は読まない:
+        #    以前は `Path.home() / ".env.local"`（グローバル env）も読んでいたが、
+        #    防災アプリが他プロジェクトの API キーまで読み込む構成は最小権限に反する。
+        #    実際 2026-07-30 に、そこにあった無関係なキーが下記 extra の既定値
+        #    （forbid）と噛み合って ValidationError を起こし、エラーメッセージが
+        #    `input_value=<実際の値>` を平文で出力してキー9件が露出した。
+        # 2) 相対パスではなく絶対パスで指定する:
+        #    相対パスだとカレントディレクトリ基準になり、リポジトリルートから
+        #    `uvicorn backend.app.main:app` のように起動すると読まれない。
+        #    逆に無関係なディレクトリの `.env` を拾う事故もありうる。
+        env_file=(_BACKEND_DIR / ".env.local", _BACKEND_DIR / ".env"),
         env_file_encoding="utf-8",
         case_sensitive=False,
         # 未知のキーは黙って捨てる。

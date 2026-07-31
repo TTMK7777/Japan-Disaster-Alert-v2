@@ -66,27 +66,37 @@ class TestNoValidationErrorOnUnrelatedEnv:
         assert Settings.model_config.get("extra") == "ignore"
 
 
+def _env_file_entries() -> list[Path]:
+    env_file = Settings.model_config.get("env_file")
+    entries = [env_file] if isinstance(env_file, (str, Path)) else list(env_file or [])
+    return [Path(e) for e in entries]
+
+
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+
 class TestDoesNotReadHomeEnvFile:
     """ユーザーのグローバル env を読まない（最小権限）"""
 
-    def test_env_file_にホームディレクトリを含まない(self):
-        env_file = Settings.model_config.get("env_file")
-        entries = [env_file] if isinstance(env_file, (str, Path)) else list(env_file or [])
+    def test_ホーム直下の_env_ファイルを参照しない(self):
+        """リポジトリ自体がホーム配下にありうるので、パスの部分一致では判定できない。
+        「ホーム直下のファイルそのものを指していないか」で判定する。"""
+        home = Path.home()
+        forbidden = {(home / ".env.local").resolve(), (home / ".env").resolve()}
 
-        home = str(Path.home())
-        for entry in entries:
-            assert home not in str(entry), (
-                f"env_file がホームを参照している: {entry!r}。"
+        for entry in _env_file_entries():
+            assert entry.resolve() not in forbidden, (
+                f"env_file がホーム直下の env を参照している: {entry!r}。"
                 "他プロジェクトのキーを読み込む構成は最小権限に反する"
             )
 
-    def test_env_file_はリポジトリ内の相対パスのみ(self):
-        env_file = Settings.model_config.get("env_file")
-        entries = [env_file] if isinstance(env_file, (str, Path)) else list(env_file or [])
-
+    def test_env_file_は_backend_ディレクトリ配下のみ(self):
+        entries = _env_file_entries()
         assert entries, "env_file が空"
         for entry in entries:
-            assert not Path(entry).is_absolute(), f"絶対パス参照: {entry!r}"
+            assert entry.resolve().parent == BACKEND_DIR, (
+                f"backend 外を参照している: {entry!r}（期待: {BACKEND_DIR}）"
+            )
 
     def test_ホームの_env_local_の値が設定に混入しない(self, tmp_path, monkeypatch):
         """ホームを差し替えても、そこの値を拾わないこと。"""
@@ -100,6 +110,41 @@ class TestDoesNotReadHomeEnvFile:
 
         settings = Settings()
         assert settings.gemini_api_key != "value-from-home-must-not-be-used"
+
+
+class TestCwdIndependence:
+    """起動時のカレントディレクトリに依存しない
+
+    `env_file` を相対パスにすると CWD 基準になり、
+      - リポジトリルートから `uvicorn backend.app.main:app` すると読まれない
+      - 無関係なディレクトリの `.env` を拾ってしまう
+    の両方が起きる。絶対パス固定でこれを防ぐ。
+    """
+
+    def test_env_file_が絶対パスである(self):
+        for entry in _env_file_entries():
+            assert entry.is_absolute(), f"相対パスは CWD に依存する: {entry!r}"
+
+    def test_別ディレクトリの_env_を拾わない(self, tmp_path, monkeypatch):
+        """本修正の主目的。相対パスだとこの偽の .env を読んでしまう。"""
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / ".env").write_text(
+            "GEMINI_API_KEY=decoy-from-unrelated-directory\n", encoding="utf-8"
+        )
+        (tmp_path / ".env.local").write_text(
+            "GEMINI_API_KEY=decoy-from-unrelated-directory\n", encoding="utf-8"
+        )
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+
+        settings = Settings()
+        assert settings.gemini_api_key != "decoy-from-unrelated-directory"
+
+    def test_どのディレクトリからでも同じ設定になる(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        baseline = Settings().model_dump()
+
+        monkeypatch.chdir(tmp_path)
+        assert Settings().model_dump() == baseline
 
 
 class TestSettingsStillWorks:
