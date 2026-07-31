@@ -24,19 +24,16 @@
 
 | 層 | コマンド | 件数（2026-07-30 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 508 |
+| Backend unit | `cd backend && pytest tests/ -v` | 519 |
 | Frontend unit | `cd frontend && npm run test:run` | 102 |
 | Frontend E2E | `cd frontend && npm run test:e2e` | 28（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
 
 - `asyncio_mode = "auto"` は `backend/pyproject.toml` で設定済み（`--asyncio-mode=auto` の明示は不要）
-- **backend の pytest はホームディレクトリを退避して実行する。** `app/config.py` の `Settings` は
-  `env_file=(Path.home() / ".env.local", ".env")` を読み、pydantic-settings は既定で extra を禁止するため、
-  ホームの `.env.local` に無関係なキー（他プロジェクトの API キー等）があると**収集段階で全件エラーになる**。
-  - **Windows では `HOME=/tmp` は効かない**（`Path.home()` は `USERPROFILE` を見る）。
-    `USERPROFILE=<空ディレクトリ> HOME=<空ディレクトリ> pytest tests/ -q` とする
-  - CI はクリーンな環境なので素の `pytest tests/ -v` で通る
+- backend の pytest は**素の `pytest tests/ -q` で通る**（ホームの退避は不要）。
+  以前は `Settings` がユーザーのグローバル env を読んでいたため退避が必要だったが、
+  2026-07-31 に `env_file` をリポジトリ内に限定し `extra="ignore"` を入れて解消した
 - **レート制限のあるエンドポイントをテストするときは limiter を無効化する。**
   `monkeypatch.setattr(limiter, "enabled", False)`（`app.main.limiter`）。
   例: `/api/v1/safety-guide` は 10回/分 のため、パラメトライズすると 429 で落ちる
@@ -67,6 +64,22 @@ cd frontend && npm run build && npm run start   # http://localhost:3000
 なお `--window-size=460` を指定しても headless の `innerWidth` は 512 になる（最小幅）。
 `--screenshot` は指定幅で切り取るため、**スクショの右端が切れていても実際のはみ出しとは限らない**。
 レイアウトを疑うときは `document.documentElement.scrollWidth` と `window.innerWidth` を実測する。
+
+## 秘密情報の扱い（2026-07-30 のインシデントを踏まえた恒久ルール）
+
+**`app` を import する Python 実行はすべて**（pytest に限らず `python -c` / `python -` の
+調査実行も含む）、設定読み込みが秘密を出力しうる前提で扱う。
+
+- **設定のバリデーションエラーは値を平文で出す。** pydantic の `extra_forbidden` は
+  `input_value=<実際の値>` をメッセージに載せる。**エラーだから中身が無い、は誤り**
+- 想定外に失敗したコマンドの出力を**ファイルに落として全文 Read しない**。
+  まず `2>&1 | tail -5` 等で量と種類（トレースバックか否か）を見る
+- `Settings` の `env_file` に**ユーザーのホーム配下を足さない**。足すと、このアプリと
+  無関係な他プロジェクトのキーまで読み込む構成になる（回帰テストで固定済み）
+
+> ルールは「よくやる操作」ではなく「**危険が発生する条件**」で書くこと。
+> 事故時の旧ルールは「**pytest** はホームを退避」と操作名で書かれていたため、
+> `python -` での調査実行にすり抜けた。
 
 ## CSP の制約（`public/` の静的 HTML を書くとき必ず踏む）
 
