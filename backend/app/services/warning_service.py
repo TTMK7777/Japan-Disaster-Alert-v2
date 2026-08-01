@@ -12,7 +12,12 @@ from datetime import datetime
 from ..models import ALLOWED_LANGUAGES, DisasterAlert
 from ..utils.logger import get_logger
 from ..utils.area_codes import AREA_CODES, get_area_code
-from .area_display import is_known_area, resolve_area_name
+from .area_display import (
+    all_forecast_offices,
+    expand_to_offices,
+    is_known_area,
+    resolve_area_name,
+)
 from .warning_guidance import resolve_guidance
 from .warning_names import (
     DESCRIPTION_TEMPLATES as WARNING_DESCRIPTION_TEMPLATES,
@@ -132,25 +137,60 @@ class WarningService:
 
         Returns:
             list[DisasterAlert]: 警報・注意報リスト
+
+        Note:
+            都道府県の代表コードを渡すと、その都道府県の**府県予報区すべて**を取りに行く。
+            気象庁の警報 API は「1 都道府県 = 1 予報区」ではなく、北海道は 8、沖縄は 4、
+            鹿児島は 2 に分かれている。代表コードだけを見ると宮古島・八重山・奄美や
+            北海道の大半が丸ごと抜け落ちる。
+        """
+        office_codes = expand_to_offices(area_code)
+        payloads = await asyncio.gather(
+            *(self._fetch_warning_payload(code) for code in office_codes)
+        )
+        data = self._combine_payloads([p for p in payloads if p])
+        if data is None:
+            return []
+
+        # 静的マッピング対応言語の場合は従来通り
+        if lang in STATIC_LANGUAGES:
+            return self._parse_warnings(data, area_code, lang)
+
+        # 未対応言語の場合はClaude APIで動的生成
+        return await self._parse_warnings_with_ai(data, area_code, lang)
+
+    async def _fetch_warning_payload(self, area_code: str) -> Optional[dict]:
+        """1 予報区ぶんの警報 JSON を取得する。失敗したら None。
+
+        1 予報区が落ちても他の予報区の警報は出す（都道府県まるごと無言でゼロ件にしない）。
         """
         url = f"{self.BASE_URL}/warning/data/warning/{area_code}.json"
-
-        client = self._get_client()
         try:
-            response = await client.get(url, timeout=self.timeout)
+            response = await self._get_client().get(url, timeout=self.timeout)
             response.raise_for_status()
-            data = response.json()
-
-            # 静的マッピング対応言語の場合は従来通り
-            if lang in STATIC_LANGUAGES:
-                return self._parse_warnings(data, area_code, lang)
-
-            # 未対応言語の場合はClaude APIで動的生成
-            return await self._parse_warnings_with_ai(data, area_code, lang)
-
+            return response.json()
         except httpx.HTTPError as e:
-            logger.error(f"警報情報取得エラー: {e}", exc_info=True)
-            return []
+            logger.error(f"警報情報取得エラー ({area_code}): {e}", exc_info=True)
+            return None
+
+    @staticmethod
+    def _combine_payloads(payloads: list[dict]) -> Optional[dict]:
+        """複数の予報区のレスポンスを1つに束ねる。
+
+        地名は地域コードから解決するので、`areaTypes` を連結するだけで
+        警報コード単位のグループ化がそのまま働く（同じ警報が複数の予報区に出ていれば
+        1件にまとまり、対象地域が並ぶ）。
+        """
+        if not payloads:
+            return None
+        area_types: list[dict] = []
+        for payload in payloads:
+            area_types.extend(payload.get("areaTypes", []))
+        # 発表時刻は最も新しいものを採る（ISO 8601 なので文字列比較で足りる）
+        report_datetime = max(
+            (p.get("reportDatetime", "") for p in payloads), default=""
+        )
+        return {"reportDatetime": report_datetime, "areaTypes": area_types}
 
     def _get_warning_name(self, code: str, lang: str) -> str:
         """警報コードから指定言語の名前を取得"""
@@ -403,30 +443,27 @@ class WarningService:
         """
         全国の警報・注意報を取得
 
+        **府県予報区 58 件すべてを回る。** 以前は都道府県表（47件）を回っていたため、
+        北海道の7予報区・奄美・大東島・宮古島・八重山が対象外で、
+        そこで特別警報が出ても `get_special_warnings` が検出できなかった
+        （＝Push通知も飛ばなかった）。
+
         Returns:
             list[DisasterAlert]: 全国の警報・注意報リスト
         """
         all_alerts = []
         semaphore = asyncio.Semaphore(10)  # 同時接続制限
 
-        async def fetch_prefecture(client: httpx.AsyncClient, prefecture: str, area_code: str) -> list[DisasterAlert]:
+        async def fetch_office(area_code: str) -> list[DisasterAlert]:
             async with semaphore:
-                try:
-                    url = f"{self.BASE_URL}/warning/data/warning/{area_code}.json"
-                    response = await client.get(url, timeout=self.timeout)
-                    if response.status_code == 200:
-                        data = response.json()
-                        return self._parse_warnings(data, area_code)
-                except httpx.HTTPError as e:
-                    logger.warning(f"{prefecture}の警報取得エラー: {e}")
-                return []
+                data = await self._fetch_warning_payload(area_code)
+                if data is None:
+                    return []
+                return self._parse_warnings(data, area_code)
 
-        client = self._get_client()
-        tasks = [
-            fetch_prefecture(client, prefecture, area_code)
-            for prefecture, area_code in self.AREA_CODES.items()
-        ]
-        results = await asyncio.gather(*tasks)
+        results = await asyncio.gather(
+            *(fetch_office(code) for code in all_forecast_offices())
+        )
         for alerts in results:
             all_alerts.extend(alerts)
 

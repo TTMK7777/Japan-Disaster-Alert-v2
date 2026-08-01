@@ -92,6 +92,23 @@ def build_offices(master: dict) -> dict[str, dict[str, object]]:
     return offices
 
 
+def build_offices_by_prefecture(offices: dict[str, dict[str, object]]) -> dict[str, list[str]]:
+    """都道府県（JIS コード2桁）-> その都道府県に属する府県予報区のコード群。
+
+    府県予報区コードの上2桁は JIS の都道府県コードと一致する
+    （北海道 01xxxx / 鹿児島 46xxxx / 沖縄 47xxxx）。この規則が崩れると
+    件数の検算（58 予報区 / 47 都道府県）が合わなくなるので main() で検証している。
+
+    「1 都道府県 = 1 予報区」ではないため、都道府県で警報を見るときは
+    ここに並ぶコード**すべて**を取りにいく必要がある。1 つしか見ないと、
+    北海道は石狩・空知・後志だけ、沖縄は本島だけになる（宮古島・八重山が抜ける）。
+    """
+    grouped: dict[str, list[str]] = {}
+    for code in offices:
+        grouped.setdefault(code[:2], []).append(code)
+    return {prefix: sorted(codes) for prefix, codes in sorted(grouped.items())}
+
+
 def render_module(table: dict[str, dict[str, str]], offices: dict[str, dict[str, object]]) -> str:
     lines = [
         '"""気象庁の地域コード → 地域名（日本語 / 英語）。',
@@ -122,7 +139,18 @@ def render_module(table: dict[str, dict[str, str]], offices: dict[str, dict[str,
     ])
     for code in sorted(offices):
         lines.append(f"    {code!r},  # {offices[code]['ja']}")
-    lines.append("})")
+    lines.extend([
+        "})",
+        "",
+        "#: 都道府県（JIS コード2桁）-> その都道府県の府県予報区コード群。",
+        "#: 都道府県で警報を見るときは、ここに並ぶコード**すべて**を取りにいく。",
+        "#: 1 つしか見ないと北海道は石狩・空知・後志だけ、沖縄は本島だけになる。",
+        "OFFICES_BY_PREFECTURE: dict[str, tuple[str, ...]] = {",
+    ])
+    for prefix, codes in build_offices_by_prefecture(offices).items():
+        names = " / ".join(offices[c]["ja"] for c in codes)
+        lines.append(f"    {prefix!r}: {tuple(codes)!r},  # {names}")
+    lines.append("}")
     lines.append("")
     return "\n".join(lines)
 
@@ -141,10 +169,17 @@ def main() -> int:
     print("サンプル: " + ", ".join(f"{c}={table[c]['ja']}/{table[c]['en']}" for c in ("130010", "471010")))
 
     # 「1 都道府県 = 1 予報区」ではないことを、生成のたびに目に見える形で残す
-    multi = {"北海道": "01", "鹿児島": "46", "沖縄": "47"}
-    for label, prefix in multi.items():
-        hits = sorted(c for c in offices if c.startswith(prefix))
-        print(f"  予報区（{label}）: {len(hits)} 件 {hits}")
+    by_pref = build_offices_by_prefecture(offices)
+    if len(by_pref) != 47:
+        raise SystemExit(
+            f"都道府県の数が 47 でない（{len(by_pref)}）。"
+            "予報区コードの上2桁 = JIS 都道府県コード という前提が崩れた可能性がある"
+        )
+    for label, prefix in {"北海道": "01", "鹿児島": "46", "沖縄": "47"}.items():
+        codes = by_pref[prefix]
+        print(f"  予報区（{label}）: {len(codes)} 件 {codes}")
+    multi = {p: c for p, c in by_pref.items() if len(c) > 1}
+    print(f"  複数予報区を持つ都道府県: {len(multi)} 件 / 予報区合計 {len(offices)} 件")
 
     source = render_module(table, offices)
     OUTPUT.write_text(source, encoding="utf-8")
