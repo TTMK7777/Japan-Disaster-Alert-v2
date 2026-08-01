@@ -7,6 +7,7 @@ import EarthquakeList from '@/components/EarthquakeList';
 import EmergencyAlert from '@/components/EmergencyAlert';
 import WarningBanner from '@/components/WarningBanner';
 import EmergencyContacts from '@/components/EmergencyContacts';
+import TransitLinks from '@/components/TransitLinks';
 import ConnectionStatus from '@/components/ConnectionStatus';
 import ThemeToggle from '@/components/ThemeToggle';
 import InstallBanner from '@/components/InstallBanner';
@@ -423,6 +424,8 @@ export default function Home() {
           {activeTab === 'emergency' && (
             <div id="tabpanel-emergency" role="tabpanel" aria-labelledby="tab-emergency" tabIndex={0} className="space-y-4">
               <EmergencyContacts language={language} />
+              {/* 交通の公式情報源。日程崩壊37.3%・交通と空港の情報22.2%（訪日客の災害時ニーズ調査）に対する最小実装 */}
+              <TransitLinks language={language} />
               <PushNotificationBanner language={language} />
             </div>
           )}
