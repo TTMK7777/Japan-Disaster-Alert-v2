@@ -122,13 +122,19 @@ class TestWarningServiceWiring:
 
     @staticmethod
     def _payload(code: str) -> dict:
+        """気象庁の実レスポンスと同じ形（`code` のみ / `name` は存在しない）。
+
+        以前ここには `"name": "東京地方"` を書いていたが、実際の警報 JSON に
+        `name` は入っていない。実在しないキーを前提にしたフィクスチャだったため、
+        本番では地域名が出ていないことをテストが見逃していた。
+        """
         return {
             "reportDatetime": "2026-07-30T12:00:00+09:00",
             "areaTypes": [
                 {
                     "areas": [
                         {
-                            "name": "東京地方",
+                            "code": "130010",  # 東京地方
                             "warnings": [{"code": code, "status": "発表"}],
                         }
                     ]

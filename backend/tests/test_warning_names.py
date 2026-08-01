@@ -194,10 +194,11 @@ class TestNewLanguages:
 class TestServiceIntegration:
     @staticmethod
     def _payload(code: str) -> dict:
+        """気象庁の実レスポンスと同じ形（`code` のみ / `name` は存在しない）。"""
         return {
             "reportDatetime": "2026-07-30T12:00:00+09:00",
             "areaTypes": [
-                {"areas": [{"name": "東京地方", "warnings": [{"code": code, "status": "発表"}]}]}
+                {"areas": [{"code": "130010", "warnings": [{"code": code, "status": "発表"}]}]}
             ],
         }
 
