@@ -31,7 +31,7 @@
 """
 from __future__ import annotations
 
-from .area_names import AREA_NAMES
+from .area_names import AREA_NAMES, OFFICES_BY_PREFECTURE
 
 #: 日本語をそのまま出す言語
 JAPANESE_LANGS = frozenset({"ja", "easy_ja"})
@@ -76,6 +76,34 @@ def is_known_area(code: str) -> bool:
     警報 JSON の `areaTypes[1]` は市町村（7桁）で、そこは収録していないので False になる。
     """
     return code in AREA_NAMES
+
+
+def expand_to_offices(area_code: str) -> tuple[str, ...]:
+    """都道府県を代表するコードを、その都道府県の府県予報区すべてに広げる。
+
+    気象庁の警報 API は府県予報区ごとに分かれており、**「1 都道府県 = 1 予報区」ではない**。
+    北海道は 8、沖縄は 4、鹿児島は 2 に分かれている。代表コードだけを見ていたため、
+    北海道は石狩・空知・後志だけ、沖縄は本島だけになり、
+    **宮古島・八重山（主要な観光地）や奄美の警報には到達できていなかった**。
+
+    Args:
+        area_code: 予報区コード。都道府県の代表コードなら兄弟の予報区に広がる。
+
+    Returns:
+        取得すべき予報区コードの一覧。予報区でないコード（一次細分区域など）や
+        未知のコードはそのまま1件で返す。
+    """
+    offices = OFFICES_BY_PREFECTURE.get(area_code[:2])
+    if not offices or area_code not in offices:
+        return (area_code,)
+    return offices
+
+
+def all_forecast_offices() -> tuple[str, ...]:
+    """全国の府県予報区コード（58件）。全国スキャンはこれを回す。"""
+    return tuple(
+        code for codes in OFFICES_BY_PREFECTURE.values() for code in codes
+    )
 
 
 def resolve_area_name(code: str, lang: str, fallback: str = "") -> str:

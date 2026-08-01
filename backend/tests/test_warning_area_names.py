@@ -158,6 +158,82 @@ class TestAreaNameIsLocalized:
         assert "Northern Izu Islands" in area
 
 
+class TestMultipleForecastOffices:
+    """複数の予報区に分かれる都道府県で、全予報区の警報が出ること
+
+    気象庁の警報 API は府県予報区ごとに分かれており、北海道は8・沖縄は4・鹿児島は2。
+    代表コードだけを見ていたため、宮古島・八重山（主要な観光地）や奄美、
+    北海道の大半の警報が利用者に一切表示されていなかった。
+    """
+
+    @staticmethod
+    def _service_with_fake_fetch(monkeypatch, per_office: dict[str, dict]):
+        service = WarningService()
+
+        async def fake_fetch(self, area_code):
+            return per_office.get(area_code)
+
+        monkeypatch.setattr(WarningService, "_fetch_warning_payload", fake_fetch)
+        return service
+
+    async def test_沖縄で八重山の警報も取得される(self, monkeypatch):
+        """**これが再現テスト。** 代表コードだけに戻すと八重山が消える。"""
+        service = self._service_with_fake_fetch(
+            monkeypatch,
+            {
+                "471000": _payload("471010"),  # 本島中南部
+                "474000": _payload("474010"),  # 石垣島地方
+            },
+        )
+
+        alerts = await service.get_warnings("471000", "en")
+
+        assert len(alerts) == 1, "同じ警報コードは1件にまとまる"
+        area = alerts[0].area or ""
+        assert "Central and Southern Main Island" in area
+        assert "Ishigakijima" in area or "Ishigaki" in area, f"八重山が抜けた: {area}"
+
+    async def test_北海道で8予報区すべてを取りにいく(self, monkeypatch):
+        requested: list[str] = []
+        service = WarningService()
+
+        async def fake_fetch(self, area_code):
+            requested.append(area_code)
+            return None
+
+        monkeypatch.setattr(WarningService, "_fetch_warning_payload", fake_fetch)
+        await service.get_warnings("016000", "ja")
+
+        assert len(requested) == 8, f"取得した予報区: {requested}"
+
+    async def test_一部の予報区が落ちても他は表示される(self, monkeypatch):
+        """1予報区の障害で都道府県まるごとゼロ件にしない。"""
+        service = self._service_with_fake_fetch(
+            monkeypatch,
+            {"474000": _payload("474010")},  # 他の3予報区は None（取得失敗）
+        )
+
+        alerts = await service.get_warnings("471000", "en")
+        assert len(alerts) == 1
+
+    async def test_全予報区が落ちたら空リスト(self, monkeypatch):
+        service = self._service_with_fake_fetch(monkeypatch, {})
+        assert await service.get_warnings("471000", "en") == []
+
+    async def test_単一予報区の県では取得回数が1回(self, monkeypatch):
+        requested: list[str] = []
+        service = WarningService()
+
+        async def fake_fetch(self, area_code):
+            requested.append(area_code)
+            return _payload("130010")
+
+        monkeypatch.setattr(WarningService, "_fetch_warning_payload", fake_fetch)
+        await service.get_warnings("130000", "ja")
+
+        assert requested == ["130000"]
+
+
 class TestContinuingWarningsAreShown:
     """継続中の警報が消えないこと
 

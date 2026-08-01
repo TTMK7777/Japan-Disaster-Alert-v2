@@ -12,14 +12,21 @@
 """
 import pytest
 
+from app.services.area_display import all_forecast_offices, expand_to_offices
 from app.services.area_names import AREA_NAMES, FORECAST_OFFICE_CODES
 from app.utils.area_codes import AREA_CODES
 
-#: アプリから到達できていない予報区。ここを減らすのが今後の課題。
-#: 件数を固定しておき、**気付かないうちに増えたら落ちる**ようにする。
-#: 内訳: 北海道7（宗谷・上川留萌・網走北見紋別・十勝・釧路根室・胆振日高・渡島檜山）、
-#:       鹿児島1（奄美）、沖縄3（大東島・宮古島・八重山）
-KNOWN_UNREACHABLE_COUNT = 11
+def _reachable_offices() -> set[str]:
+    """アプリの都道府県選択から実際に取得される予報区の集合。
+
+    `AREA_CODES` は「1 都道府県 = 1 コード」だが、`expand_to_offices` が
+    その都道府県の予報区すべてに広げるので、到達性はこちらで測る必要がある。
+    表の値だけを見ると 47 件しか数えられず、実態を測れない。
+    """
+    reachable: set[str] = set()
+    for code in AREA_CODES.values():
+        reachable.update(expand_to_offices(code))
+    return reachable
 
 
 class TestAllPrefectureCodesAreReal:
@@ -50,22 +57,49 @@ class TestAllPrefectureCodesAreReal:
         assert AREA_CODES["鹿児島県"] in FORECAST_OFFICE_CODES
 
 
-class TestUnreachableForecastOffices:
-    """未対応の予報区を明示的に記録する（黙って増えないように）"""
+class TestAllForecastOfficesAreReachable:
+    """府県予報区 58 件すべてに到達できること
 
-    def test_未到達の予報区の件数が想定どおり(self):
-        unreachable = FORECAST_OFFICE_CODES - set(AREA_CODES.values())
-        assert len(unreachable) == KNOWN_UNREACHABLE_COUNT, (
-            "アプリから到達できない予報区の数が変わった。"
-            f"現在: {sorted((c, AREA_NAMES[c]['ja']) for c in unreachable)}"
+    「1 都道府県 = 1 予報区」ではないため、代表コードだけを見ていた頃は
+    北海道7・奄美・大東島・宮古島・八重山の計11予報区に到達できなかった。
+    """
+
+    @pytest.mark.parametrize("code", sorted(FORECAST_OFFICE_CODES))
+    def test_全ての予報区が都道府県選択から到達できる(self, code):
+        """**これが再現テスト。** 代表コードだけに戻すと 11 件落ちる。"""
+        assert code in _reachable_offices(), (
+            f"{code}（{AREA_NAMES[code]['ja']}）に到達できない。"
+            "この地域の警報は利用者に一切表示されない"
         )
 
-    def test_主要な観光地の未対応を記録する(self):
-        """宮古島・八重山（石垣島）は主要な観光地だが、沖縄県=本島のため未対応。
+    def test_主要な観光地に到達できる(self):
+        """宮古島・八重山（石垣島）は主要な観光地。"""
+        reachable = _reachable_offices()
+        assert "473000" in reachable, "宮古島地方"
+        assert "474000" in reachable, "八重山地方"
 
-        対応したらこのテストを消すこと。**未対応であることの記録**であって、
-        未対応を正当化するものではない。
-        """
-        unreachable = FORECAST_OFFICE_CODES - set(AREA_CODES.values())
-        assert "473000" in unreachable  # 宮古島地方
-        assert "474000" in unreachable  # 八重山地方
+    def test_全国スキャンが全予報区を回る(self):
+        """特別警報の検出（＝Push通知の元）が取りこぼさないこと。"""
+        assert set(all_forecast_offices()) == set(FORECAST_OFFICE_CODES)
+
+
+class TestExpandToOffices:
+    def test_複数予報区の県は全予報区に広がる(self):
+        assert len(expand_to_offices(AREA_CODES["北海道"])) == 8
+        assert len(expand_to_offices(AREA_CODES["沖縄県"])) == 4
+        assert len(expand_to_offices(AREA_CODES["鹿児島県"])) == 2
+
+    def test_単一予報区の県はそのまま1件(self):
+        assert expand_to_offices("130000") == ("130000",)
+
+    def test_一次細分区域は広がらない(self):
+        """細分区域コード（130010=東京地方）を都道府県扱いしない。"""
+        assert expand_to_offices("130010") == ("130010",)
+
+    def test_未知のコードはそのまま返す(self):
+        assert expand_to_offices("999999") == ("999999",)
+
+    @pytest.mark.parametrize("prefecture,code", sorted(AREA_CODES.items()))
+    def test_広げた先は全て実在する予報区(self, prefecture, code):
+        for office in expand_to_offices(code):
+            assert office in FORECAST_OFFICE_CODES, f"{prefecture} → {office} は予報区でない"
