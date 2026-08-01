@@ -22,9 +22,9 @@
 ## Testing / Proof
 変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
 
-| 層 | コマンド | 件数（2026-07-30 実測） |
+| 層 | コマンド | 件数（2026-08-01 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 519 |
+| Backend unit | `cd backend && pytest tests/ -v` | 720 |
 | Frontend unit | `cd frontend && npm run test:run` | 102 |
 | Frontend E2E | `cd frontend && npm run test:e2e` | 28（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
@@ -39,6 +39,27 @@
   例: `/api/v1/safety-guide` は 10回/分 のため、パラメトライズすると 429 で落ちる
 - **`npm run lint` は proof に使えない**: ESLint が未設定のため対話プロンプト（設定方式の選択）に入って停止する。型チェックは上記の `tsc --noEmit` を使う
 - `npx` は環境の deny 対象。リポジトリ定義の npm script（`npm run test:run` 等）か `node ./node_modules/...` を直接呼ぶ
+
+## 気象庁 API の落とし穴（2026-08-01 に4件まとめて踏んだ）
+
+**合成フィクスチャで緑になっても、実レスポンスに当てるまで信用しない。**
+以下はすべて「自分が想像した形」のフィクスチャで緑だったが、本番では壊れていた。
+
+1. **警報 JSON に地域名は入っていない。** `areaTypes[].areas[]` は `code` と `warnings` だけで
+   `name` キーは**存在しない**。地名は `/bosai/common/const/area.json` からコードで引く
+   （生成物 = `backend/app/services/area_names.py`、生成 = `scripts/generate_area_names.py`）
+2. **`status` は「発表」だけではない。** 最初に出したときが「発表」で、以降の定時更新は
+   **「継続」**に変わる。「発表」だけを通すと**継続中の警報が全部消える**。
+   ほかに「解除」「発表警報・注意報はなし」がある
+3. **「1都道府県 = 1予報区」ではない。** 府県予報区は 58 件あり、北海道7・沖縄4・鹿児島2 に
+   分かれている。存在しないコード（例 `460000`）を投げると 404 になり、
+   `httpx.HTTPError` を握って `[]` を返すので**エラーも出ずに永久ゼロ件**になる
+4. **`areaTypes` は2階層。** `[0]` が一次細分区域（6桁）、`[1]` が市町村（7桁）。
+   両方を混ぜて表示すると市町村30件が読点で連なる
+
+実データでの受け入れ確認は `python scripts/verify_warnings_live.py`（要 UTF-8 リダイレクト）。
+**「0 件」は「警報が無い」とは限らない**（404 でも 0 件になる）ので、
+コードが実在する予報区かは `backend/tests/test_area_codes_coverage.py` が固定している。
 
 ## クライアント挙動の検証（重要な落とし穴）
 

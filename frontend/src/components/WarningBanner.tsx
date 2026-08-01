@@ -69,7 +69,9 @@ const PREFECTURES: { code: string; ja: string; en: string }[] = [
   { code: '430000', ja: '熊本県', en: 'Kumamoto' },
   { code: '440000', ja: '大分県', en: 'Oita' },
   { code: '450000', ja: '宮崎県', en: 'Miyazaki' },
-  { code: '460000', ja: '鹿児島県', en: 'Kagoshima' },
+  // 460000 は気象庁に存在しないコードで 404 になっていた（警報が常にゼロ件）。
+  // 鹿児島県は「奄美地方」と「それ以外」に分かれており、460100 が本土側。
+  { code: '460100', ja: '鹿児島県', en: 'Kagoshima' },
   { code: '471000', ja: '沖縄県', en: 'Okinawa' },
 ];
 

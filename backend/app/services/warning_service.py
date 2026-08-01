@@ -2,17 +2,17 @@
 気象庁 警報・注意報サービス（多言語対応）
 
 多言語対応方式:
-1. 静的マッピング（6言語: ja, en, zh, ko, vi, easy_ja） - 高速・無料
-2. Claude API（未対応の10言語） - 動的生成・有料
-3. キャッシュ活用 - APIコスト削減
+16言語すべてを静的マッピングで組み立てる（AI・ネットワークに依存しない）。
+地名は area_display、警報名・説明文は warning_names、行動指示は warning_guidance。
 """
 import asyncio
 import httpx
 from typing import Optional
 from datetime import datetime
-from ..models import DisasterAlert
+from ..models import ALLOWED_LANGUAGES, DisasterAlert
 from ..utils.logger import get_logger
 from ..utils.area_codes import AREA_CODES, get_area_code
+from .area_display import is_known_area, resolve_area_name
 from .warning_guidance import resolve_guidance
 from .warning_names import (
     DESCRIPTION_TEMPLATES as WARNING_DESCRIPTION_TEMPLATES,
@@ -21,8 +21,26 @@ from .warning_names import (
 
 logger = get_logger(__name__)
 
-# 静的マッピングで対応している言語
-STATIC_LANGUAGES = {"ja", "en", "zh", "ko", "vi", "easy_ja"}
+# 静的マッピングで対応している言語 = アプリが受け付ける全言語。
+#
+# 以前はここが6言語（ja/en/zh/ko/vi/easy_ja）しか無く、残る10言語は AI 経路
+# （`_parse_warnings_with_ai`）に流れていた。その結果:
+#   - 警報名が AI 不在時に英語固定になり、16言語化した `WARNING_NAMES` が使われない
+#   - 行動指示も 16言語の `resolve_guidance` を通らない
+#   - 地域名が空文字になる（AI 経路には都道府県フォールバックすら無かった）
+# 警報名・説明文・行動指示・地名がすべて16言語そろった今、AI に投げる理由はない。
+# 静的なら停電・低回線・APIキー未設定でも同じ結果が出る（docs の R2）。
+STATIC_LANGUAGES = ALLOWED_LANGUAGES
+
+# 「今その警報が出ている」とみなすステータス。
+#
+# 気象庁は最初に出したときだけ "発表" を入れ、その後の定時更新では "継続" に変わる。
+# 以前は "発表" だけを通していたため、**発表直後の一瞬しか警報が表示されず、
+# 継続中の警報はすべて消えていた**。実測（2026-08-01 沖縄 471000）では
+# 継続 62 件・解除 29 件・発表 0 件で、有効な注意報がありながら表示はゼロだった。
+#
+# 解除済み（"解除"）と、警報が無いとき（"発表警報・注意報はなし"）は当然除外する。
+ACTIVE_WARNING_STATUSES = frozenset({"発表", "継続"})
 
 
 class WarningService:
@@ -59,12 +77,10 @@ class WarningService:
     WARNING_CODES = WARNING_NAMES
 
     # 地域名翻訳
-    AREA_TRANSLATIONS = {
-        "東京地方": {"en": "Tokyo Area", "zh": "东京地区", "ko": "도쿄 지역", "vi": "Khu vực Tokyo", "easy_ja": "とうきょう"},
-        "伊豆諸島北部": {"en": "Northern Izu Islands", "zh": "伊豆诸岛北部", "ko": "이즈 제도 북부", "vi": "Bắc quần đảo Izu", "easy_ja": "いずしょとう きたぶ"},
-        "伊豆諸島南部": {"en": "Southern Izu Islands", "zh": "伊豆诸岛南部", "ko": "이즈 제도 남부", "vi": "Nam quần đảo Izu", "easy_ja": "いずしょとう みなみぶ"},
-        "小笠原諸島": {"en": "Ogasawara Islands", "zh": "小笠原诸岛", "ko": "오가사와라 제도", "vi": "Quần đảo Ogasawara", "easy_ja": "おがさわらしょとう"},
-    }
+    # 地域名は `area_display` がコードから解決する。
+    # 旧 `AREA_TRANSLATIONS`（日本語名をキーにした4地域×5言語）は、警報 JSON に
+    # `name` が入っていないため一度も引かれていなかった。訳自体は
+    # `area_display.AREA_NAME_OVERRIDES` にコード起点で移設済み。
 
     # 説明文テンプレート（16言語）— 実体は warning_names.py
     DESCRIPTION_TEMPLATES = WARNING_DESCRIPTION_TEMPLATES
@@ -142,12 +158,9 @@ class WarningService:
         # 指定言語がなければ英語、それもなければ日本語
         return warning_info.get(lang, warning_info.get("en", warning_info.get("ja", "")))
 
-    def _get_area_name(self, area_name: str, lang: str) -> str:
-        """地域名を指定言語に翻訳"""
-        if lang == "ja":
-            return area_name
-        area_trans = self.AREA_TRANSLATIONS.get(area_name, {})
-        return area_trans.get(lang, area_name)
+    def _get_area_name(self, area_code: str, lang: str, fallback: str = "") -> str:
+        """地域コードを指定言語の地名にする（実体は `area_display`）"""
+        return resolve_area_name(area_code, lang, fallback)
 
     def _get_description(self, area_name: str, warning_name: str, lang: str) -> str:
         """説明文を指定言語で生成"""
@@ -168,33 +181,54 @@ class WarningService:
             area_code,
         )
 
-        # 警報コード別にグループ化して重複排除
-        grouped: dict[str, list[str]] = {}  # code -> [area_name_ja, ...]
+        # 警報コード別にグループ化して重複排除。
+        #
+        # 気象庁の警報 JSON に地域名は入っておらず `code` しか無いので、地域コードを
+        # 集めて `area_display` で言語別の地名に変換する。
+        #
+        # `areaTypes` は2階層ある（[0]=一次細分区域6桁 / [1]=市町村7桁）。市町村は
+        # 30件を読点で連ねても読めないため収録しておらず、`is_known_area` が False に
+        # なって自然に除外される。実データで両階層の警報コードが一致することは確認済み。
+        grouped: dict[str, list[str]] = {}  # 警報コード -> [地域コード, ...]
+        announced: set[str] = set()  # 発表されている警報コード（地域が引けたかは問わない）
         for area_type in area_types:
             areas = area_type.get("areas", [])
             for area in areas:
-                area_name_ja = area.get("name", "") or prefecture_name
+                area_id = str(area.get("code", ""))
                 warnings = area.get("warnings", [])
                 for warning in warnings:
                     code = warning.get("code", "")
                     status = warning.get("status", "")
-                    if status == "発表" and code in self.WARNING_CODES:
+                    if status in ACTIVE_WARNING_STATUSES and code in self.WARNING_CODES:
+                        announced.add(code)
+                        if not is_known_area(area_id):
+                            continue
                         if code not in grouped:
                             grouped[code] = []
-                        if area_name_ja not in grouped[code]:
-                            grouped[code].append(area_name_ja)
+                        if area_id not in grouped[code]:
+                            grouped[code].append(area_id)
+
+        # 細分区域が1つも引けなかった警報も必ず出す。
+        # 地名の粒度は都道府県まで落ちるが、**警報そのものは絶対に落とさない**。
+        for code in announced:
+            grouped.setdefault(code, [])
 
         # グループ化された警報をアラートに変換
         alerts = []
-        for code, area_names_ja in grouped.items():
+        for code, area_ids in grouped.items():
             warning_info = self.WARNING_CODES[code]
             warning_name = self._get_warning_name(code, lang)
             title_ja = self._get_warning_name(code, "ja")
             title_translated = warning_name if lang != "ja" else None
 
-            # 対象地域をまとめて表示
-            combined_area_ja = "、".join(area_names_ja)
-            combined_area = ", ".join(self._get_area_name(a, lang) for a in area_names_ja)
+            # 対象地域をまとめて表示。細分区域が引けなければ都道府県まで落とす。
+            display_ids = area_ids or [area_code]
+            combined_area_ja = "、".join(
+                self._get_area_name(a, "ja", prefecture_name) for a in display_ids
+            )
+            combined_area = ", ".join(
+                self._get_area_name(a, lang, prefecture_name) for a in display_ids
+            )
 
             description_ja = self._get_description(combined_area_ja, title_ja, "ja")
             description_translated = self._get_description(combined_area, warning_name, lang) if lang != "ja" else None
@@ -255,16 +289,27 @@ class WarningService:
             return []
 
         # 1. 警報コード別にグループ化して重複排除
+        #
+        # 地域名は `code` から引く。以前は `area.get("name", "")` としていたが、
+        # 気象庁の警報 JSON に `name` は存在しないため **常に空文字**になり、
+        # 「〜に大雨警報が発表されています」の地名が丸ごと抜けていた。
+        prefecture_name = next(
+            (pref for pref, code in self.AREA_CODES.items() if code == area_code),
+            area_code,
+        )
         grouped: dict[str, list[str]] = {}
         for area_type in area_types:
             areas = area_type.get("areas", [])
             for area in areas:
-                area_name_ja = area.get("name", "")
+                area_id = str(area.get("code", ""))
+                if not is_known_area(area_id):
+                    continue
+                area_name_ja = self._get_area_name(area_id, "ja", prefecture_name)
                 warnings = area.get("warnings", [])
                 for warning in warnings:
                     code = warning.get("code", "")
                     status = warning.get("status", "")
-                    if status == "発表" and code in self.WARNING_CODES:
+                    if status in ACTIVE_WARNING_STATUSES and code in self.WARNING_CODES:
                         if code not in grouped:
                             grouped[code] = []
                         if area_name_ja not in grouped[code]:
