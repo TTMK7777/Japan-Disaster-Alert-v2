@@ -100,6 +100,7 @@ from .services.tsunami_service import TsunamiService
 from .services.volcano_service import VolcanoService
 from .services.shelter_service import ShelterService
 from .services.push_service import PushNotificationService, TokenAuthError
+from .services.transit_links import build_transit_links
 from .services.event_manager import EventManager
 
 # サービスインスタンス
@@ -612,6 +613,24 @@ SUPPORTED_LANGUAGES = {
 async def get_supported_languages():
     """対応言語一覧を取得"""
     return SUPPORTED_LANGUAGES
+
+
+@app.get("/api/v1/transit-links")
+@limiter.exempt
+async def get_transit_links(lang: str = "en"):
+    """災害時に確認すべき交通の公式情報源を、指定言語の見出し付きで返す。
+
+    訪日客の災害時ニーズ調査で「日程が崩壊した」37.3%・「交通と空港の情報」22.2% と
+    交通が上位に集中しているが、運行情報そのものの配信には各社 API のライセンス調査が要る。
+    まず「どこを見ればよいか」を示して空白を埋める。
+
+    静的なデータのみを返すため外部通信もAIも使わない（停電・低回線でも動く）。
+
+    - **lang**: 言語コード。未対応の言語は英語の見出しに落とす
+    """
+    if lang not in ALLOWED_LANGUAGES:
+        lang = "en"
+    return build_transit_links(lang)
 
 
 # 対応災害種別

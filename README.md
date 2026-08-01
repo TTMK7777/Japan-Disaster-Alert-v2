@@ -16,8 +16,9 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Push Notifications** — Real-time earthquake/tsunami alerts via Web Push (VAPID)
 - **WCAG 2.1 AA** — Accessible: zoom enabled, skip links, 44px touch targets, safe-area support
 - **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
+- **Official Transit Links** — Curated official rail / air / road information sources, with each link's language availability shown before you tap it
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 964 tests (pytest backend 834, Vitest unit 102, Playwright E2E 28)
+- **Comprehensive Testing** — 1,174 tests (pytest backend 1031, Vitest unit 111, Playwright E2E 32)
 
 ## Supported Languages
 
@@ -56,8 +57,8 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Next.js 15** with **React 19** and **TypeScript**
 - **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
-- **Vitest** + **React Testing Library** — unit testing (102 tests)
-- **Playwright** — E2E testing (28 tests)
+- **Vitest** + **React Testing Library** — unit testing (111 tests)
+- **Playwright** — E2E testing (32 tests)
 - **PWA** — Service Worker for offline capability
 
 ### Data Sources
@@ -154,6 +155,7 @@ Copy `backend/.env.example` to `backend/.env` and fill in the values.
 | `/api/v1/volcanoes` | GET | Volcano warning information |
 | `/api/v1/safety-guide` | GET | AI-generated safety guide |
 | `/api/v1/languages` | GET | Supported language list |
+| `/api/v1/transit-links` | GET | Official transit information sources (multilingual headings) |
 | `/api/v1/push/subscribe` | POST | Register push notification subscription |
 | `/api/v1/push/unsubscribe` | POST | Remove push notification subscription |
 | `/api/v1/push/test` | POST | Send test notification (dev only) |
@@ -205,14 +207,14 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
-│   │   │   └── __tests__/               # Vitest unit tests (102 tests)
+│   │   │   └── __tests__/               # Vitest unit tests (111 tests)
 │   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
 │   │   ├── test/                         # Test setup (Vitest)
 │   │   ├── types/                        # TypeScript type definitions
 │   │   └── middleware.ts                 # Nonce-based CSP middleware (Edge Runtime)
-│   ├── e2e/                              # Playwright E2E tests (28 tests)
+│   ├── e2e/                              # Playwright E2E tests (32 tests)
 │   ├── public/
 │   │   ├── icons/                        # PWA icons (72-512px)
 │   │   ├── sw.js                         # Service Worker (v2)
@@ -234,7 +236,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -v               # 834 tests
+pytest tests/ -v               # 1031 tests
 ```
 
 ### Frontend (Vitest)
@@ -242,7 +244,7 @@ pytest tests/ -v               # 834 tests
 ```bash
 cd frontend
 npm install
-npm run test:run     # 102 unit tests
+npm run test:run     # 111 unit tests
 ```
 
 ### E2E (Playwright)

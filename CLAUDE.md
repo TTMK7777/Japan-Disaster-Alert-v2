@@ -24,9 +24,9 @@
 
 | 層 | コマンド | 件数（2026-08-01 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 834 |
-| Frontend unit | `cd frontend && npm run test:run` | 102 |
-| Frontend E2E | `cd frontend && npm run test:e2e` | 28（CI 未実行） |
+| Backend unit | `cd backend && pytest tests/ -v` | 1031 |
+| Frontend unit | `cd frontend && npm run test:run` | 111 |
+| Frontend E2E | 下記「E2E を動かすとき」を参照 | 32（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
 
@@ -39,6 +39,27 @@
   例: `/api/v1/safety-guide` は 10回/分 のため、パラメトライズすると 429 で落ちる
 - **`npm run lint` は proof に使えない**: ESLint が未設定のため対話プロンプト（設定方式の選択）に入って停止する。型チェックは上記の `tsc --noEmit` を使う
 - `npx` は環境の deny 対象。リポジトリ定義の npm script（`npm run test:run` 等）か `node ./node_modules/...` を直接呼ぶ
+
+## E2E を動かすとき（2026-08-01 に3つ踏んだ）
+
+```bash
+cd frontend && npm run build   # 先にビルドが要る（下記2つ目の理由）
+node ./node_modules/@playwright/test/cli.js test --config playwright.local-chrome.config.ts
+```
+
+1. **ブラウザバイナリが入っていないことがある。** `npx playwright install` は
+   この環境では使えない（`npx` が deny／ダウンロードを伴う）。
+   `playwright.local-chrome.config.ts` は**インストール済みの Google Chrome を使う**
+   （`channel: 'chrome'`）ので、ダウンロードなしで走る
+2. **`npm run dev` ではクライアント React が動かない**（後述の CSP の項）。
+   `useEffect` が実行されないので、**fetch を伴う画面は必ず空になる**。
+   ローカル用 config は `npm run start` を使う。既定の `playwright.config.ts` は
+   `npm run dev` のままなので、クライアント挙動を見るテストは信用しないこと
+3. **ロケールを固定しないと日本語の文言を探すテストが全部落ちる。**
+   初回訪問時はブラウザ言語から表示言語を推定するため（`src/i18n/detectLanguage.ts`）、
+   実行環境が英語だと UI が英語になる。両 config に `locale: 'ja-JP'` を入れてある。
+   これが無かったため **28件中12件が壊れたまま放置されていた**（E2E は CI 未実行で気付けない）。
+   新しいテストは言語に依存しないよう `#tab-emergency` のような **id で要素を選ぶ**
 
 ## 気象庁 API の落とし穴（2026-08-01 に4件まとめて踏んだ）
 
