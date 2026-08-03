@@ -89,4 +89,23 @@ test.describe('タブナビゲーション', () => {
     await expect(page.getByRole('button', { name: /リスト/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /地図/ })).toBeVisible();
   });
+
+  // 既定はリスト。以前はマウント後に地図へ強制的に切り替えていたため、
+  // 開くたびに地図タイルの取得と fitBounds が走っていた
+  test('既定の表示はリストで、地図は利用者が選んだときだけ出る', async ({ page }) => {
+    await expect(page.getByRole('button', { name: /リスト/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await expect(page.getByRole('button', { name: /地図/ })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+
+    await page.getByRole('button', { name: /地図/ }).click();
+    await expect(page.getByRole('button', { name: /地図/ })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
 });

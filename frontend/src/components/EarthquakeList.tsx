@@ -3,6 +3,7 @@
 import { memo } from 'react';
 import type { Earthquake } from '@/types/earthquake';
 import { getTranslation } from '@/i18n/translations';
+import IntensityGauge from './IntensityGauge';
 
 // page.tsx の ApiError と互換の型
 interface ApiError {
@@ -72,6 +73,12 @@ const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }
 
       {/* 詳細情報 */}
       <div className="p-4">
+        {/* 震度の意味（16言語）。数字だけでは日本の震度階級を知らない利用者に伝わらない。
+            ここが descriptions の唯一の表示箇所（以前はテストからしか呼ばれていなかった） */}
+        <div className="mb-3">
+          <IntensityGauge intensity={eq.max_intensity} language={language} size="sm" />
+        </div>
+
         <div className="flex justify-between items-start mb-2">
           <h3 className="font-bold text-lg dark:text-gray-100">{getDisplayLocation(eq)}</h3>
           <span className="text-sm text-gray-500 dark:text-gray-400">{eq.time}</span>

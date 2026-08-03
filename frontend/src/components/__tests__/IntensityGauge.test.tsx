@@ -88,6 +88,35 @@ describe('IntensityGauge', () => {
     const gaugeElement = screen.getByRole('img');
     expect(gaugeElement).toBeInTheDocument();
   });
+
+  // 震度不明の扱い（速報値・海外震源・P2P由来の "不明"）
+  it('震度不明を震度1の配色にしない', () => {
+    const { container: unknownView } = render(<IntensityGauge intensity="不明" language="ja" />);
+    const unknownIcon = unknownView.querySelector('[role="img"]') as HTMLElement;
+
+    const { container: level1View } = render(<IntensityGauge intensity="1" language="ja" />);
+    const level1Icon = level1View.querySelector('[role="img"]') as HTMLElement;
+
+    expect(unknownIcon.style.backgroundColor).not.toBe(level1Icon.style.backgroundColor);
+  });
+
+  it('震度不明は利用者の言語で「不明」と伝える', () => {
+    const { rerender } = render(<IntensityGauge intensity="不明" language="en" />);
+    expect(screen.getByText('Unknown')).toBeInTheDocument();
+
+    rerender(<IntensityGauge intensity="不明" language="ko" />);
+    expect(screen.getByText('진도 불명')).toBeInTheDocument();
+
+    rerender(<IntensityGauge intensity="不明" language="easy_ja" />);
+    expect(screen.getByText('しんどが わからない')).toBeInTheDocument();
+  });
+
+  it('震度不明ではゲージを伸ばさない', () => {
+    const { container } = render(<IntensityGauge intensity="不明" language="ja" />);
+    const bar = container.querySelector('.absolute.left-0') as HTMLElement;
+
+    expect(bar.style.width).toBe('0%');
+  });
 });
 
 describe('IntensityBadge', () => {
@@ -103,6 +132,16 @@ describe('IntensityBadge', () => {
     render(<IntensityBadge intensity="1" language="ja" />);
 
     expect(screen.getByText('1')).toBeInTheDocument();
+  });
+
+  it('震度不明のバッジを震度1の配色にしない', () => {
+    const { container: unknownView } = render(<IntensityBadge intensity="不明" language="ja" />);
+    const { container: level1View } = render(<IntensityBadge intensity="1" language="ja" />);
+
+    const unknown = unknownView.querySelector('[role="img"]') as HTMLElement;
+    const level1 = level1View.querySelector('[role="img"]') as HTMLElement;
+
+    expect(unknown.style.backgroundColor).not.toBe(level1.style.backgroundColor);
   });
 });
 

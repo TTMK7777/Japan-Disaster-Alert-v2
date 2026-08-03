@@ -202,4 +202,33 @@ describe('EarthquakeList', () => {
     expect(greenText).toBeInTheDocument();
     expect(greenText?.textContent).toBe('なし');
   });
+
+  // 震度の意味の表示（16言語）
+  // 数字だけでは、日本の震度階級を知らない訪日客に何も伝わらない。
+  // この説明文は長らく本番のどこにも出ていなかった（import 元がテストだけだった）
+  it('震度の意味を利用者の言語で表示する', () => {
+    render(
+      <EarthquakeList
+        language="en"
+        earthquakes={[mockEarthquakes[0]]}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText('Awakens sleepers')).toBeInTheDocument();
+  });
+
+  it('日本語では日本語の説明を表示する', () => {
+    render(
+      <EarthquakeList
+        language="ja"
+        earthquakes={[mockEarthquakes[1]]}
+        loading={false}
+        error={null}
+      />
+    );
+
+    expect(screen.getByText('物につかまりたくなる')).toBeInTheDocument();
+  });
 });

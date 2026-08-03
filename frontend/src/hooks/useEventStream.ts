@@ -42,6 +42,25 @@ interface EventStreamState {
   lastEvent: string | null;
 }
 
+/** ポーリング間隔の上限。連続失敗のたびに倍にして、ここで頭打ちにする */
+const MAX_POLL_INTERVAL_MS = 300000; // 5分
+
+/**
+ * いま通信する意味があるか。
+ *
+ * 圏外・停電（＝このアプリが最も要る場面）では、投げても何も返ってこない。
+ * それでも 30 秒ごとに fetch し続けると、得る情報ゼロで電池だけを削る。
+ * 画面を見ていないとき（バックグラウンド）も同じ。
+ *
+ * `navigator.onLine` は「繋がっている」ことは保証しないが、
+ * **`false` のときは確実に繋がっていない**ので、その判定にだけ使う。
+ */
+function canReachNetwork(): boolean {
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  if (typeof document !== 'undefined' && document.hidden) return false;
+  return true;
+}
+
 /**
  * SSEによるリアルタイムイベントストリーム接続フック
  *
@@ -81,20 +100,48 @@ export function useEventStream(options: EventStreamOptions): EventStreamState {
   // タイマー・EventSourceの参照
   const eventSourceRef = useRef<EventSource | null>(null);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ポーリングの連続失敗回数（間隔を伸ばすために使う）
+  const pollFailuresRef = useRef(0);
+
+  // ポーリング停止
+  const stopPolling = useCallback(() => {
+    if (pollingTimerRef.current) {
+      clearTimeout(pollingTimerRef.current);
+      pollingTimerRef.current = null;
+    }
+  }, []);
 
   // ポーリングフォールバック: 既存のfetch方式で地震データを取得
+  //
+  // 一定間隔の setInterval ではなく、1回ごとに次を予約する形にしてある。
+  // 失敗が続くほど間隔を伸ばし（30s → 60s → … 最大5分）、
+  // 圏外・バックグラウンドでは**次を予約せずに止まる**ため。
+  // 再開は online / visibilitychange のリスナが行う。
   const startPolling = useCallback(() => {
-    // 既存のポーリングタイマーがあればクリア
-    if (pollingTimerRef.current) {
-      clearInterval(pollingTimerRef.current);
-    }
+    stopPolling();
 
     setState((prev) => ({ ...prev, mode: 'polling', connected: false }));
 
+    const scheduleNext = () => {
+      if (!isMountedRef.current) return;
+      // 2^4 で頭打ち。上限は MAX_POLL_INTERVAL_MS
+      const backoff = Math.pow(2, Math.min(pollFailuresRef.current, 4));
+      const delay = Math.min(fallbackInterval * backoff, MAX_POLL_INTERVAL_MS);
+      pollingTimerRef.current = setTimeout(poll, delay);
+    };
+
     const poll = async () => {
+      if (!isMountedRef.current) return;
+
+      if (!canReachNetwork()) {
+        // 次を予約しない＝ここで止まる。復帰時にリスナが呼び直す
+        setState((prev) => ({ ...prev, mode: 'disconnected', connected: false }));
+        return;
+      }
+
       try {
-        if (!isMountedRef.current) return;
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000);
         const response = await fetch(
@@ -104,34 +151,29 @@ export function useEventStream(options: EventStreamOptions): EventStreamState {
         clearTimeout(timeoutId);
 
         if (!isMountedRef.current) return;
-        if (response.ok) {
-          const data = await response.json();
-          callbacksRef.current.onEarthquake?.({
-            earthquakes: data,
-            updated_at: new Date().toISOString(),
-          });
-          setState((prev) => ({
-            ...prev,
-            lastEvent: new Date().toISOString(),
-          }));
-        }
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        pollFailuresRef.current = 0;
+        callbacksRef.current.onEarthquake?.({
+          earthquakes: data,
+          updated_at: new Date().toISOString(),
+        });
+        setState((prev) => ({
+          ...prev,
+          mode: 'polling',
+          lastEvent: new Date().toISOString(),
+        }));
       } catch (err) {
+        pollFailuresRef.current += 1;
         console.error('[EventStream] ポーリングエラー:', err);
+      } finally {
+        scheduleNext();
       }
     };
 
-    // 即時実行 + 定期実行
     poll();
-    pollingTimerRef.current = setInterval(poll, fallbackInterval);
-  }, [lang, fallbackInterval]);
-
-  // ポーリング停止
-  const stopPolling = useCallback(() => {
-    if (pollingTimerRef.current) {
-      clearInterval(pollingTimerRef.current);
-      pollingTimerRef.current = null;
-    }
-  }, []);
+  }, [lang, fallbackInterval, stopPolling]);
 
   // SSE接続を確立
   const connect = useCallback(() => {
@@ -145,6 +187,14 @@ export function useEventStream(options: EventStreamOptions): EventStreamState {
     if (reconnectTimerRef.current) {
       clearTimeout(reconnectTimerRef.current);
       reconnectTimerRef.current = null;
+    }
+
+    // 圏外・バックグラウンドでは接続しない。
+    // EventSource は自前でも再接続を試みるため、開いた時点で通信が始まってしまう
+    if (!canReachNetwork()) {
+      stopPolling();
+      setState({ connected: false, mode: 'disconnected', lastEvent: null });
+      return;
     }
 
     try {
@@ -215,6 +265,14 @@ export function useEventStream(options: EventStreamOptions): EventStreamState {
           connected: false,
         }));
 
+        // 圏外・バックグラウンドなら再接続もポーリングもしない。
+        // 復帰時に online / visibilitychange のリスナが呼び直す
+        if (!canReachNetwork()) {
+          stopPolling();
+          setState({ connected: false, mode: 'disconnected', lastEvent: null });
+          return;
+        }
+
         reconnectAttemptsRef.current += 1;
 
         if (reconnectAttemptsRef.current > maxReconnectAttempts) {
@@ -269,11 +327,46 @@ export function useEventStream(options: EventStreamOptions): EventStreamState {
 
     // 再接続カウンターをリセット（言語変更時など）
     reconnectAttemptsRef.current = 0;
+    pollFailuresRef.current = 0;
     connect();
+
+    // 通信を止める（圏外になった / 画面が見えなくなった）
+    const pause = () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+        eventSourceRef.current = null;
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      stopPolling();
+      setState({ connected: false, mode: 'disconnected', lastEvent: null });
+    };
+
+    // 通信を再開する（復帰したので、失敗回数は捨てて即座に取りに行く）
+    const resume = () => {
+      if (!isMountedRef.current || !canReachNetwork()) return;
+      reconnectAttemptsRef.current = 0;
+      pollFailuresRef.current = 0;
+      connectRef.current?.();
+    };
+
+    const handleVisibility = () => {
+      if (document.hidden) pause();
+      else resume();
+    };
+
+    window.addEventListener('online', resume);
+    window.addEventListener('offline', pause);
+    document.addEventListener('visibilitychange', handleVisibility);
 
     // クリーンアップ: アンマウント時またはlang/enabled変更時
     return () => {
       isMountedRef.current = false;
+      window.removeEventListener('online', resume);
+      window.removeEventListener('offline', pause);
+      document.removeEventListener('visibilitychange', handleVisibility);
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
         eventSourceRef.current = null;
