@@ -18,7 +18,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
 - **Official Transit Links** — Curated official rail / air / road information sources, with each link's language availability shown before you tap it
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 1,174 tests (pytest backend 1031, Vitest unit 111, Playwright E2E 32)
+- **Comprehensive Testing** — 1,190 tests (pytest backend 1031, Vitest unit 126, Playwright E2E 33)
 
 ## Supported Languages
 
@@ -57,7 +57,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Next.js 15** with **React 19** and **TypeScript**
 - **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
-- **Vitest** + **React Testing Library** — unit testing (111 tests)
+- **Vitest** + **React Testing Library** — unit testing (126 tests)
 - **Playwright** — E2E testing (32 tests)
 - **PWA** — Service Worker for offline capability
 
@@ -207,7 +207,7 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
-│   │   │   └── __tests__/               # Vitest unit tests (111 tests)
+│   │   │   └── __tests__/               # Vitest unit tests (126 tests)
 │   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
@@ -244,7 +244,7 @@ pytest tests/ -v               # 1031 tests
 ```bash
 cd frontend
 npm install
-npm run test:run     # 111 unit tests
+npm run test:run     # 126 unit tests
 ```
 
 ### E2E (Playwright)

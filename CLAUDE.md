@@ -22,11 +22,11 @@
 ## Testing / Proof
 変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
 
-| 層 | コマンド | 件数（2026-08-01 実測） |
+| 層 | コマンド | 件数（2026-08-04 実測） |
 |----|----------|------|
 | Backend unit | `cd backend && pytest tests/ -v` | 1031 |
-| Frontend unit | `cd frontend && npm run test:run` | 111 |
-| Frontend E2E | 下記「E2E を動かすとき」を参照 | 32（CI 未実行） |
+| Frontend unit | `cd frontend && npm run test:run` | 126 |
+| Frontend E2E | 下記「E2E を動かすとき」を参照 | 33（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
 

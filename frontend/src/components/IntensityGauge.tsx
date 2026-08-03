@@ -10,6 +10,18 @@ interface IntensityGaugeProps {
 }
 
 // 震度データ
+//
+// 震度が取れないことは普通に起きる（速報値・海外震源・P2P由来の "不明"）。
+// 以前は未知の値を**震度1にフォールバック**していたため、
+// 情報が無いだけの地震が「ほぼ揺れていない」に見えていた。
+// 未知は最も穏やかな色ではなく、無彩色の「不明」として出す。
+const UNKNOWN_INTENSITY = {
+  level: 0,
+  color: '#6B7280',
+  borderColor: '#4B5563',
+  textColor: 'white',
+} as const;
+
 const intensityData = {
   '1': { level: 1, color: '#F3F4F6', borderColor: '#9CA3AF', textColor: '#374151' },
   '2': { level: 2, color: '#60A5FA', borderColor: '#3B82F6', textColor: 'white' },
@@ -48,9 +60,39 @@ const descriptions: Record<string, Record<string, string>> = {
   '7': { ja: '投げ出される', en: 'Thrown around', zh: '被抛出', 'zh-TW': '被拋出', ko: '던져짐', vi: 'Bị ném', th: 'ถูกเหวี่ยง', id: 'Terlempar', ms: 'Dilontarkan', tl: 'Tinatapunan', ne: 'फ्याँकिन्छ', fr: 'Projet\u00e9', de: 'Umhergeworfen', it: 'Sbalzato', es: 'Lanzado', easy_ja: 'からだが とばされる！' },
 };
 
+// 震度不明のラベル（16言語）。値が無いことも情報なので、日本語の "不明" を
+// そのまま各国語の利用者に見せない
+const UNKNOWN_LABELS: Record<string, string> = {
+  ja: '震度不明', en: 'Unknown', zh: '震度不明', 'zh-TW': '震度不明', ko: '진도 불명',
+  vi: 'Không rõ', th: 'ไม่ทราบ', id: 'Tidak diketahui', ms: 'Tidak diketahui',
+  tl: 'Hindi alam', ne: 'थाहा छैन', fr: 'Inconnu', de: 'Unbekannt',
+  it: 'Sconosciuto', es: 'Desconocido', easy_ja: 'しんどが わからない',
+};
+
+/** 震度文字列に対応する表示データ。未知の値は震度1ではなく「不明」に落とす */
+export function resolveIntensityData(intensity: string) {
+  return intensityData[intensity as keyof typeof intensityData] ?? UNKNOWN_INTENSITY;
+}
+
+function isKnownIntensity(intensity: string): boolean {
+  return intensity in intensityData;
+}
+
+/** アイコン内に出す短い表記。未知は各国語の記号に依存しない '?' にする */
+function glyph(intensity: string): string {
+  return isKnownIntensity(intensity) ? intensity.replace('弱', '-').replace('強', '+') : '?';
+}
+
+function unknownLabel(language: string): string {
+  return UNKNOWN_LABELS[language] || UNKNOWN_LABELS['en'];
+}
+
 export default function IntensityGauge({ intensity, language, showLabel = true, size = 'md' }: IntensityGaugeProps) {
-  const data = intensityData[intensity as keyof typeof intensityData] || intensityData['1'];
-  const label = labels[intensity]?.[language] || labels[intensity]?.['en'] || intensity;
+  const known = isKnownIntensity(intensity);
+  const data = resolveIntensityData(intensity);
+  const label = known
+    ? labels[intensity]?.[language] || labels[intensity]?.['en'] || intensity
+    : unknownLabel(language);
   const desc = descriptions[intensity]?.[language] || descriptions[intensity]?.['en'] || '';
 
   // サイズ設定
@@ -90,7 +132,7 @@ export default function IntensityGauge({ intensity, language, showLabel = true, 
           role="img"
           aria-label={label}
         >
-          {intensity.replace('弱', '-').replace('強', '+')}
+          {glyph(intensity)}
         </div>
 
         {/* ゲージとラベル */}
@@ -131,7 +173,8 @@ export default function IntensityGauge({ intensity, language, showLabel = true, 
 
 // コンパクト版（リスト用）
 export function IntensityBadge({ intensity, language }: { intensity: string; language: string }) {
-  const data = intensityData[intensity as keyof typeof intensityData] || intensityData['1'];
+  const data = resolveIntensityData(intensity);
+  const known = isKnownIntensity(intensity);
 
   return (
     <span
@@ -142,9 +185,9 @@ export function IntensityBadge({ intensity, language }: { intensity: string; lan
         color: data.textColor,
       }}
       role="img"
-      aria-label={`Intensity ${intensity}`}
+      aria-label={known ? `Intensity ${intensity}` : unknownLabel(language)}
     >
-      {intensity.replace('弱', '-').replace('強', '+')}
+      {glyph(intensity)}
     </span>
   );
 }

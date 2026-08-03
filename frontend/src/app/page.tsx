@@ -254,8 +254,9 @@ export default function Home() {
     // クライアントサイドでのみ実行
     setMounted(true);
     setLastUpdate(new Date());
-    // マウント後に地図表示をデフォルトに
-    setEarthquakeView('map');
+    // 既定はリスト表示のまま（useState の初期値）。以前はここで地図を強制していたが、
+    // 地図タイルの取得と fitBounds が毎回走って通信と電池を食ううえ、
+    // 「まず何が起きたか」を読むだけの用途では一覧の方が速い。地図は利用者が選べる
   }, []);
 
   return (
