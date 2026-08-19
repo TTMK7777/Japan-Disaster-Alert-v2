@@ -1,0 +1,24 @@
+# gcloud builds submit がアップロードする対象から除外する。
+#
+# 注意: gcloud は「ソースとして指定したディレクトリ」の .gcloudignore を見る。
+# 無い場合はそのディレクトリの .gitignore を代用するが、本リポジトリの .gitignore は
+# ルートにしか無いため frontend/ 単体を送ると node_modules ごと上がる
+# （実測: 17,838ファイル / 624.6 MiB）。
+
+.gcloudignore
+.git/
+.gitignore
+
+# 依存とビルド生成物はコンテナ内で作り直す
+node_modules/
+.next/
+out/
+
+# テスト成果物
+coverage/
+playwright-report/
+test-results/
+
+# 秘密
+.env
+.env.*

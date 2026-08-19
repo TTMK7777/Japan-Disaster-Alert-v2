@@ -122,6 +122,8 @@ Next.js の `rewrites` でプロキシしない理由は、**SSE 接続の間フ
 
 ### 前提
 
+- 以下のコマンドはすべて**リポジトリルートで実行**する（`--source backend` や
+  `--config frontend/cloudbuild.yaml` がルートからの相対パスのため）
 - GCP プロジェクト（本番: `japan-disaster-alert`）に**請求先アカウントが紐付いていること**
 - 有効化済み API: `run.googleapis.com` / `cloudbuild.googleapis.com` / `artifactregistry.googleapis.com`
 - リージョンは `asia-northeast1`（東京）
@@ -152,26 +154,41 @@ gcloud run deploy disaster-api \
 
 出力される `https://disaster-api-....run.app` を控えます。
 
-#### ② frontend を①の URL 付きでビルド＆デプロイ
+#### ② frontend を①の URL 付きでビルドする
+
+**`gcloud run deploy --source frontend` は使えません。** フロントは `NEXT_PUBLIC_API_URL` を
+Dockerfile の `ARG` で受けますが、`--set-build-env-vars` は buildpacks 向けのフラグで
+**Dockerfile の `ARG` には渡らない**ためです。build-arg を渡す `frontend/cloudbuild.yaml` を使います。
 
 ```bash
 API_URL=$(gcloud run services describe disaster-api \
   --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
 
+gcloud builds submit frontend \
+  --config frontend/cloudbuild.yaml \
+  --project japan-disaster-alert \
+  --substitutions _API_URL=${API_URL}
+```
+
+#### ③ frontend をビルド済みイメージからデプロイする
+
+```bash
 gcloud run deploy disaster-web \
-  --source frontend \
+  --image asia-northeast1-docker.pkg.dev/japan-disaster-alert/cloud-run-source-deploy/disaster-web:latest \
   --project japan-disaster-alert \
   --region asia-northeast1 \
   --allow-unauthenticated \
   --min-instances 1 --max-instances 3 \
-  --memory 512Mi --cpu 1 \
-  --set-build-env-vars NEXT_PUBLIC_API_URL=${API_URL}
+  --memory 512Mi --cpu 1
 ```
 
 > `--min-instances 1` はコールドスタート回避のため。災害時に初回表示が数秒遅れるのを避ける意図で、
 > ここだけ常時課金を受け入れています。コストを切り詰めるなら `0` に下げられます。
 
-#### ③ backend の CORS に frontend の URL を通す
+> **API の URL を変えたときは②からやり直すこと。** 焼き込み済みのバンドルは
+> 再デプロイだけでは更新されません。
+
+#### ④ backend の CORS に frontend の URL を通す
 
 ```bash
 WEB_URL=$(gcloud run services describe disaster-web \
@@ -182,7 +199,7 @@ gcloud run services update disaster-api \
   --update-env-vars CORS_ORIGINS=${WEB_URL}
 ```
 
-**③を飛ばすとブラウザのコンソールに CORS エラーだけが出て、画面はデータ0件のまま**になります
+**④を飛ばすとブラウザのコンソールに CORS エラーだけが出て、画面はデータ0件のまま**になります
 （`config.py` の既定値は localhost のみ）。
 
 ### コスト設計
