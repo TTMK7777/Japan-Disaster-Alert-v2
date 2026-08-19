@@ -1,0 +1,28 @@
+# 秘密をイメージに焼き付けない（最優先）
+.env
+.env.*
+*.pem
+*.key
+
+# ローカル環境・生成物
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# テストは本番イメージに要らない
+tests/
+
+# 実行時に生成される状態（コンテナ内で作り直す）
+data/app.db
+data/translation_cache.json
+data/push_subscriptions.json
+
+# ドキュメント・スクリプト
+*.md
+scripts/

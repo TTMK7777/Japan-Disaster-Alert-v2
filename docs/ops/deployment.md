@@ -3,9 +3,14 @@
 > **注意**: このランブックは、本番運用に頼る前に一度通しで手動実行し、各コマンドが
 > 自分の環境で動作することを確認してください。値（ポート・パス・キー）は環境により異なります。
 
-本プロジェクトには Dockerfile や CI/CD デプロイパイプラインは含まれていません
-（GitHub Actions は `ci.yml`（テスト）と `dependabot-automerge.yml`（依存関係自動マージ）を含む）。バックエンドとフロントエンドを
-個別のプロセスとして起動するローカル / 単一サーバ構成を前提とします。
+本書は2通りの構成を扱います。
+
+1. **ローカル / 単一サーバ構成**（第1〜5節）— バックエンドとフロントエンドを個別プロセスで起動する
+2. **Cloud Run への公開デプロイ**（第6節）— コンテナ2サービス構成
+
+コンテナ定義は `backend/Dockerfile` と `frontend/Dockerfile` にあります。
+GitHub Actions は `ci.yml`（テスト）、`dependabot-automerge.yml`、`pip-audit.yml` のみで、
+**デプロイの自動化は含みません**（Cloud Run へは手動デプロイ）。
 
 ## 前提条件 (Prerequisites)
 
@@ -98,3 +103,132 @@ curl http://localhost:8000/api/v1/health    # 詳細（P2P / JMA / DB / AI）
 ```
 
 詳細ヘルスチェックで各依存先（P2P、JMA、DB、AI）の状態を確認できます。
+
+---
+
+## 6. Cloud Run への公開デプロイ (Production on Cloud Run)
+
+### 構成
+
+```
+[利用者] --> disaster-web  (Cloud Run / Next.js standalone)
+                  |
+                  +--( ブラウザから直接 )--> disaster-api (Cloud Run / FastAPI)
+```
+
+フロントとAPIは**別オリジン**です。ブラウザが API を直接叩くため、API 側で CORS 許可が要ります。
+Next.js の `rewrites` でプロキシしない理由は、**SSE 接続の間フロント側インスタンスが占有され、
+同時接続数と課金を二重に食う**ためです。
+
+### 前提
+
+- GCP プロジェクト（本番: `japan-disaster-alert`）に**請求先アカウントが紐付いていること**
+- 有効化済み API: `run.googleapis.com` / `cloudbuild.googleapis.com` / `artifactregistry.googleapis.com`
+- リージョンは `asia-northeast1`（東京）
+
+```bash
+gcloud services enable run.googleapis.com cloudbuild.googleapis.com artifactregistry.googleapis.com \
+  --project=japan-disaster-alert
+```
+
+### 順序（この順でないと通らない）
+
+`NEXT_PUBLIC_*` は**ビルド時にクライアントバンドルへ焼き込まれる**ため、
+API の URL が確定してからでないとフロントをビルドできません。
+
+#### ① backend をデプロイして URL を確定させる
+
+```bash
+gcloud run deploy disaster-api \
+  --source backend \
+  --project japan-disaster-alert \
+  --region asia-northeast1 \
+  --allow-unauthenticated \
+  --min-instances 0 --max-instances 3 \
+  --memory 512Mi --cpu 1 \
+  --timeout 300 --concurrency 80 \
+  --set-env-vars ENVIRONMENT=production,LOG_LEVEL=INFO
+```
+
+出力される `https://disaster-api-....run.app` を控えます。
+
+#### ② frontend を①の URL 付きでビルド＆デプロイ
+
+```bash
+API_URL=$(gcloud run services describe disaster-api \
+  --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
+
+gcloud run deploy disaster-web \
+  --source frontend \
+  --project japan-disaster-alert \
+  --region asia-northeast1 \
+  --allow-unauthenticated \
+  --min-instances 1 --max-instances 3 \
+  --memory 512Mi --cpu 1 \
+  --set-build-env-vars NEXT_PUBLIC_API_URL=${API_URL}
+```
+
+> `--min-instances 1` はコールドスタート回避のため。災害時に初回表示が数秒遅れるのを避ける意図で、
+> ここだけ常時課金を受け入れています。コストを切り詰めるなら `0` に下げられます。
+
+#### ③ backend の CORS に frontend の URL を通す
+
+```bash
+WEB_URL=$(gcloud run services describe disaster-web \
+  --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
+
+gcloud run services update disaster-api \
+  --project japan-disaster-alert --region asia-northeast1 \
+  --update-env-vars CORS_ORIGINS=${WEB_URL}
+```
+
+**③を飛ばすとブラウザのコンソールに CORS エラーだけが出て、画面はデータ0件のまま**になります
+（`config.py` の既定値は localhost のみ）。
+
+### コスト設計
+
+| 設定 | 値 | 理由 |
+|---|---|---|
+| `disaster-api` min-instances | **0** | 誰も見ていない間は課金ゼロ。SSE 接続がある間だけ起きる |
+| `disaster-api` max-instances | **3** | 暴走課金の上限。SSE は1接続でインスタンスを占有し続けるため上限必須 |
+| `disaster-api` timeout | **300秒** | SSE を5分で切ってクライアントに再接続させる。無制限に張らせない |
+| `disaster-web` min-instances | **1** | コールドスタート回避（常時課金が発生する唯一の箇所） |
+
+Cloud Run には月間無料枠（180,000 vCPU秒 / 360,000 GiB秒 / 200万リクエスト）があります。
+**注意すべきは SSE**で、タブを開きっぱなしにされると接続中ずっと vCPU 秒を消費します。
+`--timeout 300` と `max-instances 3` がその上限装置です。
+
+#### 予算アラートを必ず設定する
+
+`max-instances` は同時実行数の上限であって**支出の上限ではありません**。
+Cloud Run に支出の自動停止機能はないため、請求額の監視は予算アラートで行います。
+
+[請求 → 予算とアラート](https://console.cloud.google.com/billing/budgets) から、
+プロジェクト `japan-disaster-alert` に対して月額予算（例: 3,000円）と
+50% / 90% / 100% の通知しきい値を設定してください。
+CLI では `gcloud billing budgets` が alpha/beta 扱いのため、コンソールでの操作になります。
+
+### 既知の制約（この構成で「動かないもの」）
+
+1. **Push 通知の購読はインスタンス再起動で消える。** SQLite（`data/app.db`）がコンテナ内にあるため、
+   スケールイン・再デプロイで購読データが失われます。常時運用するには GCS / Firestore などへの
+   移行が必要です。地震・警報・避難所・交通・16言語ガイドは外部 API の読み取りのみで動くため影響ありません。
+2. **バックグラウンド監視は min-instances=0 の間だけ止まる。** `lifespan` で起動する
+   `event_manager` はインスタンスが生きている間のみ動きます。誰も接続していない時間帯の
+   イベント検出は行われません。
+3. **AI 経路の自由文翻訳は無効。** `GEMINI_API_KEY` を設定していないため、
+   静的辞書（16言語）でカバーされる範囲のみ動作します。
+
+### スモークテスト
+
+```bash
+API_URL=$(gcloud run services describe disaster-api --project japan-disaster-alert \
+  --region asia-northeast1 --format='value(status.url)')
+
+curl -sS "${API_URL}/api/v1/health" | head -20
+curl -sS "${API_URL}/api/v1/earthquakes?lang=en&limit=3" | head -5
+```
+
+フロントは実ブラウザで開き、**地震一覧にデータが出ること**と
+**接続インジケータが緑（SSE 接続）になること**を目視で確認します。
+型チェックが通っただけでは検証になりません。
