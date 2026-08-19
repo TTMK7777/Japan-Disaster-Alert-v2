@@ -255,6 +255,11 @@ npx playwright install chromium
 npx playwright test   # 28 E2E tests
 ```
 
+## Deployment
+
+Container definitions live in `backend/Dockerfile` and `frontend/Dockerfile`.
+See [docs/ops/deployment.md](docs/ops/deployment.md) for local, single-server, and Cloud Run steps.
+
 ## Disclaimer
 
 This system provides reference information only and is **not** a substitute for official disaster information. During emergencies, always follow announcements from the Japan Meteorological Agency and your local government.
