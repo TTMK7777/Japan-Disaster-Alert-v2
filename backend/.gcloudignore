@@ -1,0 +1,29 @@
+# gcloud builds submit / gcloud run deploy --source がアップロードする対象から除外する。
+#
+# gcloud は「ソースとして指定したディレクトリ」の .gcloudignore を見る。無ければ
+# そのディレクトリの .gitignore を代用するが、本リポジトリの .gitignore はルートにしか
+# 無いため、backend/ 単体を送ると仮想環境ごと上がる。
+
+.gcloudignore
+.git/
+.gitignore
+
+# 仮想環境・キャッシュ
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# 実行時に生成される状態（コンテナ内で作り直す）
+data/app.db
+data/translation_cache.json
+data/push_subscriptions.json
+
+# 秘密
+.env
+.env.*

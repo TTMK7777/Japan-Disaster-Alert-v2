@@ -1,0 +1,37 @@
+# frontend のイメージビルド（Cloud Build）
+#
+# なぜ `gcloud run deploy --source frontend` で済ませないか:
+#   Dockerfile は NEXT_PUBLIC_API_URL を ARG で受ける（NEXT_PUBLIC_* はビルド時に
+#   クライアントバンドルへ焼き込まれるため、ランタイム環境変数では変えられない）。
+#   一方 `gcloud run deploy --set-build-env-vars` は buildpacks 向けのフラグで、
+#   **Dockerfile の ARG には渡らない**。build-arg を渡すにはこの構成ファイルが要る。
+#
+# 使い方:
+#   API_URL=$(gcloud run services describe disaster-api \
+#     --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
+#   gcloud builds submit frontend --config frontend/cloudbuild.yaml \
+#     --project japan-disaster-alert --substitutions _API_URL=${API_URL}
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --build-arg
+      - NEXT_PUBLIC_API_URL=${_API_URL}
+      - --tag
+      - ${_IMAGE}
+      - .
+
+images:
+  - ${_IMAGE}
+
+substitutions:
+  # 未指定ならローカル開発の既定値。本番では必ず上書きすること
+  _API_URL: http://localhost:8000
+  _IMAGE: asia-northeast1-docker.pkg.dev/japan-disaster-alert/cloud-run-source-deploy/disaster-web:latest
+
+options:
+  # 既定のサービスアカウントに専用バケットへのログ書き込み権限が無い構成でも通るようにする
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: 1200s
