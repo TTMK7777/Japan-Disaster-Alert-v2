@@ -40,6 +40,7 @@ Japan Disaster Alert のドキュメントハブです。読者のロール別�
 | [PROJECT_PLAN.md](../PROJECT_PLAN.md) | Explanation | 詳細プロジェクト計画 |
 | [docs/research/JMA_API_UPDATE_2026.md](research/JMA_API_UPDATE_2026.md) | Reference | JMA API 更新調査 (2026) |
 | [docs/research/inbound-disaster-needs-2026.md](research/inbound-disaster-needs-2026.md) | Reference | 訪日外国人の災害時ニーズ調査（公的調査の棚卸し） |
+| [docs/research/b2b-pivot-demand-2026.md](research/b2b-pivot-demand-2026.md) | Reference | 訪日客に接する日本側の主体（宿泊施設・雇用主・自治体）の需要調査 |
 | [docs/dev/requirements-gap-2026.md](dev/requirements-gap-2026.md) | Explanation | 要件と実装のギャップ分析・優先度提案 |
 | [docs/strategy/differentiation-and-social-impact.md](strategy/differentiation-and-social-impact.md) | Explanation | 差別化戦略・社会貢献方針 |
 
