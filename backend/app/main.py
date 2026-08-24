@@ -451,7 +451,8 @@ async def translate_message(request: Request, body: TranslateRequest):
     )
 
 
-@app.get("/api/v1/shelters", response_model=list[ShelterInfo])
+# 応答は {shelters, meta} の封筒。meta にはサンプルか実データかの別と出典を載せる
+@app.get("/api/v1/shelters")
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
 async def get_nearby_shelters(
@@ -482,14 +483,26 @@ async def get_nearby_shelters(
         disaster_type=disaster_type
     )
 
-    # 多言語翻訳
-    if lang != "ja":
-        for shelter in shelters:
-            shelter.name_translated = await translator.translate(
-                shelter.name, target_lang=lang
-            )
-
-    return shelters
+    # **施設名は翻訳しない。**
+    #
+    # 理由は2つある。
+    # 1) 現地の看板・地図・住民の認識はすべて日本語表記なので、訳した名前では
+    #    現地で照合できない。「Jingumae Elementary School」と書かれた画面を持って
+    #    「神宮前小学校」の看板を探すことになる。交通事業者名や地域名を訳さずに
+    #    公式表記のまま出しているのと同じ判断。
+    # 2) 以前はここで1件ずつ AI 翻訳を await していた。施設名が全国 115,674 種に
+    #    増えるとキャッシュがほぼ当たらず、**1リクエストで最大100回の AI 呼び出しが
+    #    直列に走る**。災害時に最も遅くなってはいけない経路だった。
+    return {
+        "shelters": shelters,
+        "meta": {
+            # サンプルデータで動いているときに、それを利用者へ伝えられるようにする。
+            # 黙っていると数件のサンプルが「あなたの近くの避難所」として表示される
+            "is_sample_data": shelter_service.is_sample_data,
+            # 出典表示はデータのライセンス（PDL1.0）上の義務
+            "attribution": shelter_service.attribution,
+        },
+    }
 
 
 @app.get("/api/v1/shelters/types")

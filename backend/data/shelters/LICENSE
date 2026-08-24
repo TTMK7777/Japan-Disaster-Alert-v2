@@ -1,0 +1,79 @@
+避難所データのライセンス / License for shelter data
+====================================================
+
+このディレクトリの `shelters.json.gz` は、リポジトリ本体のソースコード（MIT License）とは
+**別のライセンス**で提供されるデータです。混同しないでください。
+
+This directory's `shelters.json.gz` is DATA distributed under a license that differs from
+the MIT License covering this repository's source code.
+
+
+出典 / Source
+-------------
+
+出典：国土地理院ウェブサイト
+（https://hinanmap.gsi.go.jp/hinanjocp/hinanbasho/koukaidate.html）
+
+国土地理院「指定緊急避難場所データ」を加工して作成
+
+Source: Geospatial Information Authority of Japan (GSI)
+Created by processing the GSI "Designated Emergency Evacuation Sites" dataset.
+
+- 取得日 / Retrieved: 2026-08-23
+- 収録件数 / Records: 115,674
+- 元データ / Original: mergeFromCity_2.csv（指定緊急避難場所）
+
+
+ライセンス / License
+--------------------
+
+公共データ利用規約（第1.0版）— PDL1.0
+https://www.gsi.go.jp/kikakuchousei/kikakuchousei40182.html
+
+商用利用・再配布ともに可。義務は次の2点です。
+
+1. 出典を明示すること
+2. 加工した場合は、**出典とは別に**加工した旨を記載すること。かつ、あたかも国土地理院が
+   作成したかのような態様で公表しないこと
+
+本ファイルの生成物には `meta.attribution` と `meta.processing` として同じ内容を埋め込んで
+あり、アプリの API 応答経由で利用者にも表示されます。
+
+
+重要な注意 / Important notice
+-----------------------------
+
+配布元の「ご利用上の注意」第4項により、**本データを用いた情報を第三者へ提供する場合は、
+以下の注意事項が正確に伝わるよう留意する義務があります。**
+
+> データは最新でない場合や、未掲載の施設がある場合があります。
+> 最新の状況は、当該市町村にご確認ください。
+
+アプリ側では避難所画面にこの旨を16言語で表示しています。**この表示を外さないでください。**
+
+Per the source's terms of use (item 4), when providing information derived from this data to
+third parties, you must ensure the following is communicated: the data may not be current and
+some facilities may be missing; confirm the latest status with the relevant municipality.
+The app displays this notice in 16 languages on the shelter screen. Do not remove it.
+
+
+データに含まれないもの / Fields NOT in this dataset
+---------------------------------------------------
+
+次の情報は配布データに存在しません。**値を補って断言しないでください。**
+
+- 開設状況（is_open）— 避難所が今開いているかどうか
+- 収容人数（capacity）
+- 電話番号（phone）
+- 設備（facilities）— バリアフリー、ペット可 等
+
+These fields do not exist in the source data. Do not fabricate values for them.
+
+
+再生成 / Regenerating
+---------------------
+
+    python scripts/build_shelters.py <mergeFromCity_2.csv>
+
+配布元は「随時更新」（市町村ごとのローリング更新）です。年1回程度の取り込みで実用上
+十分ですが、更新時は取得日を本ファイルにも反映してください。
