@@ -480,17 +480,25 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
           <div className="divide-y dark:divide-gray-700">
             {section.contacts.map((contact, contactIdx) => (
               <div key={contactIdx} className="p-4 flex items-center gap-4">
+                {/* 発信ボタンは「意図してここを押した」と言える大きさに留める。
+                    行全体をリンクにすると 110/119 の誤発信を招くため広げない。
+                    番号は桁数で幅が変わるのでボタンの中に入れず本文側に出す
+                    （以前は 80x80px の箱に text-lg で描いていたため、110 は収まっても
+                    「050-3816-2787」はボタン枠からはみ出して切れていた） */}
                 <a
                   href={`tel:${contact.number}`}
-                  className="flex-shrink-0 w-20 h-20 bg-red-500 hover:bg-red-600 text-white rounded-xl flex flex-col items-center justify-center transition-colors shadow-md"
+                  className="flex-shrink-0 w-16 h-16 bg-red-500 hover:bg-red-600 text-white rounded-xl flex items-center justify-center transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
                   aria-label={`Call ${contact.name} at ${contact.number}`}
                 >
                   <PhoneIcon className="w-8 h-8" />
-                  <span className="text-lg font-bold mt-1">{contact.number}</span>
                 </a>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-900 dark:text-gray-100 text-lg">{contact.name}</h4>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm">{contact.description}</p>
+                  <h4 className="font-bold text-gray-900 dark:text-gray-100">{contact.name}</h4>
+                  {/* tabular-nums で桁を揃える。長い番号でも折り返さず1行に収まる */}
+                  <p className="text-2xl font-bold text-red-600 dark:text-red-400 tabular-nums tracking-tight leading-tight">
+                    {contact.number}
+                  </p>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm mt-0.5">{contact.description}</p>
                   <div className="flex flex-wrap gap-2 mt-2">
                     {contact.available && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">

@@ -22,17 +22,30 @@ const UNKNOWN_INTENSITY = {
   textColor: 'white',
 } as const;
 
+// 震度の配色。**`app/globals.css` の `.intensity-*` と同じ値でなければならない。**
+// 以前この2つは別のパレットで、1枚のカードの中で帯が #fae696、その下のバッジが
+// #FDE047 と、同じ震度4が違う黄色で並んでいた。
+//
+// 色相は気象庁の震度分布図に合わせている。テレビや自治体の掲示と同じ色で出る方が、
+// 日本の震度階級を知らない利用者でも「今どのくらいか」を照合できるため。
+// **文字色は背景ごとにコントラストを計算して決めた**（WCAG AA 4.5 以上）。
+// 以前は 2 / 5強 / 6弱 が白文字で 2.56 / 2.14 / 3.78 しかなく、
+// 震度が上がるほど読めなくなっていた。
+// 同期は tests の drift 検出（globals.css を読んで突合）で守る。
 const intensityData = {
-  '1': { level: 1, color: '#F3F4F6', borderColor: '#9CA3AF', textColor: '#374151' },
-  '2': { level: 2, color: '#60A5FA', borderColor: '#3B82F6', textColor: 'white' },
-  '3': { level: 3, color: '#3B82F6', borderColor: '#2563EB', textColor: 'white' },
-  '4': { level: 4, color: '#FDE047', borderColor: '#FACC15', textColor: '#374151' },
-  '5弱': { level: 5, color: '#FCD34D', borderColor: '#F59E0B', textColor: '#374151' },
-  '5強': { level: 6, color: '#FB923C', borderColor: '#EA580C', textColor: 'white' },
-  '6弱': { level: 7, color: '#F87171', borderColor: '#EF4444', textColor: 'white' },
-  '6強': { level: 8, color: '#DC2626', borderColor: '#B91C1C', textColor: 'white' },
-  '7': { level: 9, color: '#9333EA', borderColor: '#7C3AED', textColor: 'white' },
+  '1': { level: 1, color: '#f0f0f0', borderColor: '#9CA3AF', textColor: '#333333' },
+  '2': { level: 2, color: '#00aaff', borderColor: '#0077b3', textColor: '#111827' },
+  '3': { level: 3, color: '#0041ff', borderColor: '#002db3', textColor: '#ffffff' },
+  '4': { level: 4, color: '#fae696', borderColor: '#d9c26a', textColor: '#333333' },
+  '5弱': { level: 5, color: '#ffe600', borderColor: '#ccb800', textColor: '#333333' },
+  '5強': { level: 6, color: '#ff9900', borderColor: '#cc7a00', textColor: '#111827' },
+  '6弱': { level: 7, color: '#ff2800', borderColor: '#cc2000', textColor: '#000000' },
+  '6強': { level: 8, color: '#a50021', borderColor: '#7a0018', textColor: '#ffffff' },
+  '7': { level: 9, color: '#b40068', borderColor: '#85004d', textColor: '#ffffff' },
 };
+
+/** globals.css との同期を検証するために公開する（本番コードからは使わない） */
+export const INTENSITY_PALETTE = intensityData;
 
 // 多言語ラベル
 const labels: Record<string, Record<string, string>> = {
@@ -106,14 +119,6 @@ export default function IntensityGauge({ intensity, language, showLabel = true, 
   // ゲージの幅（パーセント）
   const gaugeWidth = (data.level / 9) * 100;
 
-  // 危険度アイコン
-  const getDangerEmoji = (level: number) => {
-    if (level >= 7) return '🚨';
-    if (level >= 5) return '⚠️';
-    if (level >= 3) return '📢';
-    return '📊';
-  };
-
   return (
     <div className="space-y-2">
       {/* メイン表示 */}
@@ -138,10 +143,10 @@ export default function IntensityGauge({ intensity, language, showLabel = true, 
         {/* ゲージとラベル */}
         <div className="flex-1">
           {showLabel && (
-            <div className={`flex items-center gap-2 mb-1 ${s.text} font-medium`}>
-              <span>{getDangerEmoji(data.level)}</span>
-              <span>{label}</span>
-            </div>
+            /* 以前はここに震度に応じて 📊→📢→⚠️→🚨 と変わる絵文字を出していた。
+               段階の意味は数値・配色・ゲージで既に伝わっており、絵文字だけが
+               他のSVGアイコンと意匠が揃わず浮いていたので外した */
+            <div className={`mb-1 ${s.text} font-medium`}>{label}</div>
           )}
 
           {/* プログレスバー */}

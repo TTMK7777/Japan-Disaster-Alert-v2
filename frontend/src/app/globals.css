@@ -22,16 +22,23 @@ body {
   padding-right: env(safe-area-inset-right);
 }
 
-/* 震度別カラー */
-.intensity-1 { background-color: #f0f0f0; color: #333; }
-.intensity-2 { background-color: #00aaff; color: white; }
-.intensity-3 { background-color: #0041ff; color: white; }
-.intensity-4 { background-color: #fae696; color: #333; }
-.intensity-5-lower { background-color: #ffe600; color: #333; }
-.intensity-5-upper { background-color: #ff9900; color: white; }
-.intensity-6-lower { background-color: #ff2800; color: white; }
-.intensity-6-upper { background-color: #a50021; color: white; }
-.intensity-7 { background-color: #b40068; color: white; }
+/* 震度別カラー（気象庁の震度分布図と同じ色相。現地のテレビ・掲示と照合できることを優先）
+ *
+ * **文字色は背景ごとにコントラストを計算して決めている。** 以前は 2 / 5強 / 6弱 の3帯が
+ * 白文字で、それぞれ 2.56 / 2.14 / 3.78 と WCAG AA (4.5) を大きく下回っていた。
+ * 震度が上がるほど読めなくなるという、避難判断に直結する不具合だった。
+ * 背景色は公式のまま動かさず、文字色だけを濃色へ寄せて解消している。
+ * 6弱は gray-900 では 4.69 と余裕が無いため純黒（5.56）を使う。
+ */
+.intensity-1 { background-color: #f0f0f0; color: #333; }            /* 15.57 */
+.intensity-2 { background-color: #00aaff; color: #111827; }          /* 2.56 → 6.92 */
+.intensity-3 { background-color: #0041ff; color: white; }            /* 6.56 */
+.intensity-4 { background-color: #fae696; color: #333; }             /* 14.21 */
+.intensity-5-lower { background-color: #ffe600; color: #333; }       /* 14.00 */
+.intensity-5-upper { background-color: #ff9900; color: #111827; }    /* 2.14 → 8.29 */
+.intensity-6-lower { background-color: #ff2800; color: #000000; }    /* 3.78 → 5.56 */
+.intensity-6-upper { background-color: #a50021; color: white; }      /* 8.01 */
+.intensity-7 { background-color: #b40068; color: white; }            /* 6.69 */
 
 /* 警報レベル別カラー */
 .alert-advisory { background-color: #fbbf24; color: #333; }
@@ -171,12 +178,13 @@ body {
   --background-end-rgb: 17, 24, 39;
 }
 
-/* ダークモード: 震度別カラー */
-.dark .intensity-1 { background-color: #374151; color: #e5e7eb; }
-.dark .intensity-2 { background-color: #1e5f8a; color: white; }
-.dark .intensity-3 { background-color: #1a3a8f; color: white; }
-.dark .intensity-4 { background-color: #8a7a3a; color: white; }
-/* intensity-5 以上は既に暗い/濃い色のためダークモードでもそのまま使用 */
+/* ダークモード: 震度別カラー
+ *
+ * **上書きしない。** 以前は 1〜4 だけを暗く塗り替えていたが、そうすると
+ * 同じ震度4が明モードでは黄（#fae696）、暗モードでは茶（#8a7a3a）になり、
+ * 気象庁の震度分布図やテレビの色と照合できなくなる。
+ * 震度の配色は「情報」であって「装飾」ではないので、テーマで変えない。
+ * 5弱以上は元から上書きしていなかったため、上書きを外す方が一貫もする。 */
 
 /* ダークモード: 警報レベル別カラー */
 .dark .alert-advisory { background-color: #92400e; color: white; }
