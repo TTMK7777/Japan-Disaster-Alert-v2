@@ -183,9 +183,18 @@ export default function Home() {
     setLastUpdate(new Date(data.updated_at));
   }, []);
 
+  // SSE で届いた津波情報を保持して EmergencyAlert に渡す。
+  // 以前はここでコメントに「EmergencyAlert が個別にハンドリング」と書いてありながら、
+  // 実際には EmergencyAlert 側に受け口が無く、**全画面の緊急警報は一度も出なかった**。
+  const [tsunamis, setTsunamis] = useState<any[]>([]);
+  // SSE から一度でも津波イベントを受け取ったか。
+  // 受け取る前に空配列を渡すと「津波なし」と断定してしまい、
+  // EmergencyAlert 側の初回取得を打ち消す
+  const [tsunamiReceived, setTsunamiReceived] = useState(false);
+
   const handleTsunami = useCallback((data: { tsunamis: any[]; updated_at: string }) => {
-    // 津波データはWarningBannerやEmergencyAlertが個別にハンドリング
-    // ここでは最終更新時刻のみ更新
+    setTsunamis(data.tsunamis ?? []);
+    setTsunamiReceived(true);
     setLastUpdate(new Date(data.updated_at));
   }, []);
 
@@ -262,20 +271,33 @@ export default function Home() {
   return (
     <main id="main-content" className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* 緊急警報オーバーレイ */}
-      <EmergencyAlert language={language} />
+      {/* tsunamis を渡していない間（SSE 未受信）は undefined。
+          空配列を渡すと「津波なし」と断定して、EmergencyAlert 側の初回取得
+          （/api/v1/tsunami/active）を打ち消してしまう */}
+      <EmergencyAlert
+        language={language}
+        tsunamis={tsunamiReceived ? tsunamis : undefined}
+      />
 
-      {/* ヘッダー */}
-      <header className="bg-disaster-blue dark:bg-gray-800 text-white p-4 shadow-lg dark:shadow-gray-900/30 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <EarthquakeIcon size={32} />
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold">{t('title')}</h1>
-              <p className="text-xs md:text-sm opacity-80">{t('subtitle')}</p>
+      {/* ヘッダー + タブを一つの sticky 塊にする。
+          以前はヘッダー sticky top-0 / ナビ sticky top-[72px] と別々で、この 72px は
+          デスクトップのヘッダー高さの決め打ちだった。狭い画面ではヘッダーが 200px を超えて
+          折り返すため、スクロールするとナビがヘッダーの下に潜り込んで隠れていた。
+          入れ子の sticky にすれば高さを知る必要がない */}
+      <div className="sticky top-0 z-40 shadow-lg dark:shadow-gray-900/30">
+      <header className="bg-disaster-blue dark:bg-gray-800 text-white">
+        <div className="max-w-4xl mx-auto flex justify-between items-center gap-2 px-3 py-2 md:px-4 md:py-3">
+          {/* min-w-0 が無いと flex 子要素は縮まず、タイトルが折り返す代わりに
+              右側のコントロールを押し出して潰す（狭い画面で接続表示が縦1文字になっていた） */}
+          <div className="flex items-center gap-2 min-w-0">
+            <EarthquakeIcon size={28} />
+            <div className="min-w-0">
+              <h1 className="text-base md:text-2xl font-bold leading-tight truncate">{t('title')}</h1>
+              {/* サブタイトルは狭い画面では出さない。3行に折り返して面積だけ食っていた */}
+              <p className="hidden md:block text-sm opacity-80 truncate">{t('subtitle')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <ConnectionStatus mode={eventStream.mode} connected={eventStream.connected} language={language} />
+          <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
             <ThemeToggle
               theme={theme}
               onToggle={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')}
@@ -286,7 +308,7 @@ export default function Home() {
       </header>
 
       {/* タブナビゲーション（アイコン付き・アクセシビリティ強化） */}
-      <nav className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 sticky top-[72px] z-30 shadow-sm dark:shadow-gray-900/30" aria-label={language === 'ja' ? 'メインナビゲーション' : 'Main navigation'}>
+      <nav className="bg-white dark:bg-gray-800 border-b dark:border-gray-700" aria-label={language === 'ja' ? 'メインナビゲーション' : 'Main navigation'}>
         <div className="max-w-4xl mx-auto flex" role="tablist" aria-label={language === 'ja' ? '情報カテゴリ' : 'Information categories'}>
           {(['earthquake', 'warning', 'emergency', 'shelter'] as TabType[]).map((tab, index) => (
             <button
@@ -311,20 +333,16 @@ export default function Home() {
           ))}
         </div>
       </nav>
+      </div>
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto p-4">
-        {/* 最終更新時刻 */}
-        <div className="text-right text-sm text-gray-500 dark:text-gray-400 mb-4 flex items-center justify-end gap-2" suppressHydrationWarning>
-          <span
-            className={`inline-block w-2 h-2 rounded-full ${
-              eventStream.mode === 'sse' && eventStream.connected
-                ? 'bg-green-500 animate-pulse'
-                : eventStream.mode === 'polling'
-                  ? 'bg-yellow-500'
-                  : 'bg-red-500'
-            }`}
-          />
+        {/* 接続状態 + 最終更新時刻。
+            以前は同じ判定のドットがヘッダー（ConnectionStatus）とここの2箇所にあり、
+            画面に状態ランプが2つ並んでいた。ここ1箇所に統合している */}
+        <div className="text-sm text-gray-500 dark:text-gray-400 mb-4 flex items-center justify-end gap-2" suppressHydrationWarning>
+          <ConnectionStatus mode={eventStream.mode} connected={eventStream.connected} language={language} />
+          <span aria-hidden="true">·</span>
           <span suppressHydrationWarning>
             {t('lastUpdate')}: {mounted && lastUpdate ? lastUpdate.toLocaleTimeString(getLocale(language)) : '--:--:--'}
           </span>
