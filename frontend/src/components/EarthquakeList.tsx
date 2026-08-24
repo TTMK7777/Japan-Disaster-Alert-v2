@@ -4,6 +4,8 @@ import { memo } from 'react';
 import type { Earthquake } from '@/types/earthquake';
 import { getTranslation } from '@/i18n/translations';
 import IntensityGauge from './IntensityGauge';
+import IntensityImpact from './IntensityImpact';
+import { formatMagnitude, formatDepth } from '@/lib/earthquakeFormat';
 
 // page.tsx の ApiError と互換の型
 interface ApiError {
@@ -61,14 +63,15 @@ interface EarthquakeItemProps {
 const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }: EarthquakeItemProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow dark:shadow-gray-900/30 overflow-hidden">
-      {/* ヘッダー（震度表示） */}
-      <div className={`${getIntensityClass(eq.max_intensity)} px-4 py-2 flex justify-between items-center`}>
-        <span className="font-bold text-lg">
-          {getTranslation(language, 'earthquake.intensity')} {eq.max_intensity}
-        </span>
-        <span className="text-sm opacity-80">
-          M{eq.magnitude}
-        </span>
+      {/* 見出しは「どこで・いつ」。震度は帯の色で伝え、数値と意味は本文の
+          IntensityGauge が一度だけ出す。
+          以前はここが「震度 4 …… M6」で、すぐ下のゲージが「震度4」、
+          下の一覧が「規模 M6」だったため、日本語では震度もマグニチュードも
+          1枚のカードに2回ずつ出ていた（英語は "Intensity 4" と "Strong" で
+          重複しないので、言語によって崩れる=構造側の問題として直している） */}
+      <div className={`${getIntensityClass(eq.max_intensity)} px-4 py-2.5 flex justify-between items-baseline gap-3`}>
+        <h3 className="font-bold text-lg min-w-0 break-words">{getDisplayLocation(eq)}</h3>
+        <span className="text-sm opacity-80 shrink-0 tabular-nums">{eq.time}</span>
       </div>
 
       {/* 詳細情報 */}
@@ -79,21 +82,21 @@ const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }
           <IntensityGauge intensity={eq.max_intensity} language={language} size="sm" />
         </div>
 
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-lg dark:text-gray-100">{getDisplayLocation(eq)}</h3>
-          <span className="text-sm text-gray-500 dark:text-gray-400">{eq.time}</span>
-        </div>
-
         <p className="text-gray-600 dark:text-gray-300 text-sm mb-3">{getDisplayMessage(eq)}</p>
 
-        <div className="grid grid-cols-3 gap-2 text-sm">
+        {/* 「で、何が起きるのか」。震度・マグニチュードは起きたことの記述でしかなく、
+            利用者が本当に知りたいのは電車が動くか・ガスが止まるかという方。
+            震度4未満と震度不明では何も描画しない */}
+        <IntensityImpact intensity={eq.max_intensity} language={language} />
+
+        <div className="grid grid-cols-3 gap-2 text-sm mt-3">
           <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
             <div className="text-gray-500 dark:text-gray-400">{getTranslation(language, 'earthquake.depth')}</div>
-            <div className="font-medium dark:text-gray-100">{eq.depth}km</div>
+            <div className="font-medium dark:text-gray-100">{formatDepth(eq.depth)}</div>
           </div>
           <div className="bg-gray-50 dark:bg-gray-700 rounded p-2">
             <div className="text-gray-500 dark:text-gray-400">{getTranslation(language, 'earthquake.mag')}</div>
-            <div className="font-medium dark:text-gray-100">M{eq.magnitude}</div>
+            <div className="font-medium dark:text-gray-100">{formatMagnitude(eq.magnitude)}</div>
           </div>
           <div className={`rounded p-2 ${hasTsunamiRisk(eq) ? 'bg-red-50 dark:bg-red-900/30' : 'bg-green-50 dark:bg-green-900/30'}`}>
             <div className="text-gray-500 dark:text-gray-400">{getTranslation(language, 'earthquake.tsunami')}</div>

@@ -42,7 +42,9 @@ export default function ConnectionStatus({ mode, connected, language }: Connecti
         className={`inline-block w-2 h-2 rounded-full ${dotColor} ${shouldPulse ? 'animate-pulse' : ''}`}
         aria-hidden="true"
       />
-      <span className="text-xs text-white/80">{label}</span>
+      {/* 色は親から継承する。以前は text-white/80 固定で、青ヘッダー以外の場所に
+          置くと白背景に白文字になって消えていた */}
+      <span className="text-xs">{label}</span>
     </div>
   );
 }

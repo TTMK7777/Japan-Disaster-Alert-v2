@@ -4,18 +4,29 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+# **先頭にスラッシュを付けてリポジトリルートに固定する。**
+# 付けないと「あらゆる階層の同名ディレクトリ」にマッチする。
+# 実際 `lib/` が `frontend/src/lib/`（フロントエンドのソース）を巻き込み、
+# 新規モジュールが git add で無言のうちに除外されていた。
+# `git add` は ignore されたパスを黙って落とすので、
+# コミットしたつもりで中身が入っていない状態が成立する。
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+# backend 側の Python 成果物
+backend/build/
+backend/dist/
+backend/lib/
+backend/*.egg-info/
 *.egg-info/
 .installed.cfg
 *.egg

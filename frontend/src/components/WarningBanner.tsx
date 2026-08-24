@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { getTranslation, getLocale } from '@/i18n/translations';
+import { formatRelativeTime } from '@/lib/relativeTime';
 
 interface Warning {
   id: string;
@@ -13,6 +14,8 @@ interface Warning {
   description_translated?: string;
   area: string;
   issued_at: string;
+  /** 継続中の警報か。継続中は issued_at が最終更新時刻であって発表時刻ではない */
+  is_continuing?: boolean;
   severity: string;
 }
 
@@ -83,6 +86,8 @@ const WARNING_KEYS = {
   error: 'warning.error',
   retry: 'common.retry',
   issuedAt: 'warning.issuedAt',
+  // 継続中の警報向け。中央の翻訳表に16言語で既にあるものを流用する
+  lastUpdate: 'lastUpdate',
   specialWarning: 'warning.specialWarning',
   warning: 'warning.severityWarning',
   advisory: 'warning.advisory',
@@ -277,7 +282,9 @@ export default function WarningBanner({
         language={language}
       />
       <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{t('title')} - {prefectureName}</h3>
-      {warnings.map((warning, index) => (
+      {warnings.map((warning, index) => {
+        const relativeIssuedAt = formatRelativeTime(warning.issued_at, getLocale(language));
+        return (
         <div
           key={`${warning.id}-${index}`}
           className={`p-4 rounded-lg border-2 ${getSeverityStyles(warning.severity)}`}
@@ -307,15 +314,23 @@ export default function WarningBanner({
                   <p key={i}>{line}</p>
                 ))}
               </div>
-              <p className="mt-2 text-xs opacity-75">
-                📍 {warning.area} | {t('issuedAt')}: {new Date(warning.issued_at).toLocaleString(
-                  getLocale(language)
-                )}
+              {/* 継続中の警報は「発表時刻」ではなく「最終更新」を出す。
+                  気象庁は変化がない限り reportDatetime を更新しないため、
+                  3か月前の日時を「発表時刻」として見せると、たった今出た警報に見える。
+                  併せて経過時間を添える（Intl.RelativeTimeFormat が言語別に処理するので
+                  16言語ぶんの文言を用意しなくてよい）。
+                  透明度は 75% → 90% に上げている。従来は 2.75:1 でコントラストが
+                  WCAG AA に届いていなかった */}
+              <p className="mt-2 text-xs opacity-90">
+                {warning.area} | {warning.is_continuing ? t('lastUpdate') : t('issuedAt')}:{' '}
+                {new Date(warning.issued_at).toLocaleString(getLocale(language))}
+                {relativeIssuedAt && <span className="ml-1">({relativeIssuedAt})</span>}
               </p>
             </div>
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

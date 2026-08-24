@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { API_BASE_URL } from '@/config/api';
 import { ShelterIcon, LocationIcon } from './icons/DisasterIcons';
 
 interface Shelter {
@@ -18,12 +19,25 @@ interface Shelter {
   capacity?: number;
   type: ShelterType[];
   facilities: ShelterFacility[];
-  status: 'open' | 'closed' | 'full' | 'unknown';
+  // status（開設中/満員/閉鎖）は **国土地理院の配布データに存在しない**。
+  // 以前はサンプル側で 'open' / 'full' を固定値で持たせており、
+  // アプリが知りようのないことを断言していた。項目ごと持たない
   phone?: string;
 }
 
 type ShelterType = 'earthquake' | 'tsunami' | 'flood' | 'landslide' | 'fire' | 'general';
 type ShelterFacility = 'barrier_free' | 'pet_friendly' | 'medical' | 'parking' | 'toilet' | 'wifi';
+
+/** バックエンド /api/v1/shelters が返す1件分。画面側の Shelter とは項目名が異なる */
+interface ApiShelter {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  distance?: number;
+  types?: string[];
+}
 
 interface ShelterMapProps {
   language: string;
@@ -39,16 +53,86 @@ const shelterTypeColors: Record<ShelterType, string> = {
   general: '#16A34A',
 };
 
-// ステータス色
-const statusColors = {
-  open: '#22C55E',
-  closed: '#6B7280',
-  full: '#F59E0B',
-  unknown: '#9CA3AF',
-};
+// 開設状況の色は廃止。配布データに開設状況が無く、固定値で塗ると嘘になる
 
 // 多言語テキスト
 const translations: Record<string, Record<string, string>> = {
+  // 配布元（国土地理院）の「ご利用上の注意」第4項は、本データを用いた情報を
+  // 第三者へ提供する場合に、この注意が正確に伝わるよう留意することを求めている。
+  // **この表示を外すとライセンス上の義務を満たさなくなる。**
+  dataNotice: {
+    ja: 'データは最新でない場合や、未掲載の施設がある場合があります。最新の状況は各市町村にご確認ください。',
+    en: 'This data may not be current and some facilities may be missing. Confirm the latest status with the local municipality.',
+    zh: '数据可能非最新，也可能有未收录的设施。最新情况请向当地市町村确认。',
+    'zh-TW': '資料可能非最新，也可能有未收錄的設施。最新狀況請向當地市町村確認。',
+    ko: '데이터가 최신이 아니거나 미등록 시설이 있을 수 있습니다. 최신 상황은 해당 지자체에 확인하세요.',
+    vi: 'Dữ liệu có thể chưa cập nhật hoặc thiếu một số cơ sở. Hãy xác nhận tình trạng mới nhất với chính quyền địa phương.',
+    th: 'ข้อมูลอาจไม่เป็นปัจจุบันหรือมีสถานที่ที่ยังไม่ได้บันทึก โปรดตรวจสอบสถานะล่าสุดกับเทศบาลท้องถิ่น',
+    id: 'Data mungkin tidak terkini dan beberapa fasilitas mungkin belum tercantum. Konfirmasi status terbaru ke pemerintah kota setempat.',
+    ms: 'Data mungkin tidak terkini dan sesetengah kemudahan mungkin tiada. Sahkan status terkini dengan pihak perbandaran tempatan.',
+    tl: 'Maaaring hindi napapanahon ang datos at may mga pasilidad na wala rito. Kumpirmahin ang pinakabagong katayuan sa lokal na munisipyo.',
+    ne: 'डेटा नवीनतम नहुन सक्छ र केही सुविधाहरू छुट्न सक्छन्। पछिल्लो अवस्था स्थानीय नगरपालिकासँग पुष्टि गर्नुहोस्।',
+    fr: 'Ces données peuvent ne pas être à jour et certains sites peuvent manquer. Vérifiez la situation actuelle auprès de la municipalité.',
+    de: 'Diese Daten sind möglicherweise nicht aktuell und einige Einrichtungen können fehlen. Bestätigen Sie den aktuellen Stand bei der Gemeinde.',
+    it: 'I dati potrebbero non essere aggiornati e alcune strutture potrebbero mancare. Verifica la situazione attuale con il comune.',
+    es: 'Estos datos pueden no estar actualizados y pueden faltar algunas instalaciones. Confirme la situación actual con el municipio.',
+    easy_ja: 'この じょうほうは ふるい ことが あります。のっていない ばしょも あります。くわしくは やくしょに きいて ください。',
+  },
+  // 現在地が取れるまでは避難所を出さない。「あなたの近くの避難所」と言えないため
+  needLocation: {
+    ja: '現在地を取得すると、近くの避難所を表示します',
+    en: 'Share your location to see nearby evacuation sites',
+    zh: '获取当前位置后显示附近的避难场所',
+    'zh-TW': '取得目前位置後顯示附近的避難場所',
+    ko: '현재 위치를 가져오면 근처 대피 장소를 표시합니다',
+    vi: 'Chia sẻ vị trí của bạn để xem các điểm sơ tán gần đây',
+    th: 'แชร์ตำแหน่งของคุณเพื่อดูจุดอพยพใกล้เคียง',
+    id: 'Bagikan lokasi Anda untuk melihat lokasi evakuasi terdekat',
+    ms: 'Kongsi lokasi anda untuk melihat lokasi pemindahan berdekatan',
+    tl: 'Ibahagi ang iyong lokasyon upang makita ang malapit na evacuation site',
+    ne: 'नजिकैका आश्रयस्थल हेर्न आफ्नो स्थान साझा गर्नुहोस्',
+    fr: 'Partagez votre position pour voir les sites d’évacuation à proximité',
+    de: 'Teilen Sie Ihren Standort, um Notunterkünfte in der Nähe zu sehen',
+    it: 'Condividi la tua posizione per vedere i punti di evacuazione vicini',
+    es: 'Comparte tu ubicación para ver los puntos de evacuación cercanos',
+    easy_ja: 'いまの ばしょが わかると、ちかくの ひなんばしょを みせます',
+  },
+  noNearby: {
+    ja: 'この範囲に避難所が見つかりませんでした',
+    en: 'No evacuation sites found in this area',
+    zh: '此范围内未找到避难场所',
+    'zh-TW': '此範圍內未找到避難場所',
+    ko: '이 범위에서 대피 장소를 찾지 못했습니다',
+    vi: 'Không tìm thấy điểm sơ tán trong khu vực này',
+    th: 'ไม่พบจุดอพยพในพื้นที่นี้',
+    id: 'Tidak ditemukan lokasi evakuasi di area ini',
+    ms: 'Tiada lokasi pemindahan ditemui di kawasan ini',
+    tl: 'Walang nakitang evacuation site sa lugar na ito',
+    ne: 'यस क्षेत्रमा कुनै आश्रयस्थल भेटिएन',
+    fr: 'Aucun site d’évacuation trouvé dans cette zone',
+    de: 'Keine Notunterkünfte in diesem Bereich gefunden',
+    it: 'Nessun punto di evacuazione trovato in questa zona',
+    es: 'No se encontraron puntos de evacuación en esta zona',
+    easy_ja: 'この ちかくに ひなんばしょは みつかりませんでした',
+  },
+  sampleWarning: {
+    ja: '⚠ これはサンプルデータです。実際の避難所ではありません',
+    en: '⚠ This is sample data, not real evacuation sites',
+    zh: '⚠ 这是示例数据，并非实际避难场所',
+    'zh-TW': '⚠ 這是範例資料，並非實際避難場所',
+    ko: '⚠ 이것은 샘플 데이터이며 실제 대피 장소가 아닙니다',
+    vi: '⚠ Đây là dữ liệu mẫu, không phải điểm sơ tán thật',
+    th: '⚠ นี่คือข้อมูลตัวอย่าง ไม่ใช่จุดอพยพจริง',
+    id: '⚠ Ini adalah data contoh, bukan lokasi evakuasi sebenarnya',
+    ms: '⚠ Ini adalah data contoh, bukan lokasi pemindahan sebenar',
+    tl: '⚠ Sample data ito, hindi tunay na evacuation site',
+    ne: '⚠ यो नमुना डेटा हो, वास्तविक आश्रयस्थल होइन',
+    fr: '⚠ Données d’exemple, pas de vrais sites d’évacuation',
+    de: '⚠ Dies sind Beispieldaten, keine echten Notunterkünfte',
+    it: '⚠ Questi sono dati di esempio, non veri punti di evacuazione',
+    es: '⚠ Estos son datos de ejemplo, no puntos de evacuación reales',
+    easy_ja: '⚠ これは れんしゅうよう の データです。ほんとうの ひなんばしょでは ありません',
+  },
   findLocation: {
     ja: '現在地を取得',
     en: 'Get my location',
@@ -255,7 +339,6 @@ const sampleShelters: Shelter[] = [
     capacity: 500,
     type: ['earthquake', 'fire'],
     facilities: ['barrier_free', 'toilet', 'wifi'],
-    status: 'open',
   },
   {
     id: '2',
@@ -268,7 +351,6 @@ const sampleShelters: Shelter[] = [
     capacity: 300,
     type: ['earthquake', 'tsunami', 'flood'],
     facilities: ['barrier_free', 'pet_friendly', 'parking'],
-    status: 'open',
   },
   {
     id: '3',
@@ -281,15 +363,16 @@ const sampleShelters: Shelter[] = [
     capacity: 400,
     type: ['earthquake', 'fire'],
     facilities: ['toilet', 'wifi'],
-    status: 'full',
   },
 ];
 
 // カスタムマーカー作成
 function createShelterMarker(shelter: Shelter): L.DivIcon {
   const primaryType = shelter.type[0] || 'general';
-  const color = statusColors[shelter.status];
+  // 以前は外周の色に開設状況（固定値の 'open'）を使っていた。
+  // 実データに開設状況は無いので、外周・内側とも災害種別の色で統一する
   const typeColor = shelterTypeColors[primaryType];
+  const color = typeColor;
 
   return L.divIcon({
     className: 'shelter-marker',
@@ -382,9 +465,58 @@ export default function ShelterMap({ language }: ShelterMapProps) {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
-  const [shelters, setShelters] = useState<Shelter[]>(sampleShelters);
+  const [shelters, setShelters] = useState<Shelter[]>([]);
+  const [sheltersLoading, setSheltersLoading] = useState(false);
+  const [isSampleData, setIsSampleData] = useState(false);
+  const [attribution, setAttribution] = useState<string | null>(null);
+  // 現在地を取れるまで避難所は出さない。
+  // 以前は東京の固定サンプルを初期値に置いていたため、那覇にいても札幌にいても
+  // 「渋谷区立神宮前小学校」が最寄りの避難所として表示されていた
+  const [hasSearched, setHasSearched] = useState(false);
   const [selectedShelter, setSelectedShelter] = useState<Shelter | null>(null);
   const [filterType, setFilterType] = useState<ShelterType | 'all'>('all');
+
+  // 実データの取得。以前このコンポーネントは API を一度も呼ばず、
+  // ファイル内にハードコードした3件を全利用者に見せていた
+  const fetchShelters = useCallback(async (lat: number, lon: number) => {
+    setSheltersLoading(true);
+    setHasSearched(true);
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const res = await fetch(
+        `${API_BASE_URL}/api/v1/shelters?lat=${lat}&lon=${lon}&radius=5&limit=50`,
+        { signal: controller.signal }
+      );
+      clearTimeout(timeoutId);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.json();
+      setIsSampleData(Boolean(body?.meta?.is_sample_data));
+      setAttribution(body?.meta?.attribution ?? null);
+      setShelters(
+        (body?.shelters ?? []).map((raw: ApiShelter): Shelter => ({
+          id: raw.id,
+          name: raw.name,
+          address: raw.address,
+          latitude: raw.latitude,
+          longitude: raw.longitude,
+          distance: raw.distance,
+          // API は types（複数形）、画面側は type。ここで合わせる。
+          // 型が食い違ったまま放置されていたのは、そもそも繋がっていなかったため
+          type: (raw.types ?? []) as ShelterType[],
+          // 収容人数・設備・電話番号は配布データに無い。空で埋め、UI 側も出さない
+          facilities: [],
+        }))
+      );
+    } catch (err) {
+      console.error('Failed to fetch shelters:', err);
+      // 取れなかったときに古い結果や見本を残さない。
+      // 「取得できなかった」ことが分かる方が、誤った避難先を出すより安全
+      setShelters([]);
+    } finally {
+      setSheltersLoading(false);
+    }
+  }, []);
 
   const t = useCallback(
     (key: keyof typeof translations) =>
@@ -408,15 +540,8 @@ export default function ShelterMap({ language }: ShelterMapProps) {
         setCurrentLocation([latitude, longitude]);
         setIsLocating(false);
 
-        // 避難所に距離を追加
-        setShelters((prev) =>
-          prev
-            .map((s) => ({
-              ...s,
-              distance: calculateDistance(latitude, longitude, s.latitude, s.longitude),
-            }))
-            .sort((a, b) => (a.distance || 0) - (b.distance || 0))
-        );
+        // 実データを取りに行く。距離・並び順はサーバ側が計算して返す
+        void fetchShelters(latitude, longitude);
       },
       (error) => {
         setLocationError(error.message);
@@ -483,18 +608,43 @@ export default function ShelterMap({ language }: ShelterMapProps) {
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
               }`}
             >
-              {type === 'all' ? `🏠 ${t('all')}` : type === 'earthquake' ? `🌋 ${t('earthquakeFilter')}` : type === 'tsunami' ? `🌊 ${t('tsunamiFilter')}` : type === 'flood' ? `💧 ${t('floodFilter')}` : `🔥 ${t('fireFilter')}`}
+              {t(type === 'all' ? 'all' : type === 'earthquake' ? 'earthquakeFilter' : type === 'tsunami' ? 'tsunamiFilter' : type === 'flood' ? 'floodFilter' : 'fireFilter')}
             </button>
           ))}
         </div>
       </div>
 
+      {/* データの状態。**取得前に避難所を出さない。**
+          以前は東京のサンプル3件が初期表示されており、どこにいても
+          「渋谷区立神宮前小学校」が最寄りの避難所として出ていた */}
+      {isSampleData && (
+        <div className="bg-amber-50 border-2 border-amber-400 rounded-lg p-3 text-amber-900 font-medium text-sm" role="alert">
+          {t('sampleWarning')}
+        </div>
+      )}
+
+      {!hasSearched && !sheltersLoading && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center text-blue-900 text-sm">
+          {t('needLocation')}
+        </div>
+      )}
+
+      {hasSearched && !sheltersLoading && filteredShelters.length === 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-gray-600 text-sm">
+          {t('noNearby')}
+        </div>
+      )}
+
       {/* 地図 */}
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <MapContainer center={defaultCenter} zoom={13} className="leaflet-container" scrollWheelZoom={true}>
+          {/* crossOrigin: CORS で取得する。既定（crossorigin 無し）だと Service Worker が
+              受け取るのは status 0 の opaque レスポンスで response.ok が常に false になり、
+              タイルが一枚もキャッシュされずオフラインで地図が出ない（実測で確認済み） */}
           <TileLayer
             attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
             url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
+            crossOrigin="anonymous"
           />
 
           <MapPanner position={currentLocation} />
@@ -536,13 +686,8 @@ export default function ShelterMap({ language }: ShelterMapProps) {
                     {shelter.address_translated?.[language] || shelter.address}
                   </p>
 
-                  {/* ステータスバッジ */}
-                  <span
-                    className="inline-block px-2 py-0.5 rounded-full text-xs font-medium text-white mb-2"
-                    style={{ backgroundColor: statusColors[shelter.status] }}
-                  >
-                    {t(shelter.status as keyof typeof translations)}
-                  </span>
+                  {/* 開設状況のバッジは置かない。配布データに無い情報なので、
+                      「開設中」と表示すれば根拠のない断言になる */}
 
                   {/* 距離 */}
                   {shelter.distance !== undefined && (
@@ -600,7 +745,7 @@ export default function ShelterMap({ language }: ShelterMapProps) {
                   <div className="flex items-center gap-2">
                     <span
                       className="w-3 h-3 rounded-full"
-                      style={{ backgroundColor: statusColors[shelter.status] }}
+                      style={{ backgroundColor: shelterTypeColors[shelter.type[0] || 'general'] }}
                     />
                     <h4 className="font-medium">
                       {shelter.name_translated?.[language] || shelter.name}
@@ -637,6 +782,14 @@ export default function ShelterMap({ language }: ShelterMapProps) {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* 出典表示は配布データ（PDL1.0）のライセンス上の義務。
+          「最新でない場合がある」旨の注意は配布元の利用上の注意 第4項による。
+          **どちらも表示を外さないこと。** 詳細は backend/data/shelters/LICENSE */}
+      <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1 px-1">
+        <p>{t('dataNotice')}</p>
+        {attribution && <p>{attribution}</p>}
       </div>
     </div>
   );

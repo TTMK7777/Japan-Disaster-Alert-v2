@@ -80,12 +80,63 @@ def test_load_shelters_from_csv(tmp_path):
 
 
 def test_load_shelters_from_csv_missing_file(tmp_path):
-    """CSVファイルが存在しない場合にサンプルデータへフォールバック"""
-    service = _make_service(tmp_path, csv_path="/nonexistent/path.csv")
+    """CSVパスを指定したのに読めなければ**起動を失敗させる**。
+
+    以前はここでサンプルデータへフォールバックしていたが、それは
+    「運用者が実データを設定したつもりなのに、利用者には東京の5件が
+    『あなたの近くの避難所』として出続ける」という状態を許す挙動だった。
+    しかも残るログは警告1行だけで、画面からは見分けがつかない。
+
+    避難所の誤案内は取り返しがつかないため、**サンプルで動き続けるより
+    起動しない方が安全**という判断に変えている。
+    （パスを設定していない場合のサンプル動作は下のテストで担保する）
+    """
+    with pytest.raises(RuntimeError, match="1件も読めませんでした"):
+        _make_service(tmp_path, csv_path="/nonexistent/path.csv")
+
+
+def test_サンプル利用時はフラグで判別できる(tmp_path):
+    """CSVパス未設定ならサンプルで動く（開発用）。ただし旗を立てる。
+
+    API 側がこの旗を見て「これはサンプルです」と利用者に伝えられなければ、
+    サンプルが実データのふりをして表示される。
+    """
+    service = _make_service(tmp_path, csv_path="")
+    assert service.is_sample_data is True
+    assert len(service.get_all_shelters()) > 0
+
+
+def test_実データ読み込み時はサンプル旗が下りる(tmp_path):
+    service = _make_service(tmp_path, csv_rows=[
+        {"施設・場所名": "実データ避難所", "住所": "東京都新宿区", "緯度": "35.6812",
+         "経度": "139.7671", "地震": "1"},
+    ])
+    assert service.is_sample_data is False
+
+
+def test_配布元の列名で読める(tmp_path):
+    """**実データの列は「施設・場所名」**。「施設名」だけを見ていたため
+    全行スキップで0件になり、無言でサンプルへ落ちていた事象の回帰テスト。"""
+    service = _make_service(tmp_path, csv_rows=[
+        {"共通ID": "13113-0001", "施設・場所名": "渋谷区立神宮前小学校",
+         "住所": "東京都渋谷区神宮前4-20-1", "緯度": "35.6687", "経度": "139.7052",
+         "地震": "1", "大規模な火事": "1"},
+    ])
     shelters = service.get_all_shelters()
-    # サンプルデータ（ハードコード）にフォールバック
-    assert len(shelters) > 0
-    assert shelters[0].name == "東京都庁"
+    assert len(shelters) == 1
+    assert shelters[0].name == "渋谷区立神宮前小学校"
+    assert set(shelters[0].types) == {"earthquake", "fire"}
+    # 共通IDがあればハッシュではなくそれを使う（更新をまたいでIDが安定する）
+    assert shelters[0].id == "13113-0001"
+
+
+def test_開設状況を捏造しない(tmp_path):
+    """配布データに開設状況は無い。既定値 True で「開設中」と断言してはいけない。"""
+    service = _make_service(tmp_path, csv_rows=[
+        {"施設・場所名": "テスト避難所", "住所": "東京都", "緯度": "35.6", "経度": "139.7",
+         "地震": "1"},
+    ])
+    assert service.get_all_shelters()[0].is_open is None
 
 
 def test_load_shelters_from_csv_invalid_row(tmp_path):

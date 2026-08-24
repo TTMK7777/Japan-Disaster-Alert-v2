@@ -21,6 +21,7 @@ from .area_display import (
 from .warning_guidance import resolve_guidance
 from .warning_names import (
     DESCRIPTION_TEMPLATES as WARNING_DESCRIPTION_TEMPLATES,
+    CONTINUING_DESCRIPTION_TEMPLATES as WARNING_CONTINUING_TEMPLATES,
     WARNING_NAMES,
 )
 
@@ -89,6 +90,7 @@ class WarningService:
 
     # 説明文テンプレート（16言語）— 実体は warning_names.py
     DESCRIPTION_TEMPLATES = WARNING_DESCRIPTION_TEMPLATES
+    CONTINUING_DESCRIPTION_TEMPLATES = WARNING_CONTINUING_TEMPLATES
 
 
     # 気象庁定義に基づく注意事項（警報コード別）
@@ -202,9 +204,14 @@ class WarningService:
         """地域コードを指定言語の地名にする（実体は `area_display`）"""
         return resolve_area_name(area_code, lang, fallback)
 
-    def _get_description(self, area_name: str, warning_name: str, lang: str) -> str:
+    def _get_description(self, area_name: str, warning_name: str, lang: str,
+                         is_continuing: bool = False) -> str:
         """説明文を指定言語で生成"""
-        template = self.DESCRIPTION_TEMPLATES.get(lang, self.DESCRIPTION_TEMPLATES["en"])
+        templates = (
+            self.CONTINUING_DESCRIPTION_TEMPLATES if is_continuing
+            else self.DESCRIPTION_TEMPLATES
+        )
+        template = templates.get(lang, templates["en"])
         return template.format(area=area_name, warning=warning_name)
 
     def _parse_warnings(self, data: dict, area_code: str, lang: str = "ja") -> list[DisasterAlert]:
@@ -230,6 +237,8 @@ class WarningService:
         # 30件を読点で連ねても読めないため収録しておらず、`is_known_area` が False に
         # なって自然に除外される。実データで両階層の警報コードが一致することは確認済み。
         grouped: dict[str, list[str]] = {}  # 警報コード -> [地域コード, ...]
+        # 警報コード -> その警報が出ている地域の status 集合（"発表" / "継続"）
+        code_statuses: dict[str, set[str]] = {}
         announced: set[str] = set()  # 発表されている警報コード（地域が引けたかは問わない）
         for area_type in area_types:
             areas = area_type.get("areas", [])
@@ -241,6 +250,10 @@ class WarningService:
                     status = warning.get("status", "")
                     if status in ACTIVE_WARNING_STATUSES and code in self.WARNING_CODES:
                         announced.add(code)
+                        # 同じ警報コードでも地域ごとに status が異なりうる。
+                        # **1地域でも「発表」なら発表として扱う**（新規発表を
+                        # 「継続中」に格下げして、緊急度を弱く見せないため）
+                        code_statuses.setdefault(code, set()).add(status)
                         if not is_known_area(area_id):
                             continue
                         if code not in grouped:
@@ -270,8 +283,16 @@ class WarningService:
                 self._get_area_name(a, lang, prefecture_name) for a in display_ids
             )
 
-            description_ja = self._get_description(combined_area_ja, title_ja, "ja")
-            description_translated = self._get_description(combined_area, warning_name, lang) if lang != "ja" else None
+            # **全地域が「継続」のときだけ継続扱い。** 1地域でも「発表」があれば
+            # 発表として出す（新規発表を「継続中」に見せて緊急度を下げない）
+            statuses = code_statuses.get(code, set())
+            is_continuing = bool(statuses) and statuses == {"継続"}
+
+            description_ja = self._get_description(combined_area_ja, title_ja, "ja", is_continuing)
+            description_translated = (
+                self._get_description(combined_area, warning_name, lang, is_continuing)
+                if lang != "ja" else None
+            )
 
             # 気象庁定義に基づく注意事項を付加
             # ja/en はコード別文面、他の14言語は災害グループ別の文面（warning_guidance 参照）
@@ -294,7 +315,10 @@ class WarningService:
                 area=combined_area,
                 issued_at=report_datetime,
                 expires_at=None,
-                severity=warning_info["severity"]
+                severity=warning_info["severity"],
+                # 画面側が「発表時刻」と「最終更新時刻」を言い分けるために要る。
+                # 継続中の警報の issued_at は最初の発表時刻ではなく最終更新時刻
+                is_continuing=is_continuing,
             ))
 
         # 重要度順にソート (extreme > high > medium > low)

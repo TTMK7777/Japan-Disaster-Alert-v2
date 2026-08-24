@@ -258,6 +258,34 @@ DESCRIPTION_TEMPLATES: dict[str, str] = {
 }
 
 
+# 「継続」中の警報の説明文。
+#
+# 気象庁は最初の発表を status="発表"、以降の定時更新を status="継続" として返す。
+# **変化がない限り reportDatetime を更新しない**ため、3か月前に出た注意報が
+# 継続したままだと「2026/5/28」という日付を持ったまま届く。
+# これを DESCRIPTION_TEMPLATES（「〜が発表されています」）で出すと、
+# **3か月前の注意報が「たった今発表された」ように見える**。
+# データ自体は正しいので、誤解を生んでいるのは文言の側。
+CONTINUING_DESCRIPTION_TEMPLATES: dict[str, str] = {
+    "ja": "{area}に{warning}が継続しています。",
+    "en": "{warning} remains in effect for {area}.",
+    "zh": "{area}的{warning}仍在持续。",
+    "zh-TW": "{area}的{warning}仍在持續。",
+    "ko": "{area}에 {warning}이(가) 계속되고 있습니다.",
+    "vi": "{warning} vẫn đang có hiệu lực cho {area}.",
+    "th": "{warning}สำหรับ{area}ยังคงมีผลอยู่",
+    "id": "{warning} masih berlaku untuk {area}.",
+    "ms": "{warning} masih berkuat kuasa untuk {area}.",
+    "tl": "Nananatiling may bisa ang {warning} para sa {area}.",
+    "ne": "{area} मा {warning} जारी रहेको छ।",
+    "fr": "{warning} toujours en vigueur pour {area}.",
+    "de": "{warning} gilt weiterhin für {area}.",
+    "it": "{warning} ancora in vigore per {area}.",
+    "es": "{warning} sigue en vigor para {area}.",
+    "easy_ja": "{area}の {warning}は まだ つづいています。",
+}
+
+
 def build_warning_names() -> dict[str, dict[str, str]]:
     """
     コード別・言語別の警報名を組み立てる。

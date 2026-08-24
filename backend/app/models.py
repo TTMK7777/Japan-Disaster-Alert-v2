@@ -105,6 +105,10 @@ class DisasterAlert(BaseModel):
     expires_at: Optional[str] = None
     severity: str  # low, medium, high, extreme
     action: Optional[str] = None  # 推奨行動（AI生成）
+    # 気象庁は最初の発表を status="発表"、以降の定時更新を "継続" で返す。
+    # 継続中は変化がない限り reportDatetime が更新されないため、
+    # issued_at が数か月前のままになることがある。画面側でその区別が要る
+    is_continuing: bool = False
 
 
 class TranslatedMessage(BaseModel):
@@ -137,7 +141,10 @@ class ShelterInfo(BaseModel):
     capacity: Optional[int] = None
     current_occupancy: Optional[int] = None
     facilities: list[str] = []  # バリアフリー、ペット可、等
-    is_open: bool = True
+    # **既定を True にしない。** 国土地理院の配布データに開設状況は含まれないため、
+    # 既定値で埋めると「この避難所は開設中です」と根拠なく断言することになる。
+    # 分からないことは None のままにし、UI 側も分からない場合は表示しない
+    is_open: Optional[bool] = None
     phone: Optional[str] = None
     types: list[str] = []  # 地震、津波、洪水、等
 

@@ -82,10 +82,60 @@ class P2PQuakeService:
                 if eq:
                     earthquakes.append(eq)
 
-            return earthquakes
+            return self._deduplicate(earthquakes)
         except httpx.HTTPError as e:
             logger.error(f"P2P地震情報取得エラー: {e}", exc_info=True)
             return []
+
+    # 気象庁・P2P が「未確定」を表すために数値欄へ入れてくる番兵値。
+    # 欠損（キーが無い）ではなく **値として -1 が入る** ので、
+    # dict.get(key, 既定値) では拾えない。
+    UNDETERMINED = -1
+
+    def _completeness(self, eq: EarthquakeInfo) -> int:
+        """利用者から見て情報がどれだけ揃っているかの点数。
+
+        P2P は1つの地震について段階的に複数のレポートを配信する
+        （震度速報 → 震源速報 → 詳細）。どれを残すかを決めるのに
+        `issue.type` の語彙（ScalePrompt / Destination / DetailScale）へ
+        直接依存すると、P2P 側が語彙を変えたときに**エラーも出さずに**
+        選択が壊れる。そこで「画面に出せる情報が多いほど良い」という
+        利用者側の基準で点数化する。結果の順位は issue.type を見た場合と一致する。
+        """
+        score = 0
+        if eq.max_intensity != "不明":
+            score += 2  # 震度は利用者が最初に見る値なので重みを大きくする
+        if eq.magnitude > self.UNDETERMINED:
+            score += 1
+        if eq.depth > self.UNDETERMINED:
+            score += 1
+        if eq.location and eq.location != "不明":
+            score += 1
+        return score
+
+    def _deduplicate(self, earthquakes: list[EarthquakeInfo]) -> list[EarthquakeInfo]:
+        """同じ地震の複数レポートを1件にまとめる。
+
+        P2P の `id` は地震ではなく**発表単位**に振られるため重複排除の手がかりにならない。
+        発生時刻（秒精度）でまとめる。同一秒に別々の地震が起きることは事実上ない。
+
+        取得件数は減る（20件要求して10件前後になる）。これを埋めるための過剰取得は
+        あえてしない。公開APIへの負荷を3倍にするより、件数が減る方が妥当と判断した。
+        """
+        best: dict[str, EarthquakeInfo] = {}
+        order: list[str] = []
+
+        for index, eq in enumerate(earthquakes):
+            # 発生時刻が空の場合にキーを共有させると、**全件が1つに潰れて
+            # 地震が1件しか出なくなる**。束ねずにそのまま残す
+            key = eq.time or f"__no_time_{index}"
+            if key not in best:
+                best[key] = eq
+                order.append(key)
+            elif self._completeness(eq) > self._completeness(best[key]):
+                best[key] = eq
+
+        return [best[key] for key in order]
 
     def _parse_earthquake(self, data: dict) -> Optional[EarthquakeInfo]:
         """
@@ -160,9 +210,17 @@ class P2PQuakeService:
         Returns:
             str: 生成されたメッセージ
         """
+        # 震度速報の段階では規模も深さも未確定で、値として -1 が入ってくる。
+        # そのまま書くと「マグニチュード-1、震源の深さは約-1km」という
+        # 物理的にありえない文が利用者に届く（実際に画面へ出ていた）。
+        # 未確定の項目は数値を騙らず、文ごと省く
         msg = f"【地震情報】{location}で地震がありました。"
-        msg += f"マグニチュード{magnitude}、最大震度{max_intensity}。"
-        msg += f"震源の深さは約{depth}km。"
+        if magnitude > self.UNDETERMINED:
+            msg += f"マグニチュード{magnitude}、最大震度{max_intensity}。"
+        else:
+            msg += f"最大震度{max_intensity}。規模は現在調査中です。"
+        if depth > self.UNDETERMINED:
+            msg += f"震源の深さは約{depth}km。"
 
         if tsunami_warning != "なし":
             msg += f"津波情報：{tsunami_warning}。"
