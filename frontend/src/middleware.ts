@@ -33,7 +33,13 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'",  // CSS-in-JS / Tailwind インライン style は許容
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    `connect-src 'self' ${API_ORIGIN} https://api.p2pquake.net https://www.jma.go.jp`,
+    // 地理院タイル (cyberjapandata) は <img> で読むので本来 img-src の管轄だが、
+    // Service Worker が fetch を横取りして自分で取り直すため **connect-src の判定に変わる**。
+    // ここに無いと SW 内の fetch が CSP で落ち、sw.js の catch が 503 "Offline" を
+    // 合成して <img> に返すので、**地図が無言で灰色のまま**になる（実測で確認）。
+    // ページ側の securitypolicyviolation にも出ないので気づく手がかりが無い。
+    // 使っていないタイル配信元（OSM / disaportaldata）は意図的に足していない。
+    `connect-src 'self' ${API_ORIGIN} https://api.p2pquake.net https://www.jma.go.jp https://cyberjapandata.gsi.go.jp`,
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",

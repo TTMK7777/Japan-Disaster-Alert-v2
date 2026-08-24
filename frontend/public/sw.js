@@ -3,6 +3,18 @@
 // オフライン対応とキャッシュ戦略
 
 const CACHE_NAME = 'disaster-alert-v2';
+
+// 地図タイルはアプリ資産と別のキャッシュに置く。
+// 同居させると、地図をパンするたびに際限なく増えたタイルが
+// アプリ本体のキャッシュを圧迫し、ストレージ逼迫時の退避（オリジン単位で起きる）で
+// オフライン行動ガイドごと巻き添えで消えうる。分けたうえで枚数に上限を設ける。
+const TILE_CACHE_NAME = 'disaster-alert-tiles-v1';
+const TILE_CACHE_MAX_ENTRIES = 300; // 256px タイル約300枚 ≒ 15MB 程度を上限の目安とする
+
+// activate 時に消さずに残すキャッシュ。
+// **ここに TILE_CACHE_NAME を入れ忘れると、分離した瞬間に毎回消えて機能しなくなる。**
+const KEEP_CACHES = [CACHE_NAME, TILE_CACHE_NAME];
+
 const OFFLINE_URL = '/offline.html';
 
 // キャッシュするアセット
@@ -61,7 +73,7 @@ self.addEventListener('activate', (event) => {
       const cacheNames = await caches.keys();
       await Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
+          .filter((name) => !KEEP_CACHES.includes(name))
           .map((name) => {
             console.log('[SW] Deleting old cache:', name);
             return caches.delete(name);
@@ -82,12 +94,17 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET') return;
 
   // キャッシュ戦略の判定
-  if (isStaticAsset(url)) {
+  //
+  // **地図タイルを最初に判定する。** 地図タイルの URL は `.png` で終わるため、
+  // 先に isStaticAsset を通すとそこで捕まってしまい、地図タイル用の
+  // cacheFirstWithExpiry には**一度も到達しない**（＝7日キャッシュは
+  // 書かれているだけで動いていなかった）。順序がそのまま挙動を決める。
+  if (isMapTile(url)) {
+    event.respondWith(cacheFirstWithExpiry(request, 7 * 24 * 60 * 60 * 1000)); // 7日
+  } else if (isStaticAsset(url)) {
     event.respondWith(cacheFirst(request));
   } else if (isApiRequest(url)) {
     event.respondWith(networkFirst(request));
-  } else if (isMapTile(url)) {
-    event.respondWith(cacheFirstWithExpiry(request, 7 * 24 * 60 * 60 * 1000)); // 7日
   } else {
     event.respondWith(networkFirst(request));
   }
@@ -162,7 +179,8 @@ async function networkFirst(request) {
 
 // キャッシュファースト with 有効期限
 async function cacheFirstWithExpiry(request, maxAge) {
-  const cached = await caches.match(request);
+  const cache = await caches.open(TILE_CACHE_NAME);
+  const cached = await cache.match(request);
 
   if (cached) {
     const dateHeader = cached.headers.get('date');
@@ -178,16 +196,36 @@ async function cacheFirstWithExpiry(request, maxAge) {
 
   try {
     const response = await fetch(request);
+    // **response.ok が真になるのは、タイルを CORS で取得している場合だけ。**
+    // <img> の既定（crossorigin 無し）だと no-cors 扱いになり、返るのは status 0 の
+    // opaque レスポンスで ok は常に false ＝ 一枚もキャッシュされない。
+    // 実測でもタイル 6/6 が表示されているのにキャッシュ 0 件だった。
+    // TileLayer 側に crossOrigin を付けて CORS で取ることでここが成立する
+    // （地理院タイルが CORS を返すことは実測で確認済み）。
     if (response.ok) {
-      const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
+      await cache.put(request, response.clone());
+      await trimCache(cache, TILE_CACHE_MAX_ENTRIES);
     }
     return response;
   } catch (error) {
     if (cached) {
-      return cached; // エラー時は期限切れでもキャッシュを返す
+      return cached; // 圏外・停電時は期限切れでもキャッシュを返す（これがオフライン地図の本体）
     }
     throw error;
+  }
+}
+
+/**
+ * キャッシュの件数に上限を設け、古いものから捨てる。
+ * Cache Storage の keys() は挿入順を保つため、先頭が最も古い。
+ * 上限が無いと地図をパンした分だけ無限に増える。
+ */
+async function trimCache(cache, maxEntries) {
+  const keys = await cache.keys();
+  if (keys.length <= maxEntries) return;
+  const excess = keys.length - maxEntries;
+  for (let i = 0; i < excess; i++) {
+    await cache.delete(keys[i]);
   }
 }
 

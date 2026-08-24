@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { formatMagnitude } from '@/lib/earthquakeFormat';
 import { IntensityBadge, IntensityScale } from './IntensityGauge';
 import TsunamiAlert from './TsunamiAlert';
 import type { Earthquake } from '@/types/earthquake';
@@ -188,9 +189,13 @@ export default function EarthquakeMap({ earthquakes, language }: EarthquakeMapPr
         scrollWheelZoom={true}
       >
         {/* 国土地理院タイル（無料） */}
+        {/* crossOrigin: CORS で取得する。既定（crossorigin 無し）だと Service Worker が
+            受け取るのは status 0 の opaque レスポンスで response.ok が常に false になり、
+            タイルが一枚もキャッシュされずオフラインで地図が出ない（実測で確認済み） */}
         <TileLayer
           attribution='&copy; <a href="https://maps.gsi.go.jp/development/ichiran.html">国土地理院</a>'
           url="https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png"
+          crossOrigin="anonymous"
         />
 
         {/* 地図を地震に合わせてフィット */}
@@ -239,7 +244,7 @@ export default function EarthquakeMap({ earthquakes, language }: EarthquakeMapPr
                   {/* マグニチュード */}
                   <div className="text-center p-2 bg-gray-50 rounded-lg">
                     <div className="text-xs text-gray-500 mb-1">{t('magnitude')}</div>
-                    <div className="text-xl font-bold text-gray-800">M{earthquake.magnitude}</div>
+                    <div className="text-xl font-bold text-gray-800">{formatMagnitude(earthquake.magnitude)}</div>
                   </div>
 
                   {/* 深さ */}
