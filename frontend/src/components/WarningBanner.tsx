@@ -4,6 +4,13 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { getTranslation, getLocale } from '@/i18n/translations';
 import { formatRelativeTime } from '@/lib/relativeTime';
+import {
+  normalizeSeverity,
+  SEVERITY_STYLES,
+  cardClassName,
+  metaClassName,
+  badgeClassName,
+} from '@/lib/warningSeverity';
 
 interface Warning {
   id: string;
@@ -88,9 +95,8 @@ const WARNING_KEYS = {
   issuedAt: 'warning.issuedAt',
   // 継続中の警報向け。中央の翻訳表に16言語で既にあるものを流用する
   lastUpdate: 'lastUpdate',
-  specialWarning: 'warning.specialWarning',
-  warning: 'warning.severityWarning',
-  advisory: 'warning.advisory',
+  // 階級ラベル (特別警報 / 警報 / 注意報) のキーは lib/warningSeverity.ts の
+  // labelKey が持つ。階級と表示の対応を 1 箇所に集めるためここには置かない
   selectArea: 'warning.selectArea',
 } as const;
 
@@ -186,50 +192,6 @@ export default function WarningBanner({
     return () => clearInterval(interval);
   }, [fetchWarnings]);
 
-  const getSeverityStyles = (severity: string) => {
-    switch (severity) {
-      case 'extreme':
-        return 'bg-purple-600 text-white border-purple-800 animate-pulse';
-      case 'high':
-        return 'bg-red-600 text-white border-red-800';
-      case 'medium':
-        return 'bg-yellow-500 text-black border-yellow-700';
-      case 'low':
-        return 'bg-blue-500 text-white border-blue-700';
-      default:
-        return 'bg-gray-500 text-white border-gray-700';
-    }
-  };
-
-  const getSeverityLabel = (severity: string) => {
-    switch (severity) {
-      case 'extreme':
-        return t('specialWarning');
-      case 'high':
-        return t('warning');
-      case 'medium':
-      case 'low':
-        return t('advisory');
-      default:
-        return '';
-    }
-  };
-
-  const getSeverityIcon = (severity: string) => {
-    switch (severity) {
-      case 'extreme':
-        return '🚨';
-      case 'high':
-        return '⚠️';
-      case 'medium':
-        return '⚡';
-      case 'low':
-        return 'ℹ️';
-      default:
-        return '📢';
-    }
-  };
-
   if (loading) {
     return (
       <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse">
@@ -282,31 +244,46 @@ export default function WarningBanner({
         language={language}
       />
       <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{t('title')} - {prefectureName}</h3>
+      {/* 一覧であることを支援技術に伝える。従来はカードが平置きで、しかも全件に
+          role="alert" が付いていたため、注意報が並ぶ日は読み上げが割り込みで埋まった */}
+      <ul className="space-y-3">
       {warnings.map((warning, index) => {
         const relativeIssuedAt = formatRelativeTime(warning.issued_at, getLocale(language));
+        // 気象庁の 3 階級へ畳む。medium と low はどちらも「注意報」だが、
+        // 従来はラベルが同じまま黄と青に塗り分けられていた（lib/warningSeverity.ts 参照）
+        const severity = normalizeSeverity(warning.severity);
+        const style = SEVERITY_STYLES[severity];
+        const severityLabel = style.labelKey ? getTranslation(language, style.labelKey) : '';
         return (
+        <li key={`${warning.id}-${index}`}>
         <div
-          key={`${warning.id}-${index}`}
-          className={`p-4 rounded-lg border-2 ${getSeverityStyles(warning.severity)}`}
-          role="alert"
-          aria-live={warning.severity === 'extreme' ? 'assertive' : 'polite'}
+          className={`p-4 rounded-lg ${cardClassName(severity)}${
+            severity === 'extreme' ? ' animate-pulse motion-reduce:animate-none' : ''
+          }`}
+          /* 警報以上だけが読み上げに割り込む。role="alert" は暗黙に assertive なので
+             aria-live は明示しない（両方書くと意図が競合する） */
+          {...(style.interrupts ? { role: 'alert' } : {})}
         >
           <div className="flex items-start gap-3">
             <span className="text-2xl" aria-hidden="true">
-              {getSeverityIcon(warning.severity)}
+              {style.icon}
             </span>
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="px-2 py-0.5 text-xs font-bold rounded bg-black/20">
-                  {getSeverityLabel(warning.severity)}
-                </span>
+                {severityLabel && (
+                  <span className={`px-2 py-0.5 text-xs font-bold rounded ${badgeClassName(severity)}`}>
+                    {severityLabel}
+                  </span>
+                )}
                 <h4 className="font-bold">
                   {language !== 'ja' && warning.title_translated
                     ? warning.title_translated
                     : warning.title}
                 </h4>
               </div>
-              <div className="mt-1 text-sm opacity-90 space-y-1">
+              {/* 本文は二次情報ではないので見出しと同じコントラストで出す。
+                  従来の opacity-90 は下地と混ざって実効 3.28:1 まで落ちていた */}
+              <div className="mt-1 text-sm space-y-1">
                 {(language !== 'ja' && warning.description_translated
                   ? warning.description_translated
                   : warning.description
@@ -318,10 +295,8 @@ export default function WarningBanner({
                   気象庁は変化がない限り reportDatetime を更新しないため、
                   3か月前の日時を「発表時刻」として見せると、たった今出た警報に見える。
                   併せて経過時間を添える（Intl.RelativeTimeFormat が言語別に処理するので
-                  16言語ぶんの文言を用意しなくてよい）。
-                  透明度は 75% → 90% に上げている。従来は 2.75:1 でコントラストが
-                  WCAG AA に届いていなかった */}
-              <p className="mt-2 text-xs opacity-90">
+                  16言語ぶんの文言を用意しなくてよい） */}
+              <p className={`mt-2 text-xs ${metaClassName(severity)}`}>
                 {warning.area} | {warning.is_continuing ? t('lastUpdate') : t('issuedAt')}:{' '}
                 {new Date(warning.issued_at).toLocaleString(getLocale(language))}
                 {relativeIssuedAt && <span className="ml-1">({relativeIssuedAt})</span>}
@@ -329,8 +304,10 @@ export default function WarningBanner({
             </div>
           </div>
         </div>
+        </li>
         );
       })}
+      </ul>
     </div>
   );
 }
