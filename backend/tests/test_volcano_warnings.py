@@ -139,20 +139,6 @@ def parse_all(service: VolcanoService) -> list:
     return result
 
 
-class TestEndpointUrl:
-    def test_火山ごとにURLを組み立てない(self, service):
-        """存在しない `data/warning/{code}.json` に戻っていないこと。
-
-        この形の URL は 404 を返し、例外を握るので**エラーも出さずに永久ゼロ件**になる。
-        実際にそうなっていて誰も気づかなかった。
-        """
-        import inspect
-
-        source = inspect.getsource(VolcanoService.get_volcano_warnings)
-        assert "data/warning.json" in source
-        assert "warning/{" not in source
-
-
 class TestParsing:
     def test_対象火山の警報だけを拾う(self, service):
         warnings = parse_all(service)

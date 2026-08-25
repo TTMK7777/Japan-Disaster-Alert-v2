@@ -19,7 +19,7 @@ import pytest
 
 from app.models import ALLOWED_LANGUAGES
 from app.services.area_display import JAPANESE_LANGS
-from app.services.warning_service import STATIC_LANGUAGES, WarningService
+from app.services.warning_service import WarningService
 
 NON_JAPANESE_LANGS = sorted(ALLOWED_LANGUAGES - JAPANESE_LANGS)
 
@@ -51,18 +51,24 @@ def _payload(*area_codes: str, warning_code: str = "03") -> dict:
 class TestAllLanguagesUseStaticPath:
     """16言語すべてが静的経路を通ること（AI に投げない）"""
 
-    def test_受け付ける全言語が静的経路の対象(self):
-        """**これが 3 の再現テスト。** 6言語に戻すと10言語ぶん落ちる。"""
-        missing = sorted(ALLOWED_LANGUAGES - STATIC_LANGUAGES)
-        assert not missing, f"AI 経路に流れてしまう言語が残っている: {missing}"
+    def test_AI経路が復活していない(self):
+        """**これが 3 の再現テスト。**
+
+        かつて `STATIC_LANGUAGES` が 6 言語しかなく、残る 10 言語が AI 経路
+        (`_parse_warnings_with_ai`) に流れて地名が空文字になっていた。
+        16 言語全てが静的対応になった時点で AI 経路は到達不能の死コードになった
+        ため、分岐ごと削除した。ここではメソッドが復活していないことを固定する。
+        """
+        assert not hasattr(WarningService, "_parse_warnings_with_ai")
+        assert not hasattr(WarningService, "translator")
 
     @pytest.mark.parametrize("lang", sorted(ALLOWED_LANGUAGES))
     async def test_本番の入口から全言語がAIなしで地名まで出る(self, lang, monkeypatch):
         """**本番の入口 `get_warnings` を通す。**
 
         既存テストは `_parse_warnings` を直接呼んでいたため、`get_warnings` の
-        言語分岐（`if lang in STATIC_LANGUAGES`）を通っておらず、10言語が AI 経路に
-        流れて地名が空文字になっていたことを検出できなかった。
+        言語分岐（当時の `if lang in STATIC_LANGUAGES`、現在は削除済み）を通っておらず、
+        10言語が AI 経路に流れて地名が空文字になっていたことを検出できなかった。
         分岐を含めて検証しないと同じ見逃しが再発する。
         """
         service = WarningService()
@@ -80,11 +86,6 @@ class TestAllLanguagesUseStaticPath:
 
         monkeypatch.setattr(WarningService, "_get_client", lambda self: _FakeClient())
 
-        def _boom(*args, **kwargs):
-            raise AssertionError("静的経路のはずが translator を呼んだ")
-
-        monkeypatch.setattr(WarningService, "translator", property(_boom))
-
         alerts = await service.get_warnings("130000", lang)
 
         assert len(alerts) == 1, f"{lang} で警報が組み立てられなかった"
@@ -100,11 +101,6 @@ class TestAllLanguagesUseStaticPath:
         停電・低回線・APIキー未設定でも同じ結果が出る必要がある（docs の R2）。
         """
         service = WarningService()
-
-        def _boom(*args, **kwargs):
-            raise AssertionError("静的経路のはずが translator を呼んだ")
-
-        monkeypatch.setattr(WarningService, "translator", property(_boom))
 
         alerts = service._parse_warnings(_payload("130010"), "130000", lang)
         assert len(alerts) == 1

@@ -210,3 +210,111 @@ def test_get_sample_shelters_fallback(tmp_path):
     names = [s.name for s in shelters]
     assert "東京都庁" in names
     assert "代々木公園" in names
+
+
+class TestBundledRoundTrip:
+    """生成スクリプトが作った gzip を、本番の同梱読取経路で読めること。
+
+    レビュー指摘: `_read_bundled`（本番で実際に使われる経路）を通すテストが
+    1 本も無く、生成側と読取側でビットマスク表がずれても検知できなかった。
+    表は app/services/shelter_types.py に一本化したが、
+    **焼き込み済みデータとの往復**はここで固定する。
+    """
+
+    @staticmethod
+    def _build_gz(tmp_path):
+        import csv
+        import gzip
+        import importlib.util
+        import json
+        import sys
+        from pathlib import Path
+
+        scripts_dir = Path(__file__).resolve().parent.parent / "scripts"
+        spec = importlib.util.spec_from_file_location(
+            "build_shelters", scripts_dir / "build_shelters.py"
+        )
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+        csv_path = tmp_path / "sample.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=[
+                "共通ID", "施設・場所名", "住所", "緯度", "経度",
+                "洪水", "崖崩れ、土石流及び地滑り", "高潮", "地震",
+                "津波", "大規模な火事", "内水氾濫", "火山現象",
+            ])
+            writer.writeheader()
+            writer.writerow({
+                "共通ID": "13104-0001", "施設・場所名": "テスト小学校",
+                "住所": "東京都新宿区1-1", "緯度": "35.69", "経度": "139.70",
+                "地震": "○", "津波": "", "洪水": "1", "大規模な火事": "○",
+            })
+            writer.writerow({
+                "共通ID": "13104-0002", "施設・場所名": "テスト公園",
+                "住所": "東京都新宿区2-2", "緯度": "35.70", "経度": "139.71",
+                "火山現象": "○",
+            })
+
+        payload = module.build(csv_path)
+        gz_path = tmp_path / "shelters.json.gz"
+        with gzip.open(gz_path, "wt", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False)
+        return gz_path
+
+    @staticmethod
+    def _service_with_bundled(tmp_path, monkeypatch, gz_path):
+        """同梱データ経路で ShelterService を構築する（既存 _make_service の流儀に合わせる）。"""
+        from app.services.shelter_service import ShelterService
+
+        monkeypatch.setattr(ShelterService, "BUNDLED_FILE", gz_path)
+        mock_settings = MagicMock()
+        mock_settings.shelter_data_dir = str(tmp_path / "shelters")
+        mock_settings.shelter_csv_path = ""
+        with patch("app.config.settings", mock_settings):
+            return ShelterService()
+
+    def test_生成した同梱データを本番経路で読める(self, tmp_path, monkeypatch):
+        gz_path = self._build_gz(tmp_path)
+        service = self._service_with_bundled(tmp_path, monkeypatch, gz_path)
+        assert service.is_sample_data is False
+        shelters = service.get_nearby_shelters(35.69, 139.70, radius_km=5, limit=10)
+        assert len(shelters) == 2
+
+        by_id = {s.id: s for s in shelters}
+        school = by_id["13104-0001"]
+        # ビットマスク → 文字列種別の対応がずれていないこと（順不同で比較）
+        assert set(school.types) == {"earthquake", "flood", "fire"}
+        park = by_id["13104-0002"]
+        assert set(park.types) == {"volcano"}
+
+    def test_開設状況は生成データに存在しないのでNoneのまま(self, tmp_path, monkeypatch):
+        gz_path = self._build_gz(tmp_path)
+        service = self._service_with_bundled(tmp_path, monkeypatch, gz_path)
+        shelters = service.get_nearby_shelters(35.69, 139.70, radius_km=5, limit=10)
+        assert all(s.is_open is None for s in shelters)
+
+
+class TestBitAssignmentIsFrozen:
+    def test_ビット割当は焼き込み済みデータとの契約なので変更不可(self):
+        """DISASTER_BITS は data/shelters/shelters.json.gz に**焼き込み済み**の配線形式。
+
+        表は shelter_types.py に一本化したので「生成側と読取側の不一致」は
+        構造的に起きなくなったが、その代わり**表自体を並べ替えると**、
+        ラウンドトリップテストは自己整合で緑のまま、本番の同梱データだけが
+        誤読される（115,674 件の対応災害種別がサイレントに誤表示）。
+        ビット値そのものをリテラルで固定して、並べ替え・挿入を検知する。
+        値を変えたいときは同梱データの再生成とセットで行うこと。
+        """
+        from app.services.shelter_types import DISASTER_BITS
+
+        assert DISASTER_BITS == {
+            "flood": 1,
+            "landslide": 2,
+            "storm_surge": 4,
+            "earthquake": 8,
+            "tsunami": 16,
+            "fire": 32,
+            "inland_flood": 64,
+            "volcano": 128,
+        }

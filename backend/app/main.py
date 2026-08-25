@@ -116,7 +116,7 @@ p2p_service = P2PQuakeService()
 translator = TranslatorService()
 # translator を共有し、WarningService 内部での TranslatorService 重複生成
 # (キャッシュ・HTTPクライアントの二重持ち) を防ぐ
-warning_service = WarningService(translator)
+warning_service = WarningService()
 tsunami_service = TsunamiService()
 volcano_service = VolcanoService()
 shelter_service = ShelterService()

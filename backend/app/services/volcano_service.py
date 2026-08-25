@@ -2,6 +2,8 @@
 気象庁 火山情報サービス
 """
 import asyncio
+import time
+
 import httpx
 from typing import Optional
 from ..models import VolcanoInfo, VolcanoWarning
@@ -24,6 +26,8 @@ class VolcanoService:
         self.BASE_URL = f"{settings.jma_base_url}/volcano"
         self.timeout = settings.api_timeout
         self._client: Optional[httpx.AsyncClient] = None
+        #: path -> (monotonic 時刻, 生の JSON)。詳細は _fetch_json の docstring
+        self._json_cache: dict = {}
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -34,6 +38,47 @@ class VolcanoService:
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
+
+    #: 火山カタログ（const/volcano_list.json）の TTL。内容は年単位でしか変わらない
+    LIST_TTL_SECONDS = 6 * 60 * 60
+    #: 発表中の警報（data/warning.json）の TTL。フロントは 15 分間隔でポーリングする
+    WARNING_TTL_SECONDS = 5 * 60
+
+    async def _fetch_json(self, path: str, ttl: float):
+        """JMA の JSON を TTL 付きで取得する。
+
+        キャッシュするのは**生の JSON**（dict / list）だけで、モデルオブジェクトは
+        呼び出しごとに組み立て直す。パース済みオブジェクトをキャッシュすると、
+        エンドポイントが言語別に書き換えた結果が次のリクエストへ漏れる。
+        生 JSON は全経路が読み取り専用（.get のみ）なので共有してよい。
+
+        取得に失敗したときは**期限切れでも直近の成功値を返す**。災害情報アプリでは
+        「発表時刻つきの少し古い警報」の方が「何も出ない画面」よりはるかにましで、
+        sw.js のタイルキャッシュ（圏外時は期限切れでも返す）と同じ判断。
+
+        同時リクエストで二重取得になりうるが、後勝ちで上書きされるだけなので
+        ロックは持たない（正しさに影響しない・コードが単純に保てる）。
+        """
+        now = time.monotonic()
+        cached = self._json_cache.get(path)
+        if cached is not None and now - cached[0] < ttl:
+            return cached[1]
+
+        url = f"{self.BASE_URL}/{path}"
+        client = self._get_client()
+        try:
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError) as e:
+            # ValueError は response.json() のデコード失敗（json.JSONDecodeError は
+            # ValueError のサブクラス）。httpx.HTTPError では捕捉できず、
+            # 素通しすると API 全体が 500 になる
+            logger.error(f"JMA JSON 取得エラー ({path}): {e}", exc_info=True)
+            return cached[1] if cached is not None else None
+
+        self._json_cache[path] = (now, data)
+        return data
 
     # 噴火警戒レベルの説明
     ALERT_LEVELS = {
@@ -55,17 +100,10 @@ class VolcanoService:
         Returns:
             list[VolcanoInfo]: 火山情報リスト
         """
-        url = f"{self.BASE_URL}/const/volcano_list.json"
-
-        client = self._get_client()
-        try:
-            response = await client.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
-            return self._parse_volcano_list(data)
-        except httpx.HTTPError as e:
-            logger.error(f"火山一覧取得エラー: {e}", exc_info=True)
+        data = await self._fetch_json("const/volcano_list.json", self.LIST_TTL_SECONDS)
+        if data is None:
             return []
+        return self._parse_volcano_list(data)
 
     def _parse_volcano_list(self, data: list) -> list[VolcanoInfo]:
         """APIレスポンスを火山情報リストにパース"""
@@ -110,14 +148,8 @@ class VolcanoService:
         気象庁は `data/warning.json` の 1 本に全ての発表中の警報をまとめている。
         火山ごとに URL を組み立てる必要はない（そもそもその形の URL は存在しない）。
         """
-        url = f"{self.BASE_URL}/data/warning.json"
-        client = self._get_client()
-        try:
-            response = await client.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
-        except httpx.HTTPError as e:
-            logger.error(f"火山警報取得エラー: {e}", exc_info=True)
+        data = await self._fetch_json("data/warning.json", self.WARNING_TTL_SECONDS)
+        if data is None:
             return []
 
         catalogue = {v.code: v for v in await self.get_volcano_list()}
