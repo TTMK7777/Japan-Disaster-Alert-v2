@@ -18,6 +18,10 @@
 - API変更時は `frontend/src/types/` の型定義も更新
 - ユーザー向け文字列は16言語対応必須（`frontend/src/i18n/`）
 - Backend例外は `backend/app/exceptions.py` に定義
+- **effect の依存に導出オブジェクトを入れない**（依存は id 等のプリミティブへ）。タイマー系 effect は
+  fake timers のコンポーネントテスト必須 — 手動確認は参照が安定する経路を通るため**構造的に再現しない**
+- **外部 API の except は `(httpx.HTTPError, ValueError)`** — `response.json()` の失敗は HTTPError の
+  子ではなく素通りする。`asyncio.gather` は `return_exceptions=True` か内側で握り、1件の故障で全域を落とさない
 
 ## Testing / Proof
 変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
@@ -51,10 +55,9 @@ node ./node_modules/@playwright/test/cli.js test --config playwright.local-chrom
    この環境では使えない（`npx` が deny／ダウンロードを伴う）。
    `playwright.local-chrome.config.ts` は**インストール済みの Google Chrome を使う**
    （`channel: 'chrome'`）ので、ダウンロードなしで走る
-2. **`npm run dev` ではクライアント React が動かない**（後述の CSP の項）。
-   `useEffect` が実行されないので、**fetch を伴う画面は必ず空になる**。
-   ローカル用 config は `npm run start` を使う。既定の `playwright.config.ts` は
-   `npm run dev` のままなので、クライアント挙動を見るテストは信用しないこと
+2. dev でクライアント React が動かない件は後述「クライアント挙動の検証」参照。
+   E2E 固有の注意: **既定の `playwright.config.ts` は `npm run dev` 起動のままなので
+   クライアント挙動を見るテストには信用できない**。ローカル用 config（`npm run start` 起動）を使う
 3. **ロケールを固定しないと日本語の文言を探すテストが全部落ちる。**
    初回訪問時はブラウザ言語から表示言語を推定するため（`src/i18n/detectLanguage.ts`）、
    実行環境が英語だと UI が英語になる。両 config に `locale: 'ja-JP'` を入れてある。
