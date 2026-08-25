@@ -10,6 +10,7 @@ import {
   cardClassName,
   metaClassName,
   badgeClassName,
+  continuingBadgeClassName,
 } from '@/lib/warningSeverity';
 
 /**
@@ -127,7 +128,12 @@ export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
         {warnings.map((warning) => {
           const severity = normalizeSeverity(warning.severity);
           const style = SEVERITY_STYLES[severity];
-          const relative = formatRelativeTime(warning.issued_at, getLocale(language));
+          // 継続中の噴火警報では相対時刻を出さない。気象庁は内容が変わらない限り
+          // 発表日時を更新しないため、桜島のように十数年前の日時が入る。
+          // 単独の「14 年前」は情報が古いと読まれるが、実際には今も出ている。
+          const relative = warning.is_continuing
+            ? ''
+            : formatRelativeTime(warning.issued_at, getLocale(language));
           const areas = warning.municipalities ?? [];
 
           return (
@@ -140,9 +146,18 @@ export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
                 <div className="flex items-start gap-2 flex-wrap">
                   {warning.level_label && (
                     <span
+                      data-badge="level"
                       className={`px-2 py-0.5 text-xs font-bold rounded whitespace-nowrap ${badgeClassName(severity)}`}
                     >
                       {warning.level_label}
+                    </span>
+                  )}
+                  {warning.is_continuing && (
+                    <span
+                      data-badge="continuing"
+                      className={`px-2 py-0.5 text-xs font-bold rounded whitespace-nowrap ${continuingBadgeClassName(severity)}`}
+                    >
+                      {getTranslation(language, 'warning.continuing')}
                     </span>
                   )}
                   <h4 className="font-bold">{warning.volcano_name}</h4>
