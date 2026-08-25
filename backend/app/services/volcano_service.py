@@ -5,6 +5,12 @@ import asyncio
 import httpx
 from typing import Optional
 from ..models import VolcanoInfo, VolcanoWarning
+from .volcano_levels import (
+    CONTINUING_CONDITIONS,
+    LIFTED_CONDITIONS,
+    WARNING_TYPES,
+    level_severity,
+)
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -38,29 +44,9 @@ class VolcanoService:
         5: {"name": "避難", "severity": "extreme", "action": "危険な居住地域からの避難"},
     }
 
-    # 主要な監視対象火山（常時観測火山）
-    MONITORED_VOLCANOES = [
-        314,  # 富士山
-        312,  # 箱根山
-        503,  # 阿蘇山
-        506,  # 桜島
-        507,  # 霧島山
-        502,  # 雲仙岳
-        306,  # 浅間山
-        101,  # 十勝岳
-        102,  # 樽前山
-        103,  # 有珠山
-        202,  # 岩手山
-        205,  # 蔵王山
-        301,  # 那須岳
-        302,  # 日光白根山
-        303,  # 草津白根山
-        504,  # 薩摩硫黄島
-        505,  # 口永良部島
-        601,  # 諏訪之瀬島
-        509,  # 新燃岳
-        510,  # 硫黄島
-    ]
+    # 従来ここに火山コードの手書きリストがあったが、`volcano_list.json` の code は
+    # **文字列**なので `code in [314, 312, ...]` は常に False で、一度も効いていなかった。
+    # 常時観測火山かどうかは元データの `levelOperation` が持っているのでそれを使う。
 
     async def get_volcano_list(self) -> list[VolcanoInfo]:
         """
@@ -87,7 +73,7 @@ class VolcanoService:
 
         for item in data:
             try:
-                code = item.get("code", 0)
+                code = str(item.get("code", "")).strip()
                 latlon = item.get("latlon", [None, None])
                 lat = latlon[0] if len(latlon) > 0 else None
                 lon = latlon[1] if len(latlon) > 1 else None
@@ -98,7 +84,8 @@ class VolcanoService:
                     name_en=item.get("name_en"),
                     latitude=lat,
                     longitude=lon,
-                    is_monitored=code in self.MONITORED_VOLCANOES or item.get("levelOperation", False),
+                    # 噴火警戒レベルが運用されている火山（元データで 120 件中 53 件）
+                    is_monitored=bool(item.get("levelOperation", False)),
                 )
                 volcanoes.append(volcano)
             except Exception as e:
@@ -117,65 +104,121 @@ class VolcanoService:
         all_volcanoes = await self.get_volcano_list()
         return [v for v in all_volcanoes if v.is_monitored]
 
-    async def get_volcano_warnings(self) -> list[dict]:
+    async def get_volcano_warnings(self) -> list[VolcanoWarning]:
+        """発表中の噴火警報をすべて取得する。
+
+        気象庁は `data/warning.json` の 1 本に全ての発表中の警報をまとめている。
+        火山ごとに URL を組み立てる必要はない（そもそもその形の URL は存在しない）。
         """
-        火山警報を並列取得
-
-        Semaphore(10) で同時接続数を制限しつつ、asyncio.gather() で並列リクエストを実行。
-
-        Returns:
-            list[dict]: 火山警報リスト
-        """
-        semaphore = asyncio.Semaphore(10)
-
-        async def fetch_warning(client: httpx.AsyncClient, volcano_code: int) -> Optional[dict]:
-            async with semaphore:
-                try:
-                    url = f"{self.BASE_URL}/data/warning/{volcano_code}.json"
-                    response = await client.get(url, timeout=self.timeout)
-                    if response.status_code == 200:
-                        data = response.json()
-                        if data:
-                            return self._parse_volcano_warning(data, volcano_code)
-                except httpx.HTTPError:
-                    pass
-                except Exception as e:
-                    logger.warning(f"火山警報取得エラー ({volcano_code}): {e}")
-                return None
-
+        url = f"{self.BASE_URL}/data/warning.json"
         client = self._get_client()
-        tasks = [
-            fetch_warning(client, volcano_code)
-            for volcano_code in self.MONITORED_VOLCANOES
-        ]
-        results = await asyncio.gather(*tasks)
-
-        return [w for w in results if w is not None]
-
-    def _parse_volcano_warning(self, data: dict, volcano_code: int) -> Optional[dict]:
-        """火山警報情報をパース"""
         try:
-            # 警報レベルを抽出
-            level = data.get("level")
-            if level is None:
-                return None
+            response = await client.get(url, timeout=self.timeout)
+            response.raise_for_status()
+            data = response.json()
+        except httpx.HTTPError as e:
+            logger.error(f"火山警報取得エラー: {e}", exc_info=True)
+            return []
 
-            level_info = self.ALERT_LEVELS.get(level, {})
+        catalogue = {v.code: v for v in await self.get_volcano_list()}
+        warnings: list[VolcanoWarning] = []
+        for record in data:
+            warnings.extend(self._parse_warning_record(record, catalogue))
+        # 危険な方から並べる
+        order = {"extreme": 0, "high": 1, "advisory": 2}
+        warnings.sort(key=lambda w: (order.get(w.severity, 3), -(w.alert_level or 0)))
+        return warnings
 
-            return {
-                "volcano_code": volcano_code,
-                "alert_level": level,
-                "alert_level_name": level_info.get("name", ""),
-                "severity": level_info.get("severity", "low"),
-                "action": level_info.get("action", ""),
-                "issued_at": data.get("reportDatetime", ""),
-                "headline": data.get("headlineText", ""),
-            }
+    #: 対象の火山そのものを表す volcanoInfos の type。
+    #: ほかに「対象市町村等」「対象市町村の防災対応等」があり、混ぜると
+    #: 市町村名が火山名の位置に入る
+    VOLCANO_INFO_TYPE = "噴火警報・予報（対象火山）"
+    MUNICIPALITY_INFO_TYPE = "噴火警報・予報（対象市町村等）"
+
+    def _parse_warning_record(
+        self, record: dict, catalogue: dict[str, VolcanoInfo]
+    ) -> list[VolcanoWarning]:
+        """warning.json の 1 レコードを火山ごとの警報に開く。"""
+        try:
+            issued_at = record.get("reportDatetime", "")
+            municipalities = self._extract_municipalities(record)
+
+            results: list[VolcanoWarning] = []
+            for info in record.get("volcanoInfos", []):
+                if info.get("type") != self.VOLCANO_INFO_TYPE:
+                    continue
+                for item in info.get("items", []):
+                    condition = item.get("condition", "")
+                    # 解除された警報を画面に出さない。
+                    # 気象庁の condition は 発表 / 継続 / 切替 / 引上げ / 引下げ / 解除
+                    if condition in LIFTED_CONDITIONS:
+                        continue
+                    name_ja = item.get("name", "")
+                    for area in item.get("areas", []):
+                        warning = self._build_warning(
+                            area=area,
+                            name_ja=name_ja,
+                            condition=condition,
+                            issued_at=issued_at,
+                            municipalities=municipalities,
+                            catalogue=catalogue,
+                        )
+                        if warning is not None:
+                            results.append(warning)
+            return results
         except Exception as e:
             logger.error(f"火山警報パースエラー: {e}", exc_info=True)
+            return []
+
+    def _extract_municipalities(self, record: dict) -> list[str]:
+        names: list[str] = []
+        for info in record.get("volcanoInfos", []):
+            if info.get("type") != self.MUNICIPALITY_INFO_TYPE:
+                continue
+            for item in info.get("items", []):
+                for area in item.get("areas", []):
+                    name = area.get("name")
+                    if name and name not in names:
+                        names.append(name)
+        return names
+
+    def _build_warning(
+        self,
+        *,
+        area: dict,
+        name_ja: str,
+        condition: str,
+        issued_at: str,
+        municipalities: list[str],
+        catalogue: dict[str, VolcanoInfo],
+    ) -> Optional[VolcanoWarning]:
+        code = str(area.get("code", "")).strip()
+        volcano_name = area.get("name") or ""
+        if not code and not volcano_name:
             return None
 
-    async def get_volcano_by_code(self, code: int) -> Optional[VolcanoInfo]:
+        known = catalogue.get(code)
+        level = extract_level(name_ja)
+        severity = level_severity(level) or warning_type_severity(name_ja)
+
+        return VolcanoWarning(
+            volcano_code=code,
+            volcano_name=volcano_name or (known.name if known else code),
+            volcano_name_en=known.name_en if known else None,
+            latitude=known.latitude if known else None,
+            longitude=known.longitude if known else None,
+            alert_level=level,
+            # 訳は API 層で言語ごとに入れ直す。ここでは日本語を置いておく
+            alert_level_name=name_ja,
+            severity=severity,
+            warning_name_ja=name_ja,
+            condition=condition,
+            is_continuing=condition in CONTINUING_CONDITIONS,
+            issued_at=issued_at,
+            municipalities=municipalities,
+        )
+
+    async def get_volcano_by_code(self, code: str) -> Optional[VolcanoInfo]:
         """
         コードで特定の火山情報を取得
 
@@ -187,7 +230,7 @@ class VolcanoService:
         """
         all_volcanoes = await self.get_volcano_list()
         for volcano in all_volcanoes:
-            if volcano.code == code:
+            if volcano.code == str(code):
                 return volcano
         return None
 
@@ -202,3 +245,34 @@ class VolcanoService:
             dict: レベル情報
         """
         return self.ALERT_LEVELS.get(level, {})
+
+
+#: 「レベル２（火口周辺規制）」のように全角数字で書かれる。半角も一応受ける
+_LEVEL_DIGITS = {
+    "１": 1, "２": 2, "３": 3, "４": 4, "５": 5,
+    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5,
+}
+
+
+def extract_level(name_ja: str) -> Optional[int]:
+    """警報名から噴火警戒レベルを取り出す。レベル制でない火山では None。
+
+    `items[].code`（12=レベル2、13=レベル3 …）でも判別できそうに見えるが、
+    実データで観測できたのは 12 / 13 / 22 / 23 / 36 の 5 つだけで、
+    残りの対応は推測になる。名前の「レベルN」は自己記述的で観測もできているので
+    こちらを正とする。
+    """
+    marker = name_ja.find("レベル")
+    if marker < 0:
+        return None
+    tail = name_ja[marker + 3: marker + 4]
+    return _LEVEL_DIGITS.get(tail)
+
+
+def warning_type_severity(name_ja: str) -> str:
+    """レベル制でない火山の警報種別から重大度を決める。"""
+    entry = WARNING_TYPES.get(name_ja)
+    if entry:
+        return entry["severity"]
+    # 表に無い名前。噴火に関する警報である以上は軽く扱わない
+    return "high"

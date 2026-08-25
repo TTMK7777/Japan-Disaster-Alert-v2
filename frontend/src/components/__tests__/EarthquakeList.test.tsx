@@ -232,3 +232,66 @@ describe('EarthquakeList', () => {
     expect(screen.getByText('物につかまりたくなる')).toBeInTheDocument();
   });
 });
+
+describe('震源地が空のとき', () => {
+  // P2P の hypocenter.name は「キーが存在したうえで空文字」という形をとる。
+  // バックエンドは「震源地調査中」に置き換えるが、API が退行して空を返しても
+  // 見出しが高さ 0px の空要素にならないことを固定する。
+  const emptyLocation: Earthquake = {
+    id: 'sp-1',
+    time: '2026-08-25 09:00',
+    location: '',
+    magnitude: -1,
+    max_intensity: '3',
+    depth: -1,
+    latitude: -200,
+    longitude: -200,
+    tsunami_warning: '調査中',
+    message: '地震がありました。震源地は現在調査中です。',
+  };
+
+  const renderWith = (eq: Earthquake, language = 'ja') =>
+    render(
+      <EarthquakeList language={language} earthquakes={[eq]} loading={false} error={null} />
+    );
+
+  it('見出しが空文字にならない', () => {
+    const { container } = renderWith(emptyLocation);
+    const headings = container.querySelectorAll('h3');
+    expect(headings.length).toBeGreaterThan(0);
+    headings.forEach((h) => {
+      expect(h.textContent?.trim()).not.toBe('');
+    });
+  });
+
+  it('空白だけの震源地名も代替表示になる', () => {
+    const { container } = renderWith({ ...emptyLocation, location: '   ' });
+    const h3 = container.querySelector('h3');
+    expect(h3?.textContent?.trim()).not.toBe('');
+  });
+
+  it('翻訳が空文字でも原文へ落ちる', () => {
+    const { container } = renderWith({
+      ...emptyLocation,
+      location: '宮古島近海',
+      location_translated: '',
+    });
+    expect(container.querySelector('h3')?.textContent).toContain('宮古島近海');
+  });
+
+  it('代替表示は選択中の言語で出る', () => {
+    const { container } = renderWith(emptyLocation, 'en');
+    const text = container.querySelector('h3')?.textContent ?? '';
+    expect(text.trim()).not.toBe('');
+    // 英語表示に日本語が残っていないこと
+    expect(/[぀-ヿ一-鿿]/.test(text)).toBe(false);
+  });
+
+  it('震源地が確定していれば翻訳名をそのまま出す', () => {
+    const { container } = renderWith(
+      { ...emptyLocation, location: '宮城県沖', location_translated: 'Off Miyagi Coast' },
+      'en'
+    );
+    expect(container.querySelector('h3')?.textContent).toBe('Off Miyagi Coast');
+  });
+});

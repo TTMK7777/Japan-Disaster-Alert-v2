@@ -92,6 +92,15 @@ class P2PQuakeService:
     # dict.get(key, 既定値) では拾えない。
     UNDETERMINED = -1
 
+    # 震源地名にも同じ形の番兵が来る。ただし数値ではなく **空文字**:
+    #   {"depth": -1, "latitude": -200, "longitude": -200, "magnitude": -1, "name": ""}
+    # キーは存在するので `hypocenter.get("name", "不明")` は既定値に落ちない。
+    # 素通しすると画面が**高さ 0px の空の見出し**になる（実ブラウザで確認済み）。
+    #
+    # 「不明」ではなく「調査中」にしているのは、震度速報の震源地が
+    # **分からない**のではなく**まだ決まっていない**ため。数分後の続報で確定する。
+    UNDETERMINED_LOCATION = "震源地調査中"
+
     def _completeness(self, eq: EarthquakeInfo) -> int:
         """利用者から見て情報がどれだけ揃っているかの点数。
 
@@ -109,7 +118,7 @@ class P2PQuakeService:
             score += 1
         if eq.depth > self.UNDETERMINED:
             score += 1
-        if eq.location and eq.location != "不明":
+        if eq.location and eq.location not in ("不明", self.UNDETERMINED_LOCATION):
             score += 1
         return score
 
@@ -160,7 +169,9 @@ class P2PQuakeService:
             tsunami_warning = self.TSUNAMI_MAP.get(tsunami, "不明")
 
             # メッセージ生成
-            location = hypocenter.get("name", "不明")
+            # 番兵は「キーが無い」ではなく「空文字が入っている」形で来るので、
+            # get の既定値では拾えない。空白のみも同じ扱いにする
+            location = (hypocenter.get("name") or "").strip() or self.UNDETERMINED_LOCATION
             magnitude = hypocenter.get("magnitude", 0)
             depth = hypocenter.get("depth", 0)
 
@@ -214,7 +225,11 @@ class P2PQuakeService:
         # そのまま書くと「マグニチュード-1、震源の深さは約-1km」という
         # 物理的にありえない文が利用者に届く（実際に画面へ出ていた）。
         # 未確定の項目は数値を騙らず、文ごと省く
-        msg = f"【地震情報】{location}で地震がありました。"
+        if location == self.UNDETERMINED_LOCATION:
+            # 「【地震情報】で地震がありました。」と助詞だけが残る文にしない
+            msg = "【地震情報】地震がありました。震源地は現在調査中です。"
+        else:
+            msg = f"【地震情報】{location}で地震がありました。"
         if magnitude > self.UNDETERMINED:
             msg += f"マグニチュード{magnitude}、最大震度{max_intensity}。"
         else:

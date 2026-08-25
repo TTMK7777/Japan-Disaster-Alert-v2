@@ -40,21 +40,6 @@ body {
 .intensity-6-upper { background-color: #a50021; color: white; }      /* 8.01 */
 .intensity-7 { background-color: #b40068; color: white; }            /* 6.69 */
 
-/* 警報レベル別カラー */
-.alert-advisory { background-color: #fbbf24; color: #333; }
-.alert-warning { background-color: #f97316; color: white; }
-.alert-emergency { background-color: #dc2626; color: white; }
-
-/* アニメーション */
-@keyframes pulse-alert {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.pulse-alert {
-  animation: pulse-alert 1s ease-in-out infinite;
-}
-
 /* Leaflet地図コンテナ */
 .leaflet-container {
   height: 50vh;
@@ -186,9 +171,6 @@ body {
  * 震度の配色は「情報」であって「装飾」ではないので、テーマで変えない。
  * 5弱以上は元から上書きしていなかったため、上書きを外す方が一貫もする。 */
 
-/* ダークモード: 警報レベル別カラー */
-.dark .alert-advisory { background-color: #92400e; color: white; }
-
 /* ========================================
    アクセシビリティ：モーション軽減
    ======================================== */
@@ -198,7 +180,6 @@ body {
   .animate-wave,
   .animate-alert-appear,
   .animate-emergency-pulse,
-  .pulse-alert,
   .current-location-marker div {
     animation: none !important;
   }

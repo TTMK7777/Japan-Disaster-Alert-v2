@@ -22,6 +22,27 @@
 
 # 震源地名の多言語翻訳マッピング
 LOCATION_TRANSLATIONS: dict[str, dict[str, str]] = {
+    # 震度速報（ScalePrompt）の段階では震源地が未確定で、P2P は
+    # hypocenter.name に **空文字** を返す。p2p_service がこの語に置き換えるので、
+    # ここに項目が無いと 15 言語すべてで日本語のまま出る。
+    # 「不明」ではなく「調査中」なのは、分からないのではなく続報で確定するため。
+    "震源地調査中": {
+        "en": "Epicenter being determined",
+        "zh": "震源位置调查中",
+        "zh-TW": "震源位置調查中",
+        "ko": "진앙 조사 중",
+        "vi": "Đang xác định tâm chấn",
+        "th": "กำลังตรวจสอบตำแหน่งศูนย์กลาง",
+        "id": "Pusat gempa sedang ditentukan",
+        "ms": "Pusat gempa sedang ditentukan",
+        "tl": "Tinutukoy pa ang sentro",
+        "fr": "Épicentre en cours de détermination",
+        "de": "Epizentrum wird ermittelt",
+        "it": "Epicentro in corso di determinazione",
+        "es": "Epicentro en determinación",
+        "ne": "केन्द्रबिन्दु पत्ता लगाइँदै",
+        "easy_ja": "どこで おきたか しらべて います",
+    },
     # ===== 北海道 =====
     "北海道北西沖": {
         "en": "Off the northwest coast of Hokkaido",

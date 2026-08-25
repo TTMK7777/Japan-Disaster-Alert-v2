@@ -26,7 +26,14 @@ from .translation_templates import (
     TSUNAMI_TRANSLATIONS,
 )
 from .location_translations import get_location_translation, LOCATION_TRANSLATIONS
+from .location_composer import compose as compose_location
 from ..utils.logger import get_logger
+
+#: 気象庁・P2P が「未確定」を数値欄へ入れてくる番兵値。
+#: p2p_service.P2PQuakeService.UNDETERMINED と同じ値でなければならない。
+#: ここで p2p_service を import すると翻訳層が取得層に依存してしまうため
+#: 値を持ち直し、一致は tests/test_undetermined_location.py で固定している。
+UNDETERMINED = -1
 
 logger = get_logger(__name__)
 
@@ -80,10 +87,18 @@ class TranslatorService:
         if target_lang == "ja":
             return location
 
-        # 1. 静的マッピングを試行
+        # 1. 静的マッピングを試行（手で訳した 82 件。常にこれが最優先）
         static_translation = get_location_translation(location, target_lang)
         if static_translation:
             return static_translation
+
+        # 1.5 形態から組み立てる。
+        # 静的辞書は完全名の丸暗記なので、気象庁の震源地名 400 種余りに対して
+        # ユニークベースで 44.8% が未収録だった（実データ 317 レポートで実測）。
+        # 決定的で費用もかからないので、キャッシュや AI より先に試す。
+        composed = compose_location(location, target_lang)
+        if composed:
+            return composed
 
         # 2. キャッシュを確認
         cache_key = self._cache.make_key(location, target_lang)
@@ -264,6 +279,7 @@ class TranslatorService:
         depth: int,
         tsunami_warning: str,
         tsunami_warning_translated: str,
+        location_pending: bool = False,
     ) -> str:
         """
         地震情報メッセージを多言語で生成
@@ -276,27 +292,128 @@ class TranslatorService:
             depth: 震源の深さ（km）
             tsunami_warning: 津波警報（日本語）
             tsunami_warning_translated: 翻訳済み津波情報
+            location_pending: 震源地が未確定か。翻訳済みの地名を受け取るため
+                この関数からは日本語の番兵を判定できない
 
         Returns:
             翻訳されたメッセージ
         """
-        # 各言語のテンプレート（15言語対応）
-        templates = {
-            "en": "[Earthquake] An earthquake occurred in {location}. Magnitude {magnitude}, Maximum intensity {intensity}. Depth: {depth}km. {tsunami_info}",
-            "zh": "【地震信息】{location}发生地震。震级{magnitude}，最大震度{intensity}。震源深度约{depth}公里。{tsunami_info}",
-            "zh-TW": "【地震資訊】{location}發生地震。規模{magnitude}，最大震度{intensity}。震源深度約{depth}公里。{tsunami_info}",
-            "ko": "【지진정보】{location}에서 지진이 발생했습니다. 규모 {magnitude}, 최대진도 {intensity}. 진원 깊이 약 {depth}km. {tsunami_info}",
-            "vi": "[Động đất] Động đất xảy ra tại {location}. Cường độ {magnitude}, Cường độ tối đa {intensity}. Độ sâu: {depth}km. {tsunami_info}",
-            "th": "[แผ่นดินไหว] เกิดแผ่นดินไหวที่ {location} ขนาด {magnitude} ความรุนแรงสูงสุด {intensity} ความลึก: {depth} กม. {tsunami_info}",
-            "id": "[Gempa] Gempa bumi terjadi di {location}. Magnitudo {magnitude}, Intensitas maksimum {intensity}. Kedalaman: {depth}km. {tsunami_info}",
-            "ms": "[Gempa Bumi] Gempa bumi berlaku di {location}. Magnitud {magnitude}, Keamatan maksimum {intensity}. Kedalaman: {depth}km. {tsunami_info}",
-            "tl": "[Lindol] Nagkaroon ng lindol sa {location}. Magnitude {magnitude}, Pinakamataas na intensity {intensity}. Lalim: {depth}km. {tsunami_info}",
-            "fr": "[Séisme] Un séisme s'est produit à {location}. Magnitude {magnitude}, Intensité maximale {intensity}. Profondeur: {depth}km. {tsunami_info}",
-            "de": "[Erdbeben] Ein Erdbeben ereignete sich in {location}. Magnitude {magnitude}, Maximale Intensität {intensity}. Tiefe: {depth}km. {tsunami_info}",
-            "it": "[Terremoto] Si è verificato un terremoto a {location}. Magnitudo {magnitude}, Intensità massima {intensity}. Profondità: {depth}km. {tsunami_info}",
-            "es": "[Terremoto] Ocurrió un terremoto en {location}. Magnitud {magnitude}, Intensidad máxima {intensity}. Profundidad: {depth}km. {tsunami_info}",
-            "ne": "[भूकम्प] {location} मा भूकम्प आयो। म्याग्निच्युड {magnitude}, अधिकतम तीव्रता {intensity}। गहिराई: {depth} किमी। {tsunami_info}",
-            "easy_ja": "【じしん】{location}で じしんが ありました。つよさは {intensity} です。ふかさは {depth}キロメートル。{tsunami_info}",
+        # 断片方式。日本語版 P2PQuakeService._generate_message の分岐と 1:1 で対応する。
+        # 丸ごとテンプレートに magnitude/depth を無条件で流すと、震度速報の番兵値
+        # (-1) がそのまま「Magnitude -1」「Depth: -1km」として 15 言語に出る。
+        #
+        # headline_pending: 震源地が未確定のとき。翻訳済みの地名を受け取る都合上
+        #   この関数からは日本語の番兵を判定できないので、呼び出し側が
+        #   location_pending で伝える。
+        # magnitude_pending: 規模が未確定のとき。震度だけは出せるので残す。
+        # easy_ja はマグニチュードという概念自体を出さない方針なので、
+        #   magnitude と magnitude_pending が同じ文になる（意図的）。
+        fragments = {
+            "en": {
+                "headline": "[Earthquake] An earthquake occurred in {location}. ",
+                "headline_pending": "[Earthquake] An earthquake occurred. The epicenter is being determined. ",
+                "magnitude": "Magnitude {magnitude}, maximum intensity {intensity}. ",
+                "magnitude_pending": "Maximum intensity {intensity}. The magnitude is being determined. ",
+                "depth": "Depth: about {depth}km. ",
+            },
+            "zh": {
+                "headline": "【地震信息】{location}发生地震。",
+                "headline_pending": "【地震信息】发生地震。震源位置正在调查中。",
+                "magnitude": "震级{magnitude}，最大震度{intensity}。",
+                "magnitude_pending": "最大震度{intensity}。震级正在调查中。",
+                "depth": "震源深度约{depth}公里。",
+            },
+            "zh-TW": {
+                "headline": "【地震資訊】{location}發生地震。",
+                "headline_pending": "【地震資訊】發生地震。震源位置調查中。",
+                "magnitude": "規模{magnitude}，最大震度{intensity}。",
+                "magnitude_pending": "最大震度{intensity}。規模調查中。",
+                "depth": "震源深度約{depth}公里。",
+            },
+            "ko": {
+                "headline": "【지진정보】{location}에서 지진이 발생했습니다. ",
+                "headline_pending": "【지진정보】지진이 발생했습니다. 진앙은 현재 조사 중입니다. ",
+                "magnitude": "규모 {magnitude}, 최대진도 {intensity}. ",
+                "magnitude_pending": "최대진도 {intensity}. 규모는 현재 조사 중입니다. ",
+                "depth": "진원 깊이 약 {depth}km. ",
+            },
+            "vi": {
+                "headline": "[Động đất] Động đất xảy ra tại {location}. ",
+                "headline_pending": "[Động đất] Đã xảy ra động đất. Tâm chấn đang được xác định. ",
+                "magnitude": "Cường độ {magnitude}, cường độ tối đa {intensity}. ",
+                "magnitude_pending": "Cường độ tối đa {intensity}. Cường độ đang được xác định. ",
+                "depth": "Độ sâu: khoảng {depth}km. ",
+            },
+            "th": {
+                "headline": "[แผ่นดินไหว] เกิดแผ่นดินไหวที่ {location} ",
+                "headline_pending": "[แผ่นดินไหว] เกิดแผ่นดินไหว กำลังตรวจสอบตำแหน่งศูนย์กลาง ",
+                "magnitude": "ขนาด {magnitude} ความรุนแรงสูงสุด {intensity} ",
+                "magnitude_pending": "ความรุนแรงสูงสุด {intensity} กำลังตรวจสอบขนาด ",
+                "depth": "ความลึก: ประมาณ {depth} กม. ",
+            },
+            "id": {
+                "headline": "[Gempa] Gempa bumi terjadi di {location}. ",
+                "headline_pending": "[Gempa] Terjadi gempa bumi. Pusat gempa sedang ditentukan. ",
+                "magnitude": "Magnitudo {magnitude}, intensitas maksimum {intensity}. ",
+                "magnitude_pending": "Intensitas maksimum {intensity}. Magnitudo sedang ditentukan. ",
+                "depth": "Kedalaman: sekitar {depth}km. ",
+            },
+            "ms": {
+                "headline": "[Gempa Bumi] Gempa bumi berlaku di {location}. ",
+                "headline_pending": "[Gempa Bumi] Gempa bumi telah berlaku. Pusat gempa sedang ditentukan. ",
+                "magnitude": "Magnitud {magnitude}, keamatan maksimum {intensity}. ",
+                "magnitude_pending": "Keamatan maksimum {intensity}. Magnitud sedang ditentukan. ",
+                "depth": "Kedalaman: kira-kira {depth}km. ",
+            },
+            "tl": {
+                "headline": "[Lindol] Nagkaroon ng lindol sa {location}. ",
+                "headline_pending": "[Lindol] Nagkaroon ng lindol. Tinutukoy pa ang sentro nito. ",
+                "magnitude": "Magnitude {magnitude}, pinakamataas na intensity {intensity}. ",
+                "magnitude_pending": "Pinakamataas na intensity {intensity}. Tinutukoy pa ang magnitude. ",
+                "depth": "Lalim: humigit-kumulang {depth}km. ",
+            },
+            "fr": {
+                "headline": "[Séisme] Un séisme s'est produit à {location}. ",
+                "headline_pending": "[Séisme] Un séisme s'est produit. L'épicentre est en cours de détermination. ",
+                "magnitude": "Magnitude {magnitude}, intensité maximale {intensity}. ",
+                "magnitude_pending": "Intensité maximale {intensity}. La magnitude est en cours de détermination. ",
+                "depth": "Profondeur : environ {depth} km. ",
+            },
+            "de": {
+                "headline": "[Erdbeben] Ein Erdbeben ereignete sich in {location}. ",
+                "headline_pending": "[Erdbeben] Ein Erdbeben hat sich ereignet. Das Epizentrum wird noch ermittelt. ",
+                "magnitude": "Magnitude {magnitude}, maximale Intensität {intensity}. ",
+                "magnitude_pending": "Maximale Intensität {intensity}. Die Magnitude wird noch ermittelt. ",
+                "depth": "Tiefe: etwa {depth} km. ",
+            },
+            "it": {
+                "headline": "[Terremoto] Si è verificato un terremoto a {location}. ",
+                "headline_pending": "[Terremoto] Si è verificato un terremoto. L'epicentro è in corso di determinazione. ",
+                "magnitude": "Magnitudo {magnitude}, intensità massima {intensity}. ",
+                "magnitude_pending": "Intensità massima {intensity}. La magnitudo è in corso di determinazione. ",
+                "depth": "Profondità: circa {depth} km. ",
+            },
+            "es": {
+                "headline": "[Terremoto] Ocurrió un terremoto en {location}. ",
+                "headline_pending": "[Terremoto] Ocurrió un terremoto. El epicentro se está determinando. ",
+                "magnitude": "Magnitud {magnitude}, intensidad máxima {intensity}. ",
+                "magnitude_pending": "Intensidad máxima {intensity}. La magnitud se está determinando. ",
+                "depth": "Profundidad: unos {depth} km. ",
+            },
+            "ne": {
+                "headline": "[भूकम्प] {location} मा भूकम्प आयो। ",
+                "headline_pending": "[भूकम्प] भूकम्प आयो। भूकम्पको केन्द्रबिन्दु पत्ता लगाइँदै छ। ",
+                "magnitude": "म्याग्निच्युड {magnitude}, अधिकतम तीव्रता {intensity}। ",
+                "magnitude_pending": "अधिकतम तीव्रता {intensity}। म्याग्निच्युड पत्ता लगाइँदै छ। ",
+                "depth": "गहिराई: लगभग {depth} किमी। ",
+            },
+            "easy_ja": {
+                "headline": "【じしん】{location}で じしんが ありました。",
+                "headline_pending": "【じしん】じしんが ありました。どこで おきたか いま しらべて います。",
+                "magnitude": "つよさは {intensity} です。",
+                "magnitude_pending": "つよさは {intensity} です。",
+                "depth": "ふかさは やく {depth}キロメートル。",
+            },
         }
 
         # 津波情報のテンプレート（15言語対応）
@@ -318,7 +435,7 @@ class TranslatorService:
             "easy_ja": {"safe": "この じしんで つなみの しんぱいは ありません。", "warning": "つなみ じょうほう: {warning}。"},
         }
 
-        template = templates.get(lang, templates["en"])
+        parts = fragments.get(lang, fragments["en"])
         tsunami_template = tsunami_templates.get(lang, tsunami_templates["en"])
 
         # 津波情報の生成
@@ -327,13 +444,20 @@ class TranslatorService:
         else:
             tsunami_info = tsunami_template["warning"].format(warning=tsunami_warning_translated)
 
-        return template.format(
-            location=location,
-            magnitude=magnitude,
-            intensity=intensity,
-            depth=depth,
-            tsunami_info=tsunami_info,
-        )
+        if location_pending or not str(location).strip():
+            message = parts["headline_pending"]
+        else:
+            message = parts["headline"].format(location=location)
+
+        if magnitude > UNDETERMINED:
+            message += parts["magnitude"].format(magnitude=magnitude, intensity=intensity)
+        else:
+            message += parts["magnitude_pending"].format(intensity=intensity)
+
+        if depth > UNDETERMINED:
+            message += parts["depth"].format(depth=depth)
+
+        return message + tsunami_info
 
     # ------------------------------------------------------------------
     # 警報テキスト生成

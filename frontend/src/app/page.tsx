@@ -6,6 +6,7 @@ import LanguageSelector from '@/components/LanguageSelector';
 import EarthquakeList from '@/components/EarthquakeList';
 import EmergencyAlert from '@/components/EmergencyAlert';
 import WarningBanner from '@/components/WarningBanner';
+import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
 import TransitLinks from '@/components/TransitLinks';
 import ConnectionStatus from '@/components/ConnectionStatus';
@@ -435,8 +436,11 @@ export default function Home() {
           )}
 
           {activeTab === 'warning' && (
-            <div id="tabpanel-warning" role="tabpanel" aria-labelledby="tab-warning" tabIndex={0}>
+            <div id="tabpanel-warning" role="tabpanel" aria-labelledby="tab-warning" tabIndex={0} className="space-y-6">
               <WarningBanner language={language} />
+              {/* 噴火警報。気象庁の階級では警報の一種なので同じタブに置く。
+                  タブを 5 つに増やすとモバイル幅でナビが破綻する */}
+              <VolcanoWarnings language={language} />
             </div>
           )}
 

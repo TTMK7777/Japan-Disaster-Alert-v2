@@ -22,10 +22,10 @@
 ## Testing / Proof
 変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
 
-| 層 | コマンド | 件数（2026-08-04 実測） |
+| 層 | コマンド | 件数（2026-08-25 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 1031 |
-| Frontend unit | `cd frontend && npm run test:run` | 126 |
+| Backend unit | `cd backend && pytest tests/ -v` | 1418 |
+| Frontend unit | `cd frontend && npm run test:run` | 367 |
 | Frontend E2E | 下記「E2E を動かすとき」を参照 | 33（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
@@ -61,7 +61,7 @@ node ./node_modules/@playwright/test/cli.js test --config playwright.local-chrom
    これが無かったため **28件中12件が壊れたまま放置されていた**（E2E は CI 未実行で気付けない）。
    新しいテストは言語に依存しないよう `#tab-emergency` のような **id で要素を選ぶ**
 
-## 気象庁 API の落とし穴（2026-08-01 に4件まとめて踏んだ）
+## 気象庁 API の落とし穴（2026-08-01 に4件、2026-08-25 に1件）
 
 **合成フィクスチャで緑になっても、実レスポンスに当てるまで信用しない。**
 以下はすべて「自分が想像した形」のフィクスチャで緑だったが、本番では壊れていた。
@@ -80,9 +80,20 @@ node ./node_modules/@playwright/test/cli.js test --config playwright.local-chrom
 4. **`areaTypes` は2階層。** `[0]` が一次細分区域（6桁）、`[1]` が市町村（7桁）。
    両方を混ぜて表示すると市町村30件が読点で連なる
 
+5. **火山警報の URL は火山ごとではない。** `bosai/volcano/data/warning/{火山コード}.json`
+   という形の URL は**存在しない**（404）。正しくは `bosai/volcano/data/warning.json`
+   の 1 本に発表中の警報がすべて入る。前者を叩いていたため、例外を握って
+   **噴火警報が一度もゼロ件以外にならなかった**（誰も気づかないまま残っていた）。
+   なお `volcano_list.json` の `code` は**文字列**で、int と比較すると常に False になる
+
 実データでの受け入れ確認は `python scripts/verify_warnings_live.py`（要 UTF-8 リダイレクト）。
 **「0 件」は「警報が無い」とは限らない**（404 でも 0 件になる）ので、
 コードが実在する予報区かは `backend/tests/test_area_codes_coverage.py` が固定している。
+
+> **この 5 件はすべて「エラーにならない失敗」だった。** 新しいエンドポイントを
+> 足すときは、そのURLが実際に 200 を返すことを **httpx で 1 回叩いて確かめてから**
+> 実装する。例外を握って `[]` を返す実装は、間違った URL と「本当に 0 件」を
+> 区別できない。
 
 ## クライアント挙動の検証（重要な落とし穴）
 
