@@ -47,6 +47,7 @@ const COMPONENT_KEYS = [
   'warning.noWarnings',
   'warning.error',
   'warning.issuedAt',
+  'warning.continuing',
   'warning.specialWarning',
   'warning.severityWarning',
   'warning.advisory',

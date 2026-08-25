@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import VolcanoWarnings from '../VolcanoWarnings';
 
 /**
@@ -74,6 +74,32 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('継続中の噴火警報', () => {
+  /**
+   * 桜島や硫黄島のように十数年前から出続けている警報がある。
+   * 発表日時だけを相対表示すると「14 年前」となり、**もう終わった情報**に見える。
+   * 実際には今も出ているので、継続中はバッジで前面に出し相対時刻は出さない。
+   */
+  it('継続中の警報にはバッジが出て、相対時刻は出ない', async () => {
+    mockFetch([NO_LEVEL]);
+    render(<VolcanoWarnings language="ja" />);
+
+    const item = await screen.findByRole('listitem');
+    expect(within(item).getByText('継続中')).toBeInTheDocument();
+    // "(17 年前)" のような相対時刻が付いていないこと（時刻表記は括弧の外）
+    expect(/\((?!.*\d{1,2}:\d{2}).*\)/.test(item.textContent ?? '')).toBe(false);
+  });
+
+  it('継続中でない警報にはバッジが出ず、相対時刻は残る', async () => {
+    mockFetch([LEVEL3]);
+    render(<VolcanoWarnings language="ja" />);
+
+    const item = await screen.findByRole('listitem');
+    expect(within(item).queryByText('継続中')).not.toBeInTheDocument();
+    expect(/\((?!.*\d{1,2}:\d{2}).*\)/.test(item.textContent ?? '')).toBe(true);
+  });
+});
+
 describe('VolcanoWarnings', () => {
   it('発表中の警報を描画する', async () => {
     mockFetch([LEVEL3, NO_LEVEL, ADVISORY]);
@@ -102,7 +128,8 @@ describe('VolcanoWarnings', () => {
     mockFetch([LEVEL3, NO_LEVEL]);
     const { container } = render(<VolcanoWarnings language="en" />);
     await waitFor(() => expect(screen.getByText('Asosan')).toBeTruthy());
-    const badges = [...container.querySelectorAll('span.rounded')].map((b) => b.textContent);
+    // 「継続中」は階級ではないので、レベルのバッジだけを数える
+    const badges = [...container.querySelectorAll('[data-badge="level"]')].map((b) => b.textContent);
     expect(badges).toContain('Alert Level 3');
     // 空のバッジ枠を描かない
     expect(badges.every((b) => b && b.trim().length > 0)).toBe(true);

@@ -218,3 +218,13 @@ export function badgeClassName(severity: WarningSeverity): string {
   const s = SEVERITY_STYLES[severity];
   return [s.light.badgeBg, s.light.badgeText, s.dark.badgeBg, s.dark.badgeText].join(' ');
 }
+
+/**
+ * 「継続中」バッジ。階級バッジと同じ塗りにすると **「塗りつぶし = 階級」という符号が
+ * 二重になる**（継続中は階級ではない）ので、こちらは meta と同じ文字色 + 同色の枠線で表す。
+ * 新しい色トークンを足さないため、meta について既に取ってあるコントラスト保証が
+ * そのまま効く（`border-current` は文字色を継承する）。
+ */
+export function continuingBadgeClassName(severity: WarningSeverity): string {
+  return `${metaClassName(severity)} border border-current`;
+}

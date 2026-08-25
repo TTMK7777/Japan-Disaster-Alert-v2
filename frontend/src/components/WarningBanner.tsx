@@ -10,6 +10,7 @@ import {
   cardClassName,
   metaClassName,
   badgeClassName,
+  continuingBadgeClassName,
 } from '@/lib/warningSeverity';
 
 interface Warning {
@@ -95,6 +96,7 @@ const WARNING_KEYS = {
   issuedAt: 'warning.issuedAt',
   // 継続中の警報向け。中央の翻訳表に16言語で既にあるものを流用する
   lastUpdate: 'lastUpdate',
+  continuing: 'warning.continuing',
   // 階級ラベル (特別警報 / 警報 / 注意報) のキーは lib/warningSeverity.ts の
   // labelKey が持つ。階級と表示の対応を 1 箇所に集めるためここには置かない
   selectArea: 'warning.selectArea',
@@ -260,7 +262,13 @@ export default function WarningBanner({
           role="alert" が付いていたため、注意報が並ぶ日は読み上げが割り込みで埋まった */}
       <ul className="space-y-3">
       {warnings.map((warning) => {
-        const relativeIssuedAt = formatRelativeTime(warning.issued_at, getLocale(language));
+        // 継続中の警報では相対時刻を出さない。気象庁は内容が変わらない限り
+        // reportDatetime を更新しないため、伊豆諸島の注意報のように 3 か月前の
+        // 日時が入る。単独の「3 か月前」は**情報が古い＝壊れている**と読まれるが、
+        // 実際には「今も出ている」。継続中であることは下のバッジで前面に出す。
+        const relativeIssuedAt = warning.is_continuing
+          ? ''
+          : formatRelativeTime(warning.issued_at, getLocale(language));
         // 気象庁の 3 階級へ畳む。medium と low はどちらも「注意報」だが、
         // 従来はラベルが同じまま黄と青に塗り分けられていた（lib/warningSeverity.ts 参照）
         const severity = normalizeSeverity(warning.severity);
@@ -286,8 +294,13 @@ export default function WarningBanner({
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 {severityLabel && (
-                  <span className={`px-2 py-0.5 text-xs font-bold rounded ${badgeClassName(severity)}`}>
+                  <span data-badge="severity" className={`px-2 py-0.5 text-xs font-bold rounded ${badgeClassName(severity)}`}>
                     {severityLabel}
+                  </span>
+                )}
+                {warning.is_continuing && (
+                  <span data-badge="continuing" className={`px-2 py-0.5 text-xs font-bold rounded ${continuingBadgeClassName(severity)}`}>
+                    {t('continuing')}
                   </span>
                 )}
                 <h4 className="font-bold">
