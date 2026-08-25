@@ -185,6 +185,17 @@ TSUNAMI_TRANSLATIONS: dict[str, dict[str, str]] = {
 
 # 震度翻訳（JMA震度階級、10震度 x 16言語）
 INTENSITY_TRANSLATIONS: dict[str, dict[str, str]] = {
+    # 震源速報（Destination）は maxScale=0 で届き、INTENSITY_MAP に該当が無いので
+    # "不明" になる。実データの 9.5% がこれ。ここに項目が無いと
+    # translate_intensity が既定値として引数をそのまま返し、
+    # **15 言語すべてに日本語の「不明」が漏れる**（震度バッジと本文の両方）。
+    "不明": {
+        "ja": "震度不明", "en": "Unknown", "zh": "未知", "zh-TW": "未知", "ko": "불명",
+        "vi": "Chưa rõ", "th": "ไม่ทราบ", "id": "Tidak diketahui", "ms": "Tidak diketahui",
+        "tl": "Hindi alam", "fr": "Inconnue", "de": "Unbekannt", "it": "Sconosciuta",
+        "es": "Desconocida", "ne": "अज्ञात",
+        "easy_ja": "わかりません",
+    },
     "0": {
         "ja": "震度0", "en": "0", "zh": "0", "zh-TW": "0", "ko": "0",
         "vi": "0", "th": "0", "id": "0", "ms": "0", "tl": "0",

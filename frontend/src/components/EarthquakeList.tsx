@@ -38,8 +38,18 @@ function getIntensityClass(intensity: string): string {
 }
 
 // 表示用のテキストを取得（翻訳があれば翻訳版を表示）
-function getDisplayLocation(eq: Earthquake): string {
-  return eq.location_translated || eq.location;
+/**
+ * 震源地の表示名。
+ *
+ * バックエンドは震源が未確定のとき「震源地調査中」（と各言語訳）を入れるので
+ * 通常ここが空になることはない。それでも最後の砦を置いているのは、
+ * P2P が返す `hypocenter.name` は**キーが存在したうえで空文字**という形をとり、
+ * 素通しすると見出しが**高さ 0px の空要素**になるため（実ブラウザで再現済み）。
+ * API 側の退行がそのまま「文字が消えた画面」になるのを防ぐ。
+ */
+function getDisplayLocation(eq: Earthquake, language: string): string {
+  const name = (eq.location_translated || eq.location || '').trim();
+  return name || getTranslation(language, 'map.noLocation');
 }
 
 function getDisplayMessage(eq: Earthquake): string {
@@ -70,7 +80,7 @@ const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }
           1枚のカードに2回ずつ出ていた（英語は "Intensity 4" と "Strong" で
           重複しないので、言語によって崩れる=構造側の問題として直している） */}
       <div className={`${getIntensityClass(eq.max_intensity)} px-4 py-2.5 flex justify-between items-baseline gap-3`}>
-        <h3 className="font-bold text-lg min-w-0 break-words">{getDisplayLocation(eq)}</h3>
+        <h3 className="font-bold text-lg min-w-0 break-words">{getDisplayLocation(eq, language)}</h3>
         <span className="text-sm opacity-80 shrink-0 tabular-nums">{eq.time}</span>
       </div>
 

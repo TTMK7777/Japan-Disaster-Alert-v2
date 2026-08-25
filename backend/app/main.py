@@ -348,10 +348,13 @@ async def get_earthquakes(request: Request, limit: int = Query(default=10, ge=1,
                 lang=lang,
                 location=eq.location_translated,
                 magnitude=eq.magnitude,
-                intensity=eq.max_intensity,
+                # 翻訳前の値を渡すと震度が「不明」のとき本文に日本語が混ざる
+                intensity=eq.max_intensity_translated or eq.max_intensity,
                 depth=eq.depth,
                 tsunami_warning=eq.tsunami_warning,
-                tsunami_warning_translated=eq.tsunami_warning_translated
+                tsunami_warning_translated=eq.tsunami_warning_translated,
+                # 翻訳済みの地名からは番兵を判定できないので原文で判定して渡す
+                location_pending=(eq.location == P2PQuakeService.UNDETERMINED_LOCATION),
             )
 
     return earthquakes
