@@ -8,9 +8,12 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **SSE Real-time Streaming** — Server-Sent Events for instant disaster updates with polling fallback
 - **JMA Weather Alerts** — Prefecture-level weather warnings via Japan Meteorological Agency API
 - **16-Language Support** — Covers the top 10 tourist-origin countries visiting Japan (2024), plus residents
-- **Hybrid Translation Engine** — Three-layer approach: static location mapping → AI translation (Gemini/Claude) → DB-backed cache
+- **Hybrid Translation Engine** — Four-layer approach: hand-curated location mapping → morphology-based name composition (100% coverage of real epicenter names) → DB-backed cache → AI translation (Gemini/Claude)
 - **Regional Notifications** — Prefecture-based push notification preferences with earthquake threshold filtering
-- **Shelter Finder** — Nearby evacuation shelter search based on current location
+- **Shelter Finder** — 115,674 official evacuation sites nationwide (GSI open data, bundled for offline use), grid-indexed nearby search
+- **Volcanic Warnings** — Live JMA eruption alerts (alert levels 1-5) in 16 languages, severity keyed to traveler impact
+- **Intensity Impact Card** — What each seismic intensity means for rail, highways, and utilities, sourced from the official JMA scale tables
+- **Offline Maps** — GSI map tiles cached by the service worker; maps keep working with no connection
 - **Dark Mode** — Light / Dark / System theme with persistent preference and FOUT prevention
 - **PWA Ready** — Installable on Android/iOS with offline support, app icons, and install prompts
 - **Push Notifications** — Real-time earthquake/tsunami alerts via Web Push (VAPID)
@@ -18,7 +21,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
 - **Official Transit Links** — Curated official rail / air / road information sources, with each link's language availability shown before you tap it
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 1,190 tests (pytest backend 1031, Vitest unit 126, Playwright E2E 33)
+- **Comprehensive Testing** — 1,852 tests (pytest backend 1438, Vitest unit 381, Playwright E2E 33), mutation-checked regression suites
 
 ## Supported Languages
 
@@ -57,7 +60,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Next.js 15** with **React 19** and **TypeScript**
 - **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
-- **Vitest** + **React Testing Library** — unit testing (126 tests)
+- **Vitest** + **React Testing Library** — unit testing (381 tests)
 - **Playwright** — E2E testing (32 tests)
 - **PWA** — Service Worker for offline capability
 
@@ -207,7 +210,7 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
-│   │   │   └── __tests__/               # Vitest unit tests (126 tests)
+│   │   │   └── __tests__/               # Vitest unit tests (381 tests)
 │   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
@@ -236,7 +239,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -v               # 1031 tests
+pytest tests/ -v               # 1438 tests
 ```
 
 ### Frontend (Vitest)
@@ -244,7 +247,7 @@ pytest tests/ -v               # 1031 tests
 ```bash
 cd frontend
 npm install
-npm run test:run     # 126 unit tests
+npm run test:run     # 381 unit tests
 ```
 
 ### E2E (Playwright)
