@@ -37,9 +37,14 @@ function IntensityImpact({ intensity, language }: IntensityImpactProps) {
   return (
     <section
       className="mt-3 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 overflow-hidden"
-      aria-label={text('heading')}
+      /* aria-label に同じ文言を持たせると「見出しX、リージョンX」と二重に
+         読み上げられる。可視の見出しを名前として参照する */
+      aria-labelledby={`intensity-impact-heading-${intensity}`}
     >
-      <h4 className="px-3 py-2 text-sm font-bold text-slate-900 dark:text-slate-100 bg-slate-200/70 dark:bg-slate-700/60">
+      <h4
+        id={`intensity-impact-heading-${intensity}`}
+        className="px-3 py-2 text-sm font-bold text-slate-900 dark:text-slate-100 bg-slate-200/70 dark:bg-slate-700/60"
+      >
         {text('heading')}
       </h4>
 

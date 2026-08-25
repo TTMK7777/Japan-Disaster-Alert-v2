@@ -21,12 +21,15 @@ export default function ServiceWorkerRegistration() {
             installingWorker.onstatechange = () => {
               if (installingWorker.state === 'installed') {
                 if (navigator.serviceWorker.controller) {
-                  // 新しいバージョンが利用可能
-                  console.log('[App] New Service Worker available');
-                  // オプション: ユーザーに更新を促す
-                  if (window.confirm('新しいバージョンが利用可能です。更新しますか？')) {
-                    window.location.reload();
-                  }
+                  // 新しいバージョンが利用可能。
+                  // **確認ダイアログは出さない。** sw.js は skipWaiting() +
+                  // clients.claim() で即時に制御を取る設計（災害情報アプリは
+                  // 常に最新のロジックで動くべき）なので、ダイアログが出る
+                  // 時点で新 SW は既に fetch を握っており「更新しますか？」は
+                  // 実効性のない選択だった。しかも文言が日本語固定で、
+                  // 16 言語アプリの非日本語話者には読めない全画面ブロックだった。
+                  // ページ資産は次の再読み込みで自然に新しくなる
+                  console.log('[App] New Service Worker activated');
                 } else {
                   // 初回インストール完了
                   console.log('[App] Service Worker installed for the first time');

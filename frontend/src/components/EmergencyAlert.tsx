@@ -1,7 +1,7 @@
 'use client';
 
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { EarthquakeIcon, TsunamiIcon, AlertIcon } from './icons/DisasterIcons';
 import { getLocale } from '@/i18n/translations';
 import { API_BASE_URL } from '@/config/api';
@@ -276,14 +276,23 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
 
   // props（SSE）が来ていればそれを、無ければ初回取得分を使う
   const effectiveTsunamis = tsunamis ?? fetchedTsunamis;
-  const derivedAlert = selectAlert(effectiveTsunamis);
+  const derivedAlert = useMemo(() => selectAlert(effectiveTsunamis), [effectiveTsunamis]);
   const showDerived = shouldDisplay(derivedAlert, dismissed);
 
-  const activeAlert: AlertData | null =
-    manualAlert ??
-    (showDerived && derivedAlert
-      ? buildAlertContent(derivedAlert.dismissKey, 'tsunami', derivedAlert.severity)
-      : null);
+  // **useMemo は必須。** buildAlertContent は timestamp: new Date() を含む
+  // 新規オブジェクトを毎回返すため、素で導出するとレンダーごとに参照が変わる。
+  // 下のカウントダウン effect が [activeAlert] を依存に持つと、1 秒ごとの
+  // setCountdown 自体が再レンダー → 新参照 → effect 再実行 → setCountdown(30)
+  // という振動になり、**注意報が永遠に自動で閉じない**（実際にそうなっていた）。
+  // 表示中の発表時刻がレンダーごとに現在時刻へ進む問題も同時に直る
+  const activeAlert: AlertData | null = useMemo(
+    () =>
+      manualAlert ??
+      (showDerived && derivedAlert
+        ? buildAlertContent(derivedAlert.dismissKey, 'tsunami', derivedAlert.severity)
+        : null),
+    [manualAlert, showDerived, derivedAlert]
+  );
   const isVisible = activeAlert !== null;
 
   const handleDismiss = useCallback(() => {
@@ -297,15 +306,66 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
   // 自動解除カウントダウン。**津波警報・大津波警報は自動で閉じない。**
   // 全画面を占有してでも見てもらう設計なのに、見ていなくても数秒で
   // 消えるのでは意味がない（canAutoDismiss がその判断を持つ）
+  // 依存はオブジェクト参照ではなく**警報の同一性（id）**。SSE の再配信などで
+  // 同じ警報のオブジェクトが作り直されてもカウントダウンはリセットされず、
+  // 別の警報（または引き上げ = dismissKey が変わる）が来たときだけ 30 秒から数え直す
+  const autoDismissKey =
+    activeAlert !== null && canAutoDismiss(activeAlert.level) ? activeAlert.id : null;
   useEffect(() => {
-    if (activeAlert && canAutoDismiss(activeAlert.level) && isVisible) {
-      setCountdown(30);
-      const timer = setInterval(() => {
-        setCountdown((prev) => (prev === null ? null : prev - 1));
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, [activeAlert, isVisible]);
+    if (autoDismissKey === null) return;
+    setCountdown(30);
+    const timer = setInterval(() => {
+      setCountdown((prev) => (prev === null ? null : prev - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [autoDismissKey]);
+
+  // フォーカス管理。role="alertdialog" + aria-modal="true" は「背後は操作不可」を
+  // **宣言するだけ**で、実装しなければキーボード利用者は Tab でオーバーレイの
+  // 背後（視覚的には完全に隠れている言語切替やタブナビ）へ抜けてしまう。
+  // 本アプリで最も重要な画面（津波警報の全画面表示）なので、
+  // 表示時に最初のボタンへフォーカスを移し、Tab をダイアログ内で循環させ、
+  // 閉じたら元の位置へ戻す
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!isVisible) return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const previouslyFocused =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    const focusables = () =>
+      Array.from(
+        dialog.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, [tabindex]:not([tabindex="-1"])'
+        )
+      );
+    (focusables()[0] ?? dialog).focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const items = focusables();
+      if (items.length === 0) {
+        event.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const last = items[items.length - 1];
+      const current = document.activeElement;
+      if (event.shiftKey && (current === first || !dialog.contains(current))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (current === last || !dialog.contains(current))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    dialog.addEventListener('keydown', onKeyDown);
+    return () => {
+      dialog.removeEventListener('keydown', onKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [isVisible]);
 
   // カウントダウン完了で自動解除（setState updater内での副作用を避ける）
   useEffect(() => {
@@ -347,6 +407,8 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
 
   return (
     <div
+      ref={dialogRef}
+      tabIndex={-1}
       className={`fixed inset-0 z-[9999] flex items-center justify-center ${style.overlay} ${
         style.pulse ? 'animate-emergency-pulse' : ''
       }`}

@@ -503,7 +503,11 @@ export default function ShelterMap({ language }: ShelterMapProps) {
           distance: raw.distance,
           // API は types（複数形）、画面側は type。ここで合わせる。
           // 型が食い違ったまま放置されていたのは、そもそも繋がっていなかったため
-          type: (raw.types ?? []) as ShelterType[],
+          // as キャストは実行時検証をしない。未知の値が混ざると
+          // shelterTypeColors[type] が undefined になり、マーカーが無色になる
+          type: ((raw.types ?? []) as string[]).filter(
+            (t): t is ShelterType => t in shelterTypeColors
+          ),
           // 収容人数・設備・電話番号は配布データに無い。空で埋め、UI 側も出さない
           facilities: [],
         }))
