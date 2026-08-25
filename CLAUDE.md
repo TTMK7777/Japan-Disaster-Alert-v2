@@ -24,8 +24,8 @@
 
 | 層 | コマンド | 件数（2026-08-25 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 1418 |
-| Frontend unit | `cd frontend && npm run test:run` | 367 |
+| Backend unit | `cd backend && pytest tests/ -v` | 1438 |
+| Frontend unit | `cd frontend && npm run test:run` | 381 |
 | Frontend E2E | 下記「E2E を動かすとき」を参照 | 33（CI 未実行） |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
