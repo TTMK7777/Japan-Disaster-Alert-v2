@@ -265,3 +265,45 @@ class TestCompletenessLocationTerm:
         pending = self._eq(P2PQuakeService.UNDETERMINED_LOCATION)
         known = self._eq("宮古島近海")
         assert service._deduplicate([pending, known])[0].location == "宮古島近海"
+
+
+class TestUntrustedInputBounds:
+    """P2P API は信頼できない外部入力。異常値が下流へ無制限に伝播しないこと。"""
+
+    def test_異常に長い震源地名は上限で切られる(self, service):
+        data = _scale_prompt()
+        data["earthquake"]["hypocenter"]["name"] = "あ" * 10_000
+        eq = service._parse_earthquake(data)
+        assert eq is not None
+        assert len(eq.location) <= P2PQuakeService.MAX_LOCATION_LENGTH
+        # message は location から組み立てるので、これも有界になる
+        assert len(eq.message) <= P2PQuakeService.MAX_LOCATION_LENGTH + 200
+
+    def test_実在する最長級の震源地名は切られない(self, service):
+        data = _detail(name="熊本県天草・芦北地方")
+        eq = service._parse_earthquake(data)
+        assert eq.location == "熊本県天草・芦北地方"
+
+    @pytest.mark.asyncio
+    async def test_壊れたJSONで500にならず空リストへ落ちる(self, service, monkeypatch):
+        """200 のまま壊れた本文（切断・プロキシ改変等）が返っても
+        docstring の約束どおり空リストへグレースフルデグレードすること。
+        json.JSONDecodeError は httpx.HTTPError の子ではないので、
+        except を広げていないと素通りして 500 になる。
+        """
+        import json as json_module
+
+        class _BrokenResponse:
+            def raise_for_status(self):
+                return None
+
+            def json(self):
+                raise json_module.JSONDecodeError("Expecting value", "<html>", 0)
+
+        class _Client:
+            async def get(self, url, params=None, timeout=None):
+                return _BrokenResponse()
+
+        monkeypatch.setattr(service, "_get_client", lambda: _Client())
+        result = await service.get_recent_earthquakes(limit=10)
+        assert result == []

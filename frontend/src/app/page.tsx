@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Component, ReactNode } from 'react';
+import { useState, useEffect, useCallback, useRef, Component, ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import LanguageSelector from '@/components/LanguageSelector';
 import EarthquakeList from '@/components/EarthquakeList';
@@ -147,24 +147,32 @@ export default function Home() {
     [language]
   );
 
-  // 地震データの取得（ポーリングフォールバック・手動リトライ用）
+  // 地震データの取得（ポーリングフォールバック・手動リトライ用）。
+  // **前回の取得を必ず中断してから始める。** 言語切替の直後などで
+  // 古いリクエストが遅れて返ると、後着の setEarthquakes が勝って
+  // 旧言語のデータが新言語の UI に載る（レスポンス順序の逆転）
+  const earthquakeFetchRef = useRef<AbortController | null>(null);
   const fetchEarthquakes = useCallback(async () => {
+    earthquakeFetchRef.current?.abort();
+    const controller = new AbortController();
+    earthquakeFetchRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       setEarthquakeLoading(true);
       setEarthquakeError(null);
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-      const response = await fetch(`${API_BASE_URL}/api/v1/earthquakes?lang=${language}&limit=20`, {
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
+      const response = await fetch(
+        `${API_BASE_URL}/api/v1/earthquakes?lang=${encodeURIComponent(language)}&limit=20`,
+        { signal: controller.signal }
+      );
       if (response.ok) {
         const data = await response.json();
-        setEarthquakes(data);
+        if (!controller.signal.aborted) setEarthquakes(data);
       } else {
         throw new Error('Server error');
       }
     } catch (err) {
+      // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
+      if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
       console.error('Failed to fetch earthquakes:', err);
       const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
       setEarthquakeError({
@@ -172,7 +180,9 @@ export default function Home() {
         retryable: true,
       });
     } finally {
-      setEarthquakeLoading(false);
+      clearTimeout(timeoutId);
+      // 後続の取得が始まっていたら loading 表示はそちらに任せる
+      if (earthquakeFetchRef.current === controller) setEarthquakeLoading(false);
     }
   }, [language, getErrorMessage]);
 

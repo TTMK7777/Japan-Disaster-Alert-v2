@@ -36,7 +36,6 @@ logger = get_logger(__name__)
 #   - 地域名が空文字になる（AI 経路には都道府県フォールバックすら無かった）
 # 警報名・説明文・行動指示・地名がすべて16言語そろった今、AI に投げる理由はない。
 # 静的なら停電・低回線・APIキー未設定でも同じ結果が出る（docs の R2）。
-STATIC_LANGUAGES = ALLOWED_LANGUAGES
 
 # 「今その警報が出ている」とみなすステータス。
 #
@@ -52,11 +51,10 @@ ACTIVE_WARNING_STATUSES = frozenset({"発表", "継続"})
 class WarningService:
     """気象庁の警報・注意報を取得するサービス"""
 
-    def __init__(self, translator=None):
+    def __init__(self):
         from ..config import settings
         self.BASE_URL = settings.jma_base_url
         self.timeout = settings.api_timeout
-        self._translator = translator  # TranslatorServiceへの参照（遅延初期化）
         self._client: Optional[httpx.AsyncClient] = None
 
     def _get_client(self) -> httpx.AsyncClient:
@@ -68,14 +66,6 @@ class WarningService:
         if self._client is not None and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
-
-    @property
-    def translator(self):
-        """TranslatorServiceを遅延初期化で取得"""
-        if self._translator is None:
-            from .translator import TranslatorService
-            self._translator = TranslatorService()
-        return self._translator
 
     # 警報・注意報コードマッピング（16言語）
     # 実体は warning_names.py（災害種別 × 警報レベル の合成で生成）。
@@ -154,12 +144,12 @@ class WarningService:
         if data is None:
             return []
 
-        # 静的マッピング対応言語の場合は従来通り
-        if lang in STATIC_LANGUAGES:
-            return self._parse_warnings(data, area_code, lang)
-
-        # 未対応言語の場合はClaude APIで動的生成
-        return await self._parse_warnings_with_ai(data, area_code, lang)
+        # 16 言語すべてが静的マッピングで完結する（warning_names / area_display /
+        # warning_guidance がそろっているため）。静的なら停電・低回線・API キー
+        # 未設定でも同じ結果が出る（docs の R2）。かつて存在した AI 翻訳経路は
+        # `_validate_lang` が許可する全言語が静的対応になった時点で到達不能に
+        # なっていたため、メソッドごと削除した
+        return self._parse_warnings(data, area_code, lang)
 
     async def _fetch_warning_payload(self, area_code: str) -> Optional[dict]:
         """1 予報区ぶんの警報 JSON を取得する。失敗したら None。
@@ -171,7 +161,12 @@ class WarningService:
             response = await self._get_client().get(url, timeout=self.timeout)
             response.raise_for_status()
             return response.json()
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:
+            # ValueError は response.json() のデコード失敗（json.JSONDecodeError は
+            # ValueError のサブクラス）。200 で壊れた本文が返る事故（切断・プロキシ
+            # 改変等）をここで握らないと、呼び出し側の asyncio.gather を突き抜けて
+            # **他の予報区が正常でも都道府県全体が 500** になる — このメソッドの
+            # docstring に書いた設計意図と正面から矛盾する挙動になっていた
             logger.error(f"警報情報取得エラー ({area_code}): {e}", exc_info=True)
             return None
 
@@ -218,7 +213,9 @@ class WarningService:
         """APIレスポンスを警報リストにパース（重複排除済み）"""
         report_datetime = data.get("reportDatetime", "")
 
-        area_types = data.get("areaTypes", [])
+        # JSON の null は .get(key, []) では [] に落ちない（キーは存在して値が None）。
+        # `for ... in None` の TypeError で全域の警報が消えるのを防ぐ
+        area_types = data.get("areaTypes") or []
         if not area_types:
             return []
 
@@ -241,25 +238,33 @@ class WarningService:
         code_statuses: dict[str, set[str]] = {}
         announced: set[str] = set()  # 発表されている警報コード（地域が引けたかは問わない）
         for area_type in area_types:
-            areas = area_type.get("areas", [])
+            areas = (area_type.get("areas") or []) if isinstance(area_type, dict) else []
             for area in areas:
-                area_id = str(area.get("code", ""))
-                warnings = area.get("warnings", [])
-                for warning in warnings:
-                    code = warning.get("code", "")
-                    status = warning.get("status", "")
-                    if status in ACTIVE_WARNING_STATUSES and code in self.WARNING_CODES:
-                        announced.add(code)
-                        # 同じ警報コードでも地域ごとに status が異なりうる。
-                        # **1地域でも「発表」なら発表として扱う**（新規発表を
-                        # 「継続中」に格下げして、緊急度を弱く見せないため）
-                        code_statuses.setdefault(code, set()).add(status)
-                        if not is_known_area(area_id):
-                            continue
-                        if code not in grouped:
-                            grouped[code] = []
-                        if area_id not in grouped[code]:
-                            grouped[code].append(area_id)
+                # 外部 API のレコード 1 件が想定外の形（dict でない・warnings が
+                # null 等）でも、その 1 件だけを捨てて他の警報は出す。
+                # volcano_service._parse_warning_record と同じ隔離粒度。
+                # ここで隔離しないと、型崩れ 1 件で**その地域の警報が全部 500**になる
+                try:
+                    area_id = str(area.get("code", ""))
+                    warnings = area.get("warnings") or []
+                    for warning in warnings:
+                        code = warning.get("code", "")
+                        status = warning.get("status", "")
+                        if status in ACTIVE_WARNING_STATUSES and code in self.WARNING_CODES:
+                            announced.add(code)
+                            # 同じ警報コードでも地域ごとに status が異なりうる。
+                            # **1地域でも「発表」なら発表として扱う**（新規発表を
+                            # 「継続中」に格下げして、緊急度を弱く見せないため）
+                            code_statuses.setdefault(code, set()).add(status)
+                            if not is_known_area(area_id):
+                                continue
+                            if code not in grouped:
+                                grouped[code] = []
+                            if area_id not in grouped[code]:
+                                grouped[code].append(area_id)
+                except (AttributeError, TypeError) as e:
+                    logger.warning(f"警報レコードの形が想定外のためスキップ ({area_code}): {e}")
+                    continue
 
         # 細分区域が1つも引けなかった警報も必ず出す。
         # 地名の粒度は都道府県まで落ちるが、**警報そのものは絶対に落とさない**。
@@ -337,131 +342,6 @@ class WarningService:
             return "advisory"
         else:
             return "watch"
-
-    async def _parse_warnings_with_ai(self, data: dict, area_code: str, lang: str) -> list[DisasterAlert]:
-        """
-        APIレスポンスを警報リストにパース（Claude API使用版）
-
-        未対応言語（th, id, ms, tl, fr, de, it, es, ne, zh-TW）の場合に使用。
-        asyncio.gather() で全警報のAI翻訳を並列実行し、N+1問題を解消。
-        return_exceptions=True により各言語・各警報のエラーが独立してハンドリングされる。
-        """
-        report_datetime = data.get("reportDatetime", "")
-
-        area_types = data.get("areaTypes", [])
-        if not area_types:
-            return []
-
-        # 1. 警報コード別にグループ化して重複排除
-        #
-        # 地域名は `code` から引く。以前は `area.get("name", "")` としていたが、
-        # 気象庁の警報 JSON に `name` は存在しないため **常に空文字**になり、
-        # 「〜に大雨警報が発表されています」の地名が丸ごと抜けていた。
-        prefecture_name = next(
-            (pref for pref, code in self.AREA_CODES.items() if code == area_code),
-            area_code,
-        )
-        grouped: dict[str, list[str]] = {}
-        for area_type in area_types:
-            areas = area_type.get("areas", [])
-            for area in areas:
-                area_id = str(area.get("code", ""))
-                if not is_known_area(area_id):
-                    continue
-                area_name_ja = self._get_area_name(area_id, "ja", prefecture_name)
-                warnings = area.get("warnings", [])
-                for warning in warnings:
-                    code = warning.get("code", "")
-                    status = warning.get("status", "")
-                    if status in ACTIVE_WARNING_STATUSES and code in self.WARNING_CODES:
-                        if code not in grouped:
-                            grouped[code] = []
-                        if area_name_ja not in grouped[code]:
-                            grouped[code].append(area_name_ja)
-
-        # グループ化された警報のメタデータを生成
-        pending_items: list[dict] = []
-        for code, area_names_ja in grouped.items():
-            warning_info = self.WARNING_CODES[code]
-            title_ja = self._get_warning_name(code, "ja")
-            severity = warning_info.get("severity", "medium")
-            alert_id = f"{area_code}_{code}_{datetime.now().strftime('%Y%m%d')}"
-            combined_area_ja = "、".join(area_names_ja)
-
-            pending_items.append({
-                "code": code,
-                "title_ja": title_ja,
-                "severity": severity,
-                "alert_id": alert_id,
-                "area_name_ja": combined_area_ja,
-            })
-
-        if not pending_items:
-            return []
-
-        # 2. 全警報のAI翻訳を並列実行
-        async def translate_single(item: dict) -> tuple[dict, Optional[dict], Optional[str]]:
-            """単一警報の翻訳タスク。(metadata, generated_or_None, area_translated_or_None) を返す。"""
-            try:
-                generated, area_translated = await asyncio.gather(
-                    self.translator.generate_warning_text(
-                        warning_name_ja=item["title_ja"],
-                        target_lang=lang,
-                        area_name=item["area_name_ja"],
-                        severity=item["severity"],
-                    ),
-                    self.translator.translate_location(item["area_name_ja"], lang),
-                )
-                return (item, generated, area_translated)
-            except Exception as e:
-                logger.error(f"AI生成エラー: {e}", exc_info=True)
-                return (item, None, None)
-
-        tasks = [translate_single(item) for item in pending_items]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # 3. 結果を DisasterAlert に変換
-        alerts: list[DisasterAlert] = []
-        for result in results:
-            # gather(return_exceptions=True) により例外オブジェクトが返る可能性を処理
-            if isinstance(result, BaseException):
-                logger.error(f"並列翻訳で予期しないエラー: {result}", exc_info=True)
-                continue
-
-            item, generated, area_translated = result
-
-            if generated is not None and area_translated is not None:
-                alerts.append(DisasterAlert(
-                    id=item["alert_id"],
-                    type=self._get_alert_type(item["severity"]),
-                    title=item["title_ja"],
-                    title_translated=generated.get("name"),
-                    description=f"{item['area_name_ja']}に{item['title_ja']}が発表されています。",
-                    description_translated=generated.get("description"),
-                    area=area_translated,
-                    issued_at=report_datetime,
-                    expires_at=None,
-                    severity=item["severity"],
-                    action=generated.get("action"),
-                ))
-            else:
-                # フォールバック: 英語版を使用
-                alerts.append(DisasterAlert(
-                    id=item["alert_id"],
-                    type=self._get_alert_type(item["severity"]),
-                    title=item["title_ja"],
-                    title_translated=self._get_warning_name(item["code"], "en"),
-                    description=f"{item['area_name_ja']}に{item['title_ja']}が発表されています。",
-                    description_translated=self._get_description(
-                        item["area_name_ja"], self._get_warning_name(item["code"], "en"), "en"
-                    ),
-                    area=item["area_name_ja"],
-                    issued_at=report_datetime,
-                    expires_at=None,
-                    severity=item["severity"],
-                ))
-
-        return alerts
 
     async def get_all_prefectures_warnings(self) -> list[DisasterAlert]:
         """

@@ -41,17 +41,12 @@ import json
 import sys
 from pathlib import Path
 
-# 災害種別 -> ビット位置。ShelterInfo.types の文字列表現と対応する
-DISASTER_BITS: dict[str, int] = {
-    "flood": 1 << 0,        # 洪水
-    "landslide": 1 << 1,    # 崖崩れ、土石流及び地滑り
-    "storm_surge": 1 << 2,  # 高潮
-    "earthquake": 1 << 3,   # 地震
-    "tsunami": 1 << 4,      # 津波
-    "fire": 1 << 5,         # 大規模な火事
-    "inland_flood": 1 << 6, # 内水氾濫
-    "volcano": 1 << 7,      # 火山現象
-}
+# 読取側 (app/services/shelter_service.py) と同じ表を使う。
+# 以前は両ファイルに手書き複製されており、片方だけ変えると 115,674 件の
+# 対応災害種別が全件サイレントに誤表示される構造だった。
+# cwd に依存せず import できるよう backend/ を sys.path に足す
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from app.services.shelter_types import DISASTER_BITS  # noqa: E402
 
 # CSV の列名 -> 災害種別キー。**配布元の列名をそのまま書く**（推測しない）
 DISASTER_COLUMNS: dict[str, str] = {

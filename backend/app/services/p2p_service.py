@@ -83,7 +83,11 @@ class P2PQuakeService:
                     earthquakes.append(eq)
 
             return self._deduplicate(earthquakes)
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:
+            # ValueError は response.json() のデコード失敗（json.JSONDecodeError は
+            # ValueError のサブクラスで、httpx.HTTPError では捕捉できない）。
+            # 200 のまま壊れた本文が返る事故で 500 にせず、docstring の約束どおり
+            # 空リストへ落とす。大規模地震直後 = API が輻輳しがちな瞬間に起きやすい
             logger.error(f"P2P地震情報取得エラー: {e}", exc_info=True)
             return []
 
@@ -100,6 +104,16 @@ class P2PQuakeService:
     # 「不明」ではなく「調査中」にしているのは、震度速報の震源地が
     # **分からない**のではなく**まだ決まっていない**ため。数分後の続報で確定する。
     UNDETERMINED_LOCATION = "震源地調査中"
+
+    # 震源地名の長さ上限。実在する震源地名は最長でも 20 文字弱
+    # （「熊本県天草・芦北地方」で 10 文字）なので 100 は十分に余裕がある。
+    # P2P API は信頼できない外部入力で、異常に長い name が来た場合、
+    # 静的辞書・合成器はどちらも外れて **AI 翻訳へそのまま流れる**
+    # （translator.translate_location の最終フォールバック）。上限が無いと
+    # 巨大テキストが毎リクエスト・毎言語で AI API に送られ、コスト増と
+    # レート制限枯渇の経路になる。message も location から組み立てるため
+    # ここで止めれば下流すべてが有界になる
+    MAX_LOCATION_LENGTH = 100
 
     def _completeness(self, eq: EarthquakeInfo) -> int:
         """利用者から見て情報がどれだけ揃っているかの点数。
@@ -171,7 +185,8 @@ class P2PQuakeService:
             # メッセージ生成
             # 番兵は「キーが無い」ではなく「空文字が入っている」形で来るので、
             # get の既定値では拾えない。空白のみも同じ扱いにする
-            location = (hypocenter.get("name") or "").strip() or self.UNDETERMINED_LOCATION
+            raw_name = (hypocenter.get("name") or "").strip()[: self.MAX_LOCATION_LENGTH]
+            location = raw_name or self.UNDETERMINED_LOCATION
             magnitude = hypocenter.get("magnitude", 0)
             depth = hypocenter.get("depth", 0)
 
@@ -197,7 +212,12 @@ class P2PQuakeService:
                 source="気象庁"
             )
         except Exception as e:
-            logger.error(f"地震データパースエラー: {e}", exc_info=True)
+            # どのレポートで失敗したかを grep できるように id を添える。
+            # ここで握られたレポートは**利用者からは見えないまま消える**ので、
+            # ログが唯一の手がかりになる
+            logger.error(
+                f"地震データパースエラー (id={data.get('id', '?')}): {e}", exc_info=True
+            )
             return None
 
     def _generate_message(

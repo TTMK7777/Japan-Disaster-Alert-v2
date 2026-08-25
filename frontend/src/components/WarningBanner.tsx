@@ -151,37 +151,46 @@ export default function WarningBanner({
 
   // 現在選択中の都道府県情報を取得
   const selectedPrefecture = PREFECTURES.find(p => p.code === selectedAreaCode);
-  const prefectureName = language === 'ja' || language === 'easy_ja'
+  // 表外のコードが渡っても見出しに "undefined" を出さない
+  const prefectureName = (language === 'ja' || language === 'easy_ja'
     ? selectedPrefecture?.ja
-    : selectedPrefecture?.en;
+    : selectedPrefecture?.en) ?? selectedAreaCode;
 
+  // **前回の取得を必ず中断してから始める。** 都道府県セレクタを素早く
+  // A→B と切り替えたとき、A のレスポンスが遅れて後着すると
+  // setWarnings(A のデータ) が勝ち、見出しは B のまま A の警報一覧が出る —
+  // 災害情報アプリで**別地域の警報を今の地域のものとして見せてしまう**
+  const fetchRef = useRef<AbortController | null>(null);
   const fetchWarnings = useCallback(async () => {
+    fetchRef.current?.abort();
+    const controller = new AbortController();
+    fetchRef.current = controller;
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     setLoading(true);
     setError(null);
 
     try {
-      // HIGH #9: AbortController でタイムアウトを設定
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000);
-
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/alerts?area_code=${selectedAreaCode}&lang=${language}`,
+        `${API_BASE_URL}/api/v1/alerts?area_code=${encodeURIComponent(selectedAreaCode)}&lang=${encodeURIComponent(language)}`,
         { signal: controller.signal }
       );
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         throw new Error('Failed to fetch warnings');
       }
 
       const data = await response.json();
+      if (controller.signal.aborted) return;
       setWarnings(data);
       onWarningsUpdateRef.current?.(data);
     } catch (err) {
+      // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
+      if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
       console.error('Warning fetch error:', err);
       setError(t('error'));
     } finally {
-      setLoading(false);
+      clearTimeout(timeoutId);
+      if (fetchRef.current === controller) setLoading(false);
     }
   }, [selectedAreaCode, language, t]);
 
@@ -189,7 +198,10 @@ export default function WarningBanner({
     fetchWarnings();
     // 5分ごとに更新
     const interval = setInterval(fetchWarnings, 5 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      fetchRef.current?.abort();
+    };
   }, [fetchWarnings]);
 
   if (loading) {
@@ -247,15 +259,18 @@ export default function WarningBanner({
       {/* 一覧であることを支援技術に伝える。従来はカードが平置きで、しかも全件に
           role="alert" が付いていたため、注意報が並ぶ日は読み上げが割り込みで埋まった */}
       <ul className="space-y-3">
-      {warnings.map((warning, index) => {
+      {warnings.map((warning) => {
         const relativeIssuedAt = formatRelativeTime(warning.issued_at, getLocale(language));
         // 気象庁の 3 階級へ畳む。medium と low はどちらも「注意報」だが、
         // 従来はラベルが同じまま黄と青に塗り分けられていた（lib/warningSeverity.ts 参照）
         const severity = normalizeSeverity(warning.severity);
         const style = SEVERITY_STYLES[severity];
         const severityLabel = style.labelKey ? getTranslation(language, style.labelKey) : '';
+        // key は id 単体。index を混ぜると 5 分ごとのポーリングで並びが
+        // 変わったとき、内容が同じ警報の <li> まで別要素として再マウントされ、
+        // role="alert" が付いた項目をスクリーンリーダーが読み上げ直す
         return (
-        <li key={`${warning.id}-${index}`}>
+        <li key={warning.id}>
         <div
           className={`p-4 rounded-lg ${cardClassName(severity)}${
             severity === 'extreme' ? ' animate-pulse motion-reduce:animate-none' : ''

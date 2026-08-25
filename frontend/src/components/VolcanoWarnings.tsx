@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { getTranslation, getLocale } from '@/i18n/translations';
 import { formatRelativeTime } from '@/lib/relativeTime';
@@ -63,19 +63,26 @@ export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
   const [warnings, setWarnings] = useState<VolcanoWarning[]>([]);
   const [failed, setFailed] = useState(false);
 
+  // 前回の取得を必ず中断してから始める（言語切替でレスポンス順序が
+  // 逆転すると、旧言語の警報が新言語の UI に載る）
+  const fetchRef = useRef<AbortController | null>(null);
   const fetchWarnings = useCallback(async () => {
+    fetchRef.current?.abort();
     const controller = new AbortController();
+    fetchRef.current = controller;
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     try {
       const response = await fetch(
-        `${API_BASE_URL}/api/v1/volcanoes/warnings?lang=${language}`,
+        `${API_BASE_URL}/api/v1/volcanoes/warnings?lang=${encodeURIComponent(language)}`,
         { signal: controller.signal }
       );
       if (!response.ok) throw new Error(String(response.status));
       const data = await response.json();
+      if (controller.signal.aborted) return;
       setWarnings(Array.isArray(data) ? data : []);
       setFailed(false);
     } catch (error) {
+      if (controller.signal.aborted && (error as Error).name === 'AbortError') return;
       console.error('Volcano warning fetch error:', error);
       setFailed(true);
     } finally {
@@ -87,7 +94,10 @@ export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
     fetchWarnings();
     // 噴火警戒レベルは分単位で動くものではないので 15 分間隔
     const interval = setInterval(fetchWarnings, 15 * 60 * 1000);
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      fetchRef.current?.abort();
+    };
   }, [fetchWarnings]);
 
   // 取得に失敗したとき、警報が無いかのように見せない。

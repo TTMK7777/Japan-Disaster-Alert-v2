@@ -4,8 +4,8 @@ import { useState, useMemo, useEffect } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { formatMagnitude } from '@/lib/earthquakeFormat';
-import { IntensityBadge, IntensityScale } from './IntensityGauge';
+import { formatMagnitude, formatDepth } from '@/lib/earthquakeFormat';
+import { IntensityBadge, IntensityScale, resolveIntensityData, glyph } from './IntensityGauge';
 import TsunamiAlert from './TsunamiAlert';
 import type { Earthquake } from '@/types/earthquake';
 import { getTranslation, getLocale } from '@/i18n/translations';
@@ -16,46 +16,49 @@ interface EarthquakeMapProps {
 }
 
 // 震度に応じた色を返す（色覚多様性対応版）
-const intensityConfig: Record<string, { color: string; borderColor: string; textColor: string; pattern?: string }> = {
-  '1': { color: '#E5E7EB', borderColor: '#9CA3AF', textColor: '#374151' },
-  '2': { color: '#93C5FD', borderColor: '#3B82F6', textColor: '#1E40AF' },
-  '3': { color: '#3B82F6', borderColor: '#1D4ED8', textColor: 'white' },
-  '4': { color: '#FDE047', borderColor: '#CA8A04', textColor: '#713F12' },
-  '5弱': { color: '#FBBF24', borderColor: '#D97706', textColor: '#713F12', pattern: 'stripe' },
-  '5強': { color: '#F97316', borderColor: '#C2410C', textColor: 'white', pattern: 'stripe' },
-  '6弱': { color: '#EF4444', borderColor: '#B91C1C', textColor: 'white', pattern: 'dot' },
-  '6強': { color: '#DC2626', borderColor: '#991B1B', textColor: 'white', pattern: 'dot' },
-  '7': { color: '#7C3AED', borderColor: '#5B21B6', textColor: 'white', pattern: 'cross' },
-};
+// 震度の配色は IntensityGauge の resolveIntensityData に一本化してある。
+// 以前ここに独自のパレット（Tailwind 系の色）が複製されており、
+// **同じ地震がマーカーとポップアップで違う色**で出ていた。さらに未知の震度を
+// 震度1へフォールバックしていたため、「不明」なだけの地震が地図上で
+// 最も穏やかな見た目になっていた — IntensityGauge が明示的に直した誤りの再現。
+// 統合により地図も気象庁の震度配色（テレビ・自治体掲示と同じ）で出る。
 
-// カスタムマーカーアイコンを作成（改善版：より大きく、パターン付き）
+// 色覚多様性対応のパターン。level は resolveIntensityData の並び
+// （5弱=5, 5強=6, 6弱=7, 6強=8, 7=9。未知=0）
+function patternFor(level: number): string | undefined {
+  if (level >= 9) return 'cross';
+  if (level >= 7) return 'dot';
+  if (level >= 5) return 'stripe';
+  return undefined;
+}
+
+// カスタムマーカーアイコンを作成
 function createIntensityIcon(intensity: string): L.DivIcon {
-  const config = intensityConfig[intensity] || intensityConfig['1'];
+  const config = resolveIntensityData(intensity);
 
-  // サイズは震度に応じて変化
+  // サイズは震度に応じて変化（未知 = level 0 は最小サイズの無彩色）
   const baseSize = 24;
-  const intensityNum = parseInt(intensity.replace(/[弱強]/g, '')) || 1;
-  const size = baseSize + Math.min(intensityNum * 4, 24);
+  const size = baseSize + Math.min(config.level * 3, 27);
 
   // パターン（色覚多様性対応）
   let patternHtml = '';
-  if (config.pattern === 'stripe') {
+  if (patternFor(config.level) === 'stripe') {
     patternHtml = `
       <div style="position:absolute;top:50%;left:0;right:0;height:4px;background:rgba(0,0,0,0.3);transform:translateY(-50%) rotate(45deg);"></div>
     `;
-  } else if (config.pattern === 'dot') {
+  } else if (patternFor(config.level) === 'dot') {
     patternHtml = `
       <div style="position:absolute;top:50%;left:50%;width:8px;height:8px;background:rgba(255,255,255,0.5);border-radius:50%;transform:translate(-50%,-50%);"></div>
     `;
-  } else if (config.pattern === 'cross') {
+  } else if (patternFor(config.level) === 'cross') {
     patternHtml = `
       <div style="position:absolute;top:50%;left:0;right:0;height:3px;background:rgba(255,255,255,0.5);transform:translateY(-50%);"></div>
       <div style="position:absolute;left:50%;top:0;bottom:0;width:3px;background:rgba(255,255,255,0.5);transform:translateX(-50%);"></div>
     `;
   }
 
-  // 震度5以上はアニメーション
-  const animation = intensityNum >= 5 ? 'animation: marker-pulse 1.5s ease-in-out infinite;' : '';
+  // 震度5弱（level 5）以上はアニメーション
+  const animation = config.level >= 5 ? 'animation: marker-pulse 1.5s ease-in-out infinite;' : '';
 
   return L.divIcon({
     className: 'earthquake-marker-enhanced',
@@ -83,7 +86,7 @@ function createIntensityIcon(intensity: string): L.DivIcon {
           position: relative;
         ">
           ${patternHtml}
-          <span style="position:relative;z-index:1;">${intensity.replace('弱', '-').replace('強', '+')}</span>
+          <span style="position:relative;z-index:1;">${glyph(intensity)}</span>
         </div>
       </div>
     `,
@@ -93,10 +96,9 @@ function createIntensityIcon(intensity: string): L.DivIcon {
   });
 }
 
-// 影響範囲の円の色
+// 影響範囲の円の色（マーカー・バッジと同じパレットから引く）
 function getImpactCircleColor(intensity: string): string {
-  const config = intensityConfig[intensity];
-  return config?.color || '#9CA3AF';
+  return resolveIntensityData(intensity).color;
 }
 
 // 影響範囲の半径（km -> m）
@@ -250,7 +252,8 @@ export default function EarthquakeMap({ earthquakes, language }: EarthquakeMapPr
                   {/* 深さ */}
                   <div className="text-center p-2 bg-gray-50 rounded-lg">
                     <div className="text-xs text-gray-500 mb-1">{t('depth')}</div>
-                    <div className="text-xl font-bold text-gray-800">{earthquake.depth}km</div>
+                    {/* 震度速報の深さは -1（未確定）。素通しすると "-1km" が出る */}
+                    <div className="text-xl font-bold text-gray-800">{formatDepth(earthquake.depth)}</div>
                   </div>
                 </div>
 

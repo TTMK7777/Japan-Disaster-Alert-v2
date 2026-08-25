@@ -10,6 +10,7 @@ import json
 from typing import Optional
 from pathlib import Path
 from ..models import ShelterInfo
+from .shelter_types import mask_to_types
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -129,12 +130,8 @@ class ShelterService:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             payload = json.load(f)
         meta = payload.get("meta", {})
-        bits = {
-            "flood": 1 << 0, "landslide": 1 << 1, "storm_surge": 1 << 2, "earthquake": 1 << 3,
-            "tsunami": 1 << 4, "fire": 1 << 5, "inland_flood": 1 << 6, "volcano": 1 << 7,
-        }
         rows = [
-            (sid, name, address, lat, lon, tuple(k for k, b in bits.items() if mask & b))
+            (sid, name, address, lat, lon, mask_to_types(mask))
             for sid, name, address, lat, lon, mask in payload["shelters"]
         ]
         return rows, meta.get("attribution")

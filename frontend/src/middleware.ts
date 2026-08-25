@@ -38,8 +38,13 @@ export function middleware(request: NextRequest) {
     // ここに無いと SW 内の fetch が CSP で落ち、sw.js の catch が 503 "Offline" を
     // 合成して <img> に返すので、**地図が無言で灰色のまま**になる（実測で確認）。
     // ページ側の securitypolicyviolation にも出ないので気づく手がかりが無い。
-    // 使っていないタイル配信元（OSM / disaportaldata）は意図的に足していない。
-    `connect-src 'self' ${API_ORIGIN} https://api.p2pquake.net https://www.jma.go.jp https://cyberjapandata.gsi.go.jp`,
+    //
+    // **最小権限**: 許可は実際に fetch するオリジンだけに絞る。
+    // p2pquake / jma への接続はすべてバックエンド経由で、フロントから直接は
+    // 叩かない（jma.go.jp は <a href> の出典リンクのみ = connect-src の管轄外）。
+    // ここを広げると、万一 nonce を突破されたときの持ち出し先が増える。
+    // 使っていないタイル配信元（OSM / disaportaldata）も同じ理由で足さない。
+    `connect-src 'self' ${API_ORIGIN} https://cyberjapandata.gsi.go.jp`,
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",

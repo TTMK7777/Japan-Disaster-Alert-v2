@@ -91,8 +91,10 @@ function isKnownIntensity(intensity: string): boolean {
   return intensity in intensityData;
 }
 
-/** アイコン内に出す短い表記。未知は各国語の記号に依存しない '?' にする */
-function glyph(intensity: string): string {
+/** アイコン内に出す短い表記。未知は各国語の記号に依存しない '?' にする。
+ *  既知の値は固定テーブルのキーそのものなので、innerHTML 系のシンク
+ *  （地図マーカーの L.divIcon）へ渡しても安全 — EarthquakeMap が再利用する */
+export function glyph(intensity: string): string {
   return isKnownIntensity(intensity) ? intensity.replace('弱', '-').replace('強', '+') : '?';
 }
 
