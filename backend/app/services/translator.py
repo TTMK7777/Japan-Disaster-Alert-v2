@@ -26,6 +26,7 @@ from .translation_templates import (
     TSUNAMI_TRANSLATIONS,
 )
 from .location_translations import get_location_translation, LOCATION_TRANSLATIONS
+from .location_composer import compose as compose_location
 from ..utils.logger import get_logger
 
 #: 気象庁・P2P が「未確定」を数値欄へ入れてくる番兵値。
@@ -86,10 +87,18 @@ class TranslatorService:
         if target_lang == "ja":
             return location
 
-        # 1. 静的マッピングを試行
+        # 1. 静的マッピングを試行（手で訳した 82 件。常にこれが最優先）
         static_translation = get_location_translation(location, target_lang)
         if static_translation:
             return static_translation
+
+        # 1.5 形態から組み立てる。
+        # 静的辞書は完全名の丸暗記なので、気象庁の震源地名 400 種余りに対して
+        # ユニークベースで 44.8% が未収録だった（実データ 317 レポートで実測）。
+        # 決定的で費用もかからないので、キャッシュや AI より先に試す。
+        composed = compose_location(location, target_lang)
+        if composed:
+            return composed
 
         # 2. キャッシュを確認
         cache_key = self._cache.make_key(location, target_lang)
