@@ -52,6 +52,8 @@ export function normalizeSeverity(raw: string | null | undefined): WarningSeveri
     // medium と low はどちらも気象庁の「注意報」。表示を分けない。
     case 'medium':
     case 'low':
+    // 噴火警報の API は最初から 3 階級で返すので advisory がそのまま来る
+    case 'advisory':
       return 'advisory';
     default:
       return 'unknown';

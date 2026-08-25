@@ -356,3 +356,40 @@ class TestWiredIntoTranslator:
             if _CJK.search(result):
                 leaked.append((name, result))
         assert leaked == [], f"{lang} で日本語が残った: {leaked}"
+
+
+class TestPrefectureFromMunicipality:
+    """市町村名から都道府県だけを取り出して訳す（噴火警報の対象地域で使う）。
+
+    市町村は全国 1700 以上あって訳を持てないが、訪日客に必要なのは
+    「どの都道府県か」の粒度。畳めない名前は None にして日本語を残さない。
+    """
+
+    def test_市町村名から都道府県を訳す(self):
+        from app.services.location_composer import localize_prefecture
+
+        assert localize_prefecture("熊本県阿蘇市", "en") == "Kumamoto Prefecture"
+        assert localize_prefecture("鹿児島県三島村", "en") == "Kagoshima Prefecture"
+        assert localize_prefecture("北海道美瑛町", "en") == "Hokkaido"
+
+    def test_冠詞を落として文頭を大文字にする(self):
+        from app.services.location_composer import localize_prefecture
+
+        # 単独で並べるので "la préfecture de …" ではなく "Préfecture de …"
+        assert localize_prefecture("熊本県阿蘇市", "fr") == "Préfecture de Kumamoto"
+        assert localize_prefecture("岩手県雫石町", "fr") == "Préfecture d'Iwate"
+        assert localize_prefecture("熊本県阿蘇市", "es") == "Prefectura de Kumamoto"
+
+    def test_漢字圏とかな(self):
+        from app.services.location_composer import localize_prefecture
+
+        assert localize_prefecture("熊本県阿蘇市", "zh") == "熊本县"
+        assert localize_prefecture("熊本県阿蘇市", "ko") == "구마모토현"
+        assert localize_prefecture("熊本県阿蘇市", "easy_ja") == "くまもとけん"
+
+    def test_都道府県で始まらない名前はNone(self):
+        from app.services.location_composer import localize_prefecture
+
+        assert localize_prefecture("小笠原村", "en") is None
+        assert localize_prefecture("", "en") is None
+        assert localize_prefecture("架空県某市", "en") is None

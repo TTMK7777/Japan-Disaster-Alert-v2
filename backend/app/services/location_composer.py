@@ -822,3 +822,22 @@ def compose(name: str, lang: str) -> Optional[str]:
         )
 
     return _finish(core, lang)
+
+
+def localize_prefecture(area_name: str, lang: str) -> Optional[str]:
+    """「熊本県阿蘇市」のような市町村名から都道府県だけを取り出して訳す。
+
+    市町村は全国に 1700 以上あり訳を持てない。一方で訪日客にとって必要なのは
+    「どの都道府県か」であって市の粒度ではないので、頭の都道府県だけを訳して返す。
+    都道府県で始まらない名前（「東京都八丈支庁」の支庁名など）は
+    都道府県部分だけが取れる。まったく一致しなければ None。
+    """
+    match = _PREFECTURE_RE.match((area_name or "").strip())
+    if not match:
+        return None
+    name = _place_name(match.group(1), lang)
+    if name is None:
+        return None
+    # 単独で並べるので冠詞は落として文頭を大文字にする
+    # （"la préfecture de Kagoshima" ではなく "Préfecture de Kagoshima"）
+    return _finish(_strip_article(name, lang), lang)

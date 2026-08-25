@@ -187,7 +187,9 @@ class TsunamiInfo(BaseModel):
 
 class VolcanoInfo(BaseModel):
     """火山情報"""
-    code: int
+    # 気象庁の volcano_list.json は code を**文字列**で返す。int にすると
+    # 警報側の文字列コードと突き合わせできず、火山名の英字表記が引けなくなる
+    code: str
     name: str
     name_en: Optional[str] = None
     latitude: Optional[float] = None
@@ -201,15 +203,36 @@ class VolcanoInfo(BaseModel):
 
 
 class VolcanoWarning(BaseModel):
-    """火山警報"""
-    volcano_code: int
-    volcano_name: Optional[str] = None
-    alert_level: int
+    """火山警報。
+
+    気象庁の `bosai/volcano/data/warning.json` から組み立てる。
+    火山コードは元データが**文字列**で、`volcano_list.json` の code と対応する。
+    """
+
+    volcano_code: str
+    volcano_name: str
+    #: 気象庁の英字表記（volcano_list.json の name_en）。音訳を自前で作らずに済む
+    volcano_name_en: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    #: 噴火警戒レベル 1〜5。海底火山など、レベル制を採らない火山では None
+    alert_level: Optional[int] = None
+    #: レベルのキーワード、またはレベル制を採らない火山の警報種別（翻訳済み）
     alert_level_name: str
-    severity: str  # low, medium, high, extreme
-    action: str  # 推奨される行動
+    #: 「噴火警戒レベル3」のような見出し（翻訳済み）。レベル制でない火山では空
+    level_label: str = ""
+    #: とるべき防災対応（翻訳済み）。レベル制でない火山では空
+    action: str = ""
+    severity: str  # advisory, high, extreme
+    #: 気象庁の生の警報名。翻訳の突き合わせと調査のために残す
+    warning_name_ja: str = ""
+    #: 発表 / 継続 / 切替 / 引上げ / 引下げ
+    condition: str = ""
+    #: 継続中か。継続中は issued_at が最終更新であって発表時刻ではない
+    is_continuing: bool = False
     issued_at: str
-    headline: Optional[str] = None
+    #: 対象となる市町村（日本語表記）
+    municipalities: list[str] = []
 
 
 class PushSubscription(BaseModel):

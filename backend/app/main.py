@@ -98,6 +98,13 @@ from .services.translator import TranslatorService
 from .services.warning_service import WarningService
 from .services.tsunami_service import TsunamiService
 from .services.volcano_service import VolcanoService
+from .services.location_composer import localize_prefecture
+from .services.volcano_levels import (
+    LEVEL_LABEL,
+    localize_volcano_name,
+    localize_warning,
+    pick,
+)
 from .services.shelter_service import ShelterService
 from .services.push_service import PushNotificationService, TokenAuthError
 from .services.transit_links import build_transit_links
@@ -574,24 +581,64 @@ async def get_volcanoes(request: Request, monitored_only: bool = True):
         return await volcano_service.get_volcano_list()
 
 
-@app.get("/api/v1/volcanoes/warnings")
+@app.get("/api/v1/volcanoes/warnings", response_model=list[VolcanoWarning])
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
 async def get_volcano_warnings(request: Request, lang: str = "ja"):
     """
-    火山警報を取得
+    発表中の噴火警報を取得
+
+    気象庁の `data/warning.json` から取る。火山ごとに URL を組み立てる形の
+    エンドポイントは存在せず、以前それを叩いていたため 404 を握りつぶして
+    常にゼロ件を返していた。
 
     - **lang**: 言語コード
     """
     lang = _validate_lang(lang)
     warnings = await volcano_service.get_volcano_warnings()
+    for warning in warnings:
+        name, action = localize_warning(
+            level=warning.alert_level, name_ja=warning.warning_name_ja, lang=lang
+        )
+        warning.alert_level_name = name
+        warning.action = action
+        warning.level_label = (
+            pick(LEVEL_LABEL, lang).format(level=warning.alert_level)
+            if warning.alert_level is not None
+            else ""
+        )
+        warning.volcano_name = localize_volcano_name(
+            warning.volcano_name, warning.volcano_name_en, lang
+        )
+        warning.municipalities = _localize_areas(warning.municipalities, lang)
     return warnings
+
+
+#: 市町村名をそのまま出してよい言語
+_KEEPS_JA_AREAS = frozenset({"ja", "easy_ja"})
+
+
+def _localize_areas(municipalities: list[str], lang: str) -> list[str]:
+    """対象市町村を表示用に整える。
+
+    市町村は全国に 1700 以上あるので訳は持てない。日本語以外では
+    **都道府県まで畳んで**訳す。訪日客に必要なのは「どの都道府県か」で、
+    市の粒度ではないため。畳めない名前は落とす（日本語を残さない）。
+    """
+    if lang in _KEEPS_JA_AREAS:
+        return municipalities
+    result: list[str] = []
+    for name in municipalities:
+        localized = localize_prefecture(name, lang)
+        if localized and localized not in result:
+            result.append(localized)
+    return result
 
 
 @app.get("/api/v1/volcanoes/{volcano_code}", response_model=VolcanoInfo)
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_volcano_by_code(request: Request, volcano_code: int):
+async def get_volcano_by_code(request: Request, volcano_code: str):
     """
     特定の火山情報を取得
 
