@@ -9,6 +9,7 @@ import {
   selectAlert,
   shouldDisplay,
   canAutoDismiss,
+  type AlertSeverity,
   type TsunamiLike,
 } from '@/lib/emergencyAlert';
 
@@ -23,7 +24,7 @@ interface EmergencyAlertProps {
 interface AlertData {
   id: string;
   type: 'earthquake' | 'tsunami' | 'warning';
-  level: 'advisory' | 'warning' | 'emergency';
+  level: AlertSeverity;
   title: Record<string, string>;
   message: Record<string, string>;
   action: Record<string, string>;
@@ -46,7 +47,7 @@ interface AlertData {
  * 注意報を「警報」と表示して過大に伝える**という両方向の誤りが起きていた。
  * 英語は気象庁の公式訳（Major Tsunami Warning / Tsunami Warning / Tsunami Advisory）に合わせている。
  */
-export const TSUNAMI_TITLES: Record<'advisory' | 'warning' | 'emergency', Record<string, string>> = {
+export const TSUNAMI_TITLES: Record<AlertSeverity, Record<string, string>> = {
   emergency: {
     ja: '大津波警報', en: 'Major Tsunami Warning', zh: '大海啸警报', 'zh-TW': '大海嘯警報',
     ko: '대형 쓰나미 경보', vi: 'Cảnh báo sóng thần lớn', th: 'เตือนภัยสึนามิขนาดใหญ่',
@@ -68,17 +69,74 @@ export const TSUNAMI_TITLES: Record<'advisory' | 'warning' | 'emergency', Record
     ne: 'सुनामी सूचना', fr: 'Avis de tsunami', de: 'Tsunami-Hinweis',
     it: 'Avviso tsunami', es: 'Aviso de tsunami', easy_ja: 'つなみに きを つけて',
   },
+  // 種別名が想定と違う津波情報（backend の warning_level="unknown"）。
+  // 気象庁の種別名を一次資料で確認できていないため、名前が推定と違っても
+  // 見落とさないよう全画面に出す。階級を名乗らず、公式情報の確認へ誘導する
+  unknown: {
+    ja: '津波に関する情報', en: 'Tsunami Information Issued', zh: '已发布海啸相关信息', 'zh-TW': '已發布海嘯相關資訊',
+    ko: '쓰나미 관련 정보 발표', vi: 'Có thông tin về sóng thần', th: 'มีประกาศข้อมูลเกี่ยวกับสึนามิ',
+    id: 'Ada Informasi Tsunami', ms: 'Maklumat Tsunami Dikeluarkan', tl: 'May Impormasyon tungkol sa Tsunami',
+    ne: 'सुनामीसम्बन्धी सूचना जारी', fr: 'Information tsunami émise', de: 'Tsunami-Information herausgegeben',
+    it: 'Informazione sullo tsunami emessa', es: 'Información sobre tsunami emitida', easy_ja: 'つなみの おしらせが でています',
+  },
+};
+
+/** 種別不明の津波情報の本文と行動指示。階級が分からないので避難の要否を断定しない */
+const TSUNAMI_UNKNOWN_MESSAGE: Record<string, string> = {
+  ja: '津波に関する情報が出ています。公式情報を確認してください',
+  en: 'Tsunami information has been issued. Check official information.',
+  zh: '已发布海啸相关信息。请确认官方信息。',
+  'zh-TW': '已發布海嘯相關資訊。請確認官方資訊。',
+  ko: '쓰나미 관련 정보가 발표되었습니다. 공식 정보를 확인하세요.',
+  vi: 'Đã có thông tin về sóng thần. Hãy kiểm tra thông tin chính thức.',
+  th: 'มีการประกาศข้อมูลเกี่ยวกับสึนามิ โปรดตรวจสอบข้อมูลทางการ',
+  id: 'Informasi tsunami telah dikeluarkan. Periksa informasi resmi.',
+  ms: 'Maklumat tsunami telah dikeluarkan. Semak maklumat rasmi.',
+  tl: 'May inilabas na impormasyon tungkol sa tsunami. Tingnan ang opisyal na impormasyon.',
+  ne: 'सुनामीसम्बन्धी सूचना जारी गरिएको छ। आधिकारिक जानकारी हेर्नुहोस्।',
+  fr: 'Une information sur un tsunami a été émise. Consultez les informations officielles.',
+  de: 'Es wurde eine Tsunami-Information herausgegeben. Prüfen Sie die offiziellen Informationen.',
+  it: "È stata emessa un'informazione sullo tsunami. Controlla le informazioni ufficiali.",
+  es: 'Se ha emitido información sobre un tsunami. Consulte la información oficial.',
+  easy_ja: 'つなみの おしらせが でています。くにや まちの おしらせを みて ください',
+};
+
+const TSUNAMI_UNKNOWN_ACTION: Record<string, string> = {
+  ja: '海岸から離れ、気象庁・市町村の発表を確認',
+  en: 'Move away from the coast and check JMA and municipal announcements',
+  zh: '远离海岸，确认气象厅和市町村的发布',
+  'zh-TW': '遠離海岸，確認氣象廳與市町村的發布',
+  ko: '해안에서 떨어지고 기상청·시정촌 발표를 확인하세요',
+  vi: 'Tránh xa bờ biển và kiểm tra thông báo của JMA và chính quyền địa phương',
+  th: 'ออกห่างจากชายฝั่ง และตรวจสอบประกาศของ JMA และเทศบาล',
+  id: 'Jauhi pantai dan periksa pengumuman JMA serta pemerintah setempat',
+  ms: 'Jauhi pantai dan semak pengumuman JMA serta pihak berkuasa tempatan',
+  tl: 'Lumayo sa baybayin at tingnan ang anunsyo ng JMA at ng munisipyo',
+  ne: 'तटबाट टाढा रहनुहोस् र JMA तथा नगरपालिकाको सूचना हेर्नुहोस्',
+  fr: 'Éloignez-vous de la côte et consultez les annonces de la JMA et de la municipalité',
+  de: 'Halten Sie sich von der Küste fern und prüfen Sie die Meldungen der JMA und der Gemeinde',
+  it: 'Allontanati dalla costa e controlla gli annunci della JMA e del comune',
+  es: 'Aléjese de la costa y consulte los anuncios de la JMA y del municipio',
+  easy_ja: 'うみから はなれて、テレビや まちの おしらせを みて',
 };
 
 function buildAlertContent(
   id: string,
   type: 'earthquake' | 'tsunami',
-  level: 'advisory' | 'warning' | 'emergency'
+  level: AlertSeverity
 ): AlertData {
   // 津波はレベルごとに正式名称が異なるので専用の表を引く。
   // 地震（緊急地震速報）はレベルで名称が変わらないので従来どおり
   if (type === 'tsunami') {
     const base = buildBaseContent(id, type, level);
+    if (level === 'unknown') {
+      return {
+        ...base,
+        title: TSUNAMI_TITLES.unknown,
+        message: TSUNAMI_UNKNOWN_MESSAGE,
+        action: TSUNAMI_UNKNOWN_ACTION,
+      };
+    }
     return { ...base, title: TSUNAMI_TITLES[level] };
   }
   return buildBaseContent(id, type, level);
@@ -87,7 +145,7 @@ function buildAlertContent(
 function buildBaseContent(
   id: string,
   type: 'earthquake' | 'tsunami',
-  level: 'advisory' | 'warning' | 'emergency'
+  level: AlertSeverity
 ): AlertData {
   return {
     id,
@@ -245,6 +303,16 @@ const alertStyles = {
     message: 'text-yellow-900',     // yellow-400 + yellow-900 = 5.66
     button: 'bg-yellow-900 text-white hover:bg-yellow-800',
     pulse: false,
+  },
+  // 種別不明は注意報相当以上。注意報と同じ配色で、点滅させて目を引く
+  unknown: {
+    overlay: 'bg-yellow-900/80',
+    container: 'bg-yellow-400 border-yellow-200',
+    icon: 'text-yellow-900',
+    title: 'text-yellow-900',
+    message: 'text-yellow-900',     // yellow-400 + yellow-900 = 5.66
+    button: 'bg-yellow-900 text-white hover:bg-yellow-800',
+    pulse: true,
   },
 };
 
@@ -429,7 +497,7 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
             ) : activeAlert.type === 'tsunami' ? (
               <TsunamiIcon size={64} animate={style.pulse} />
             ) : (
-              <AlertIcon size={64} level={activeAlert.level} />
+              <AlertIcon size={64} level={activeAlert.level === 'unknown' ? 'advisory' : activeAlert.level} />
             )}
           </div>
           <div>
@@ -463,7 +531,9 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
 
         {/* ボタン */}
         <div className="flex flex-col sm:flex-row gap-3">
-          {(activeAlert.level === 'warning' || activeAlert.level === 'emergency') && (
+          {(activeAlert.level === 'warning' ||
+            activeAlert.level === 'emergency' ||
+            activeAlert.level === 'unknown') && (
             <button
               className={`flex-1 py-3 px-6 rounded-xl font-bold text-lg ${style.button} transition-colors`}
               onClick={() => {

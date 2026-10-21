@@ -185,6 +185,28 @@ describe('useEventStream — 低電力モード', () => {
     expect(result.current.lastFailed).toBe(true);
   });
 
+  it('津波が 503（backend の取得失敗）なら、表示中の津波を空で上書きしない', async () => {
+    // backend の /api/v1/tsunami/active は上流の取得に失敗すると 503 を返す（PR #100）。
+    // 非 2xx を失敗として扱い、onTsunami に [] を渡さないこと
+    routeFetch({ tsunamis: [{ id: 't1', warning_level: 'warning' }] });
+    const onTsunami = vi.fn();
+    const { result } = renderHook(() => useEventStream({ lang: 'ja', lowPower: true, onTsunami }));
+    await flush();
+    expect(onTsunami).toHaveBeenCalledTimes(1);
+
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v1/tsunami/active')) {
+        return { ok: false, status: 503, json: async () => ({ detail: 'unavailable' }) };
+      }
+      return { ok: true, status: 200, json: async () => [{ id: 'eq1' }] };
+    }) as unknown as typeof fetch;
+    await advance(FIVE_MIN);
+
+    expect(onTsunami).toHaveBeenCalledTimes(1);
+    expect(result.current.lastFailed).toBe(true);
+  });
+
   it('失敗が続いても間隔は 5 分のまま（短くも長くもならない）', async () => {
     routeFetch({ earthquakeOk: false, tsunamiOk: false });
     renderHook(() => useEventStream({ lang: 'ja', lowPower: true }));

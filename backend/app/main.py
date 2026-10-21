@@ -552,10 +552,17 @@ async def get_active_tsunami_warnings(request: Request, lang: str = "ja"):
     """
     現在発令中の津波警報・注意報を取得
 
+    上流（気象庁）の取得に失敗したら **503** を返す。200 の [] を返すと、
+    フロントは「津波なし」と受け取り、表示中の津波警報を消してしまう。
+
     - **lang**: 言語コード
     """
     lang = _validate_lang(lang)
-    tsunamis = await tsunami_service.get_active_warnings()
+    try:
+        tsunamis = await tsunami_service.fetch_active_warnings()
+    except (httpx.HTTPError, ValueError) as e:
+        logger.error(f"津波警報の取得に失敗（503 を返す）: {type(e).__name__}")
+        raise HTTPException(status_code=503, detail="津波情報を取得できませんでした")
 
     if lang != "ja":
         for tsunami in tsunamis:
