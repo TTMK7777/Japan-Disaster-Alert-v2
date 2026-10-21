@@ -18,6 +18,8 @@ steps:
       - build
       - --build-arg
       - NEXT_PUBLIC_API_URL=${_API_URL}
+      - --build-arg
+      - NEXT_PUBLIC_SITE_URL=${_SITE_URL}
       - --tag
       - ${_IMAGE}
       - .
@@ -28,6 +30,8 @@ images:
 substitutions:
   # 未指定ならローカル開発の既定値。本番では必ず上書きすること
   _API_URL: http://localhost:8000
+  # フロント自身の公開 URL（SNS 共有の og:image 用）。空なら og:image を出さない
+  _SITE_URL: ''
   _IMAGE: asia-northeast1-docker.pkg.dev/japan-disaster-alert/cloud-run-source-deploy/disaster-web:latest
 
 options:

@@ -2,8 +2,11 @@ import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import './globals.css';
 import ServiceWorkerRegistration from '@/components/ServiceWorkerRegistration';
+import { SHARE_LANG_HEADER } from '@/lib/shareLangHeader';
+import { buildShareMetadata } from '@/lib/shareMetadata';
 
-export const metadata: Metadata = {
+// 共有（OGP / Twitter Card）以外のメタデータ。言語に依らず固定
+const baseMetadata: Metadata = {
   title: '災害対応AI - Disaster Response AI',
   description: '多言語対応の災害情報提供システム / Multilingual Disaster Information System',
   manifest: '/manifest.json',
@@ -15,12 +18,28 @@ export const metadata: Metadata = {
   formatDetection: {
     telephone: true,
   },
-  openGraph: {
-    title: '災害対応AI - Japan Disaster Alert',
-    description: '16言語対応のリアルタイム災害情報システム',
-    type: 'website',
-  },
 };
+
+/**
+ * 共有されたリンクの `?lang=` に合わせて og:title / og:description / og:locale を変える。
+ *
+ * layout の generateMetadata には searchParams が渡らず、`/` の page.tsx は 'use client' で
+ * generateMetadata を持てないため、middleware が許可リストを通した言語コードを
+ * `x-share-lang` ヘッダーで渡す。ここでも buildShareMetadata が許可リストに通し直す
+ * （middleware を通らないリクエストで利用者が付けたヘッダーをそのまま使わない）。
+ *
+ * `process.env.NEXT_PUBLIC_SITE_URL` はビルド時に埋め込まれる（NEXT_PUBLIC_* の仕様）。
+ */
+export async function generateMetadata(): Promise<Metadata> {
+  const headersList = await headers();
+  return {
+    ...baseMetadata,
+    ...buildShareMetadata(
+      headersList.get(SHARE_LANG_HEADER) ?? undefined,
+      process.env.NEXT_PUBLIC_SITE_URL
+    ),
+  };
+}
 
 export const viewport: Viewport = {
   width: 'device-width',
