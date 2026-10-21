@@ -47,12 +47,16 @@ export function phraseById(id: string): ConversationPhrase | undefined {
 
 /** 訪日客がスタッフに見せるカード: 日本語 → 利用者の言語 → 英語 */
 export function visitorCardLines(phrase: ConversationPhrase, userLang: SupportedLanguage): CardLine[] {
-  const lines: CardLine[] = [{ role: 'staff', lang: 'ja', text: phrase.text.ja }];
-  lines.push({ role: 'visitor', lang: userLang, text: phrase.text[userLang] });
-  // 英語は必ず最後の行に出す（利用者の行が英語なら、その行を英語の行として扱う）
+  const staff: CardLine = { role: 'staff', lang: 'ja', text: phrase.text.ja };
+  const visitor: CardLine = { role: 'visitor', lang: userLang, text: phrase.text[userLang] };
   const english: CardLine = { role: 'english', lang: 'en', text: phrase.text.en };
-  const body = dedupe(lines).filter((l) => l.lang !== 'en' && l.text !== english.text);
-  return [...body, english];
+  // スタッフ用の日本語の行は必ず残す（重複除去で消してよいのは利用者の行と英語の行だけ）。
+  // 英語は最後の行。利用者の行が英語・英語と同じ本文なら、英語の行にまとめる
+  const lines = dedupe([staff, visitor]).filter(
+    (l) => l.role === 'staff' || (l.lang !== 'en' && l.text !== english.text)
+  );
+  if (english.text !== staff.text) lines.push(english);
+  return lines;
 }
 
 /**

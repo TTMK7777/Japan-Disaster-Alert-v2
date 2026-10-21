@@ -48,6 +48,11 @@ describe('会話カードの文例データ', () => {
     ]);
   });
 
+  it('訪日客の返答 C32 / C34 / C35 の英語は Yes. / No. / I do not know.', () => {
+    const en = (id: string) => CONVERSATION_PHRASES.find((p) => p.id === id)?.text.en;
+    expect([en('C32'), en('C34'), en('C35')]).toEqual(['Yes.', 'No.', 'I do not know.']);
+  });
+
   it('カテゴリの順は命に関わる順（緊急→けが→持病・薬→アレルギー→家族→…）', () => {
     expect(CONVERSATION_CATEGORY_ORDER.slice(0, 5)).toEqual([
       'emergency',

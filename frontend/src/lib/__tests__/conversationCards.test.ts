@@ -66,6 +66,17 @@ describe('visitorCardLines（スタッフに見せる 3 段表示）', () => {
   });
 });
 
+describe('visitorCardLines: スタッフ用の日本語の行は消さない', () => {
+  // 実データには無いが、日本語と英語が同じ本文の文（例「OK」）でもスタッフ用の行は残す
+  const same = { ...C05, text: { ...C05.text, ja: 'OK', en: 'OK' } };
+
+  it.each(['th', 'en', 'ja', 'easy_ja'] as SupportedLanguage[])('%s', (lang) => {
+    const lines = visitorCardLines(same, lang);
+    expect(lines[0]).toMatchObject({ role: 'staff', lang: 'ja', text: 'OK' });
+    expect(new Set(texts(lines)).size).toBe(lines.length);
+  });
+});
+
 describe('staffReplyLines（スタッフが返す: 訪日客の言語＋英語）', () => {
   const C06 = phraseById('C06')!;
 

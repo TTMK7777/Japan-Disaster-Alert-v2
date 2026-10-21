@@ -58,13 +58,25 @@ CATEGORIES = {
 }
 
 ROW_RE = re.compile(r"^\|\s*(C\d{2})\s*\|")
+SEPARATOR_RE = re.compile(r"^\|[\s|:\-]+\|$")
+HEADER_FIRST_CELL = "ID"
 
 
 def parse_phrase_table(text: str) -> list[dict]:
+    """`|` で始まる行はすべて検査する。見出し・区切り以外で文例の形をしていない行はエラー
+    （黙って読み飛ばすと、壊れた行の文がデータから消えても気付けない）。"""
     rows = []
-    for line in text.splitlines():
-        if not ROW_RE.match(line):
+    for lineno, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line.startswith("|"):
             continue
+        if SEPARATOR_RE.match(line):
+            continue
+        first_cell = line.strip("|").split("|")[0].strip()
+        if first_cell == HEADER_FIRST_CELL:
+            continue
+        if not ROW_RE.match(line):
+            raise ValueError(f"{lineno} 行目: 文例の行として読めない（ID は C + 2 桁）: {line}")
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
         if len(cells) < 6:
             raise ValueError(f"列が足りない行: {line}")
@@ -80,6 +92,24 @@ def parse_phrase_table(text: str) -> list[dict]:
             "source": {"ja": ja, "en": en, "easy_ja": easy_ja},
         })
     return rows
+
+
+def find_warnings(rows: list[dict], translations: dict) -> list[str]:
+    """生成は止めないが、取りこぼしの疑いがあるもの（表に無い文の訳・未知の言語）。"""
+    warnings: list[str] = []
+    known_ids = {r["id"] for r in rows}
+    for lang in sorted(set(translations) - set(LANGUAGES)):
+        warnings.append(f"未知の言語キー {lang!r}（生成に使わない）")
+    extra: set[str] = set()
+    for lang, table in translations.items():
+        if not isinstance(table, dict):
+            continue
+        for key in table:
+            if key.startswith(KEY_PREFIX) and key[len(KEY_PREFIX):] not in known_ids:
+                extra.add(key)
+    for key in sorted(extra):
+        warnings.append(f"文例表に無い {key} の訳がある（生成に使わない）")
+    return warnings
 
 
 def build(phrases_md: str, translations: dict) -> tuple[list[dict], list[str]]:
@@ -183,7 +213,13 @@ def main(argv: list[str] | None = None) -> int:
 
     phrases_md = args.phrases.read_text(encoding="utf-8")
     translations = json.loads(args.translations.read_text(encoding="utf-8"))
-    phrases, errors = build(phrases_md, translations)
+    try:
+        phrases, errors = build(phrases_md, translations)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        return 1
+    for w in find_warnings(parse_phrase_table(phrases_md), translations):
+        print(f"WARN: {w}", file=sys.stderr)
     if errors:
         for e in errors:
             print(f"ERROR: {e}", file=sys.stderr)
@@ -201,7 +237,7 @@ def main(argv: list[str] | None = None) -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, "w", encoding="utf-8", newline="\n") as f:
         f.write(content)
-    print(f"wrote {args.output.relative_to(REPO_ROOT)}: {len(phrases)} phrases x {len(LANGUAGES)} languages")
+    print(f"wrote {args.output}: {len(phrases)} phrases x {len(LANGUAGES)} languages")
     return 0
 
 

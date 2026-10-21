@@ -74,9 +74,22 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
 
   const shownPhrase = shown ? phraseById(shown.id) : undefined;
 
+  // 開いただけの文は「相手の文」にしない。スタッフに渡したとき（「スタッフの返事へ」）だけ記録する
   const openVisitorCard = (id: string) => {
-    setLastVisitorId(id);
     setShown({ id, kind: 'visitor-card' });
+  };
+
+  /** 訪日客が見せた文をスタッフに渡す */
+  const handToStaff = (id: string) => {
+    setLastVisitorId(id);
+    setShown(null);
+    setMode('staff');
+  };
+
+  /** 「ほかの文を選ぶ」: 渡さずに閉じた文は相手の文として残さない */
+  const closeVisitorCard = () => {
+    setLastVisitorId(null);
+    setShown(null);
   };
 
   const goStaff = () => {
@@ -218,15 +231,15 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
         <PhraseDialog
           key={`${shown.kind}-${shown.id}`}
           label={ui(shown.kind === 'visitor-card' ? 'modeVisitor' : 'staffSays')}
-          onClose={() => setShown(null)}
+          onClose={shown.kind === 'visitor-card' ? closeVisitorCard : () => setShown(null)}
         >
           {shown.kind === 'visitor-card' ? (
             <VisitorCard
               phrase={shownPhrase}
               language={language}
               ui={{ forVisitor, forStaff }}
-              onStaffReply={goStaff}
-              onClose={() => setShown(null)}
+              onStaffReply={() => handToStaff(shown.id)}
+              onClose={closeVisitorCard}
             />
           ) : (
             <StaffReply

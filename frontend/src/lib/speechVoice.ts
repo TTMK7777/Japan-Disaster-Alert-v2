@@ -36,12 +36,20 @@ function compatible(voiceTag: string, targetTag: string): boolean {
 /**
  * `locale`（例 'th-TH'）を読める音声を返す。無ければ null。
  * 優先: 完全一致 > 同じ言語。同順位なら端末内の音声（電波が無くても読める）を先に。
+ *
+ * `offline: true` のときは通信が必要な音声（localService が false。Chrome の Google 音声など）を
+ * 候補にしない。選ぶと何も聞こえず、画面にも何も出ないまま失敗するため。
  */
-export function findVoice<V extends VoiceLike>(voices: readonly V[], locale: string): V | null {
+export function findVoice<V extends VoiceLike>(
+  voices: readonly V[],
+  locale: string,
+  options: { offline?: boolean } = {}
+): V | null {
   const target = normalizeTag(locale);
   let best: V | null = null;
   let bestScore = -1;
   for (const voice of voices) {
+    if (options.offline && !voice.localService) continue;
     const tag = normalizeTag(voice.lang || '');
     if (!tag || !compatible(tag, target)) continue;
     const score = (tag === target ? 2 : 0) + (voice.localService ? 1 : 0);
@@ -60,4 +68,14 @@ export function getSpeechSynthesis(): SpeechSynthesis | null {
   const Utterance = (window as Window & { SpeechSynthesisUtterance?: unknown }).SpeechSynthesisUtterance;
   if (!synth || typeof Utterance !== 'function') return null;
   return synth;
+}
+
+/** 端末が電波の無い状態か（navigator.onLine === false のときだけ true。不明なら false） */
+export function isOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+/** 読み上げの失敗のうち、停止・割り込み（利用者の操作や次の読み上げ）によるもの */
+export function isInterruption(error: string | undefined): boolean {
+  return error === 'interrupted' || error === 'canceled';
 }

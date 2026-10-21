@@ -45,4 +45,11 @@ describe('findVoice（その言語の音声があるか）', () => {
     expect(findVoice([v('fil-PH')], 'fil-PH')?.lang).toBe('fil-PH');
     expect(findVoice([v('tl-PH')], 'fil-PH')?.lang).toBe('tl-PH');
   });
+
+  it('オフラインでは通信が必要な音声を候補にしない', () => {
+    expect(findVoice([v('ja-JP', false)], 'ja-JP', { offline: true })).toBeNull();
+    expect(findVoice([v('ja-JP', false), v('ja', true)], 'ja-JP', { offline: true })?.lang).toBe('ja');
+    // オンラインなら通信が必要な音声も使う（端末内の音声が無い場合）
+    expect(findVoice([v('ja-JP', false)], 'ja-JP')?.lang).toBe('ja-JP');
+  });
 });

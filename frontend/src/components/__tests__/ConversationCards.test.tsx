@@ -14,7 +14,7 @@ class FakeUtterance {
   lang = '';
   voice: unknown = null;
   onend: (() => void) | null = null;
-  onerror: (() => void) | null = null;
+  onerror: ((e: { error: string }) => void) | null = null;
   constructor(text: string) {
     this.text = text;
   }
@@ -53,12 +53,22 @@ function installSpeech(initialVoices: FakeVoice[]) {
   };
 }
 
+/** navigator.onLine を差し替える。'online' / 'offline' イベントも投げる */
+function setOnline(online: boolean) {
+  Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => online });
+  act(() => {
+    window.dispatchEvent(new Event(online ? 'online' : 'offline'));
+  });
+}
+
 function removeSpeech() {
   delete (window as unknown as Record<string, unknown>).speechSynthesis;
   delete (window as unknown as Record<string, unknown>).SpeechSynthesisUtterance;
 }
 
 const voice = (lang: string): FakeVoice => ({ lang, localService: true, name: lang });
+/** 通信が必要な音声（Chrome の Google 音声など） */
+const remoteVoice = (lang: string): FakeVoice => ({ lang, localService: false, name: `remote-${lang}` });
 
 function openVisitorCard(categoryId: string, phraseId: string) {
   fireEvent.click(document.querySelector(`[data-category="${categoryId}"]`)!);
@@ -87,6 +97,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   removeSpeech();
+  delete (window.navigator as unknown as Record<string, unknown>).onLine; // プロトタイプの getter に戻す
 });
 
 describe('ConversationCards: スタッフに見せる', () => {
@@ -172,6 +183,39 @@ describe('ConversationCards: スタッフが返す', () => {
     expect(next.querySelector('[data-line-role="staff"]')).toHaveTextContent(phraseById('C32')!.text.ja);
   });
 
+  it('開いて「ほかの文を選ぶ」で閉じただけの文は、相手の文としてスタッフに出ない', () => {
+    render(<ConversationCards language="th" />);
+    openVisitorCard('injury', 'C05');
+    fireEvent.click(screen.getByTestId('conv-close'));
+    fireEvent.click(screen.getByTestId('conv-mode-staff'));
+    expect(screen.queryByTestId('conv-visitor-said')).toBeNull();
+    // 相手の文が無いので優先順のまま（緊急の C04 が先頭）
+    expect(
+      screen.getByTestId('conv-staff-list').querySelector('[data-phrase-id]')!.getAttribute('data-phrase-id')
+    ).toBe('C04');
+  });
+
+  it('渡した後に別の文を開いて閉じたら、前の相手の文も残さない', () => {
+    render(<ConversationCards language="th" />);
+    openVisitorCard('injury', 'C05');
+    fireEvent.click(screen.getByTestId('conv-to-staff'));
+    expect(screen.getByTestId('conv-visitor-said')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('conv-back-to-visitor'));
+    fireEvent.click(document.querySelector('[data-phrase-id="C07"]')!);
+    fireEvent.click(screen.getByTestId('conv-close'));
+    fireEvent.click(screen.getByTestId('conv-mode-staff'));
+    expect(screen.queryByTestId('conv-visitor-said')).toBeNull();
+  });
+
+  it('訪日客の答え（はい）を「スタッフの返事へ」で渡すと、相手の文は はい になる', () => {
+    render(<ConversationCards language="th" />);
+    fireEvent.click(screen.getByTestId('conv-mode-staff'));
+    fireEvent.click(document.querySelector('[data-phrase-id="C06"]')!);
+    fireEvent.click(document.querySelector('[data-answer-id="C32"]')!);
+    fireEvent.click(screen.getByTestId('conv-to-staff'));
+    expect(screen.getByTestId('conv-visitor-said')).toHaveTextContent(phraseById('C32')!.text.ja);
+  });
+
   it('「訪日客の画面へ」で訪日客のモードに戻る', () => {
     render(<ConversationCards language="th" />);
     fireEvent.click(screen.getByTestId('conv-mode-staff'));
@@ -255,5 +299,49 @@ describe('ConversationCards: 読み上げ', () => {
     speech.synth.cancel.mockClear();
     fireEvent.click(screen.getByTestId('conv-close'));
     expect(speech.synth.cancel).toHaveBeenCalled();
+  });
+
+  it('オフラインでは通信が必要な音声を使わない（ボタンを出さず注記）', () => {
+    installSpeech([remoteVoice('ja-JP')]);
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, get: () => false });
+    render(<ConversationCards language="th" />);
+    const dialog = openVisitorCard('injury', 'C05');
+    expect(within(dialog).queryByTestId('conv-speak')).toBeNull();
+    expect(within(dialog).getByTestId('conv-no-voice')).toBeInTheDocument();
+  });
+
+  it('オンラインなら通信が必要な音声でもボタンを出し、電波が切れたら注記に切り替える', () => {
+    installSpeech([remoteVoice('ja-JP')]);
+    setOnline(true);
+    render(<ConversationCards language="th" />);
+    const dialog = openVisitorCard('injury', 'C05');
+    expect(within(dialog).getByTestId('conv-speak')).toBeInTheDocument();
+    setOnline(false);
+    expect(within(dialog).queryByTestId('conv-speak')).toBeNull();
+    expect(within(dialog).getByTestId('conv-no-voice')).toBeInTheDocument();
+  });
+
+  it('読み上げが失敗したら（network 等）注記に切り替える', () => {
+    const speech = installSpeech([voice('ja-JP')]);
+    render(<ConversationCards language="th" />);
+    const dialog = openVisitorCard('injury', 'C05');
+    fireEvent.click(within(dialog).getByTestId('conv-speak'));
+    act(() => speech.lastUtterance().onerror?.({ error: 'network' }));
+    expect(within(dialog).queryByTestId('conv-speak')).toBeNull();
+    expect(within(dialog).queryByTestId('conv-stop')).toBeNull();
+    expect(within(dialog).getByTestId('conv-no-voice')).toBeInTheDocument();
+  });
+
+  it('停止・割り込み（interrupted / canceled）は失敗として扱わない', () => {
+    const speech = installSpeech([voice('ja-JP')]);
+    render(<ConversationCards language="th" />);
+    const dialog = openVisitorCard('injury', 'C05');
+    for (const error of ['interrupted', 'canceled']) {
+      fireEvent.click(within(dialog).getByTestId('conv-speak'));
+      act(() => speech.lastUtterance().onerror?.({ error }));
+      expect(within(dialog).queryByTestId('conv-no-voice')).toBeNull();
+      expect(within(dialog).queryByTestId('conv-stop')).toBeNull();
+      expect(within(dialog).getByTestId('conv-speak')).toBeInTheDocument();
+    }
   });
 });
