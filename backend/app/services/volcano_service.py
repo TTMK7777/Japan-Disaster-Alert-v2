@@ -64,12 +64,8 @@ class VolcanoService:
         if cached is not None and now - cached[0] < ttl:
             return cached[1]
 
-        url = f"{self.BASE_URL}/{path}"
-        client = self._get_client()
         try:
-            response = await client.get(url, timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
+            return await self._fetch_json_fresh(path, now=now)
         except (httpx.HTTPError, ValueError) as e:
             # ValueError は response.json() のデコード失敗（json.JSONDecodeError は
             # ValueError のサブクラス）。httpx.HTTPError では捕捉できず、
@@ -77,7 +73,13 @@ class VolcanoService:
             logger.error(f"JMA JSON 取得エラー ({path}): {e}", exc_info=True)
             return cached[1] if cached is not None else None
 
-        self._json_cache[path] = (now, data)
+    async def _fetch_json_fresh(self, path: str, *, now: Optional[float] = None):
+        """キャッシュを見ずに取得し、成功したらキャッシュを更新する。**失敗は例外で返す**。"""
+        url = f"{self.BASE_URL}/{path}"
+        response = await self._get_client().get(url, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        self._json_cache[path] = (time.monotonic() if now is None else now, data)
         return data
 
     # 噴火警戒レベルの説明
@@ -148,10 +150,33 @@ class VolcanoService:
         気象庁は `data/warning.json` の 1 本に全ての発表中の警報をまとめている。
         火山ごとに URL を組み立てる必要はない（そもそもその形の URL は存在しない）。
         """
-        data = await self._fetch_json("data/warning.json", self.WARNING_TTL_SECONDS)
+        data = await self._fetch_json(self.WARNING_PATH, self.WARNING_TTL_SECONDS)
         if data is None:
             return []
+        return await self._warnings_from_raw(data)
 
+    #: 発表中の噴火警報がすべて入る 1 本の JSON
+    WARNING_PATH = "data/warning.json"
+
+    async def fetch_volcano_warnings(self) -> list[VolcanoWarning]:
+        """発表中の噴火警報を**キャッシュを使わずに**取得する。失敗は例外で返す。
+
+        get_volcano_warnings は TTL キャッシュと「失敗時は古い値」を使うため、
+        戻り値からは「今取れた」のか「前に取れた値」なのかが分からない。
+        取得成功時刻を記録したい呼び出し元（スナップショット）はこちらを使う。
+        成功すればキャッシュも更新する。
+
+        Raises:
+            httpx.HTTPError: 通信・HTTP ステータスの失敗
+            ValueError: 本文が JSON でない、または配列でない
+        """
+        data = await self._fetch_json_fresh(self.WARNING_PATH)
+        if not isinstance(data, list):
+            raise ValueError(f"噴火警報が配列ではない: {type(data).__name__}")
+        return await self._warnings_from_raw(data)
+
+    async def _warnings_from_raw(self, data) -> list[VolcanoWarning]:
+        # カタログ（英字名・座標）は補助情報。取れなくても警報自体は返す
         catalogue = {v.code: v for v in await self.get_volcano_list()}
         warnings: list[VolcanoWarning] = []
         for record in data:

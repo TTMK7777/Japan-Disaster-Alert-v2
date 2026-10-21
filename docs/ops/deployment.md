@@ -249,3 +249,76 @@ curl -sS "${API_URL}/api/v1/earthquakes?lang=en&limit=3" | head -5
 フロントは実ブラウザで開き、**地震一覧にデータが出ること**と
 **接続インジケータが緑（SSE 接続）になること**を目視で確認します。
 型チェックが通っただけでは検証になりません。
+
+## 7. 表示用スナップショット（埋め込み・サイネージ向けの静的配信）
+
+災害時は埋め込み・サイネージ・多数の訪日客からアクセスが集中します。表示に使うデータを
+1 つの JSON（スナップショット）にまとめ、短時間キャッシュできる形で配れるようにしてあります。
+**このリポジトリにあるのはコード側だけ**で、クラウド資源（Scheduler・Job・公開 bucket）は作っていません。
+
+### いまあるもの
+
+| もの | 場所 | 内容 |
+|---|---|---|
+| 生成関数 | `backend/app/services/snapshot_service.py` | 地震（直近 10 件）・発表中の津波警報/注意報・発表中の噴火警報を、dataset ごとの成否と取得成功時刻つきでまとめる |
+| API | `GET /api/v1/snapshot` | 最後の版をメモリに持ち、60 秒より古ければ作り直す（同時リクエストは 1 本の生成を待つ）。`Cache-Control: public, max-age=60, stale-while-revalidate=300` と `ETag`（`If-None-Match` 一致で 304）。レート制限は他の API と同じ `RATE_LIMIT_GENERAL` |
+| CLI | `scripts/build_snapshot.py --out <path>` | 同じ生成関数でファイルに書き出す。終了コード 0 = 全部 ok / 2 = 書き出したが stale・error を含む / 1 = 書き出せなかった。`--out` に前回の出力があれば前回値として読む |
+| スキーマ | `docs/dev/snapshot-schema.json` | pydantic モデル（`backend/app/snapshot_models.py`）から生成。更新は `--write-schema docs/dev/snapshot-schema.json`。モデルとの不一致はテストが止める |
+
+dataset の `status` は次の 3 つです。**「取得失敗」と「0 件」を区別する**ためのもので、
+失敗を空配列で表すことはありません。
+
+- `ok`: 今回取得に成功。`items: []` は「取得時点で対象なし」を確認済みという意味
+- `stale`: 今回は失敗。`items` と `fetched_at` は**前回成功時**のまま（古さは `fetched_at` から計算する）
+- `error`: 今回失敗し、前回の成功も無い。`items` と `fetched_at` は `null`
+
+言語別の表示文は入れていません（事実・コード・気象庁の日本語名だけを持ち、文言はフロントの辞書で描く）。
+`source.official` は常に `false` で、気象庁の発表を中継したものであり公式発表ではないことを示します。
+
+### 入れていないもの
+
+- **気象警報・注意報（府県予報区 58 件）**: 全国を毎分 1 巡すると 58 回 × 毎分 = 月約 250 万回、
+  気象庁へリクエストすることになります。上流への負荷と利用条件の確認、条件付き取得や
+  取得周期を分ける案を比べてから決める項目（設計メモで判断待ち）のため、今回は入れていません。
+  入れるときは 58 区の一部だけ失敗した状態（partial）を表せるようにスキーマの小版を上げます
+- **CAP（Common Alerting Protocol）形式**: 今後。解除・訂正を事象ごとに永続的に追跡する仕組みが
+  前提のため、JSON を先に出しています
+
+### オーナー作業: Scheduler → Cloud Run Job → GCS（未実施）
+
+ここから先は**オーナーの判断と操作**です（新しいクラウド資源・リージョン・予算を伴うため）。
+以下は手順の案で、このリポジトリの作業では gcloud を実行していません。
+
+1. **配信用の bucket を決める。** 公開専用の bucket と、非公開の状態保存用を分ける。
+   公開してよいのはスナップショットの JSON だけ（リポジトリや他のデータを置かない）
+2. **Job 用のイメージを用意する。** `scripts/build_snapshot.py` は `backend/` の外にあるため、
+   現在の backend イメージ（`backend/Dockerfile` は `app/` と `data/` だけを COPY）には入っていません。
+   Job 化するときは CLI をイメージに含める変更が要ります
+3. **GCS への書き込み方を決める。** CLI はいまローカルファイルにだけ書き出します。
+   Cloud Storage FUSE のボリュームを `--out` の書き出し先にするか、CLI に GCS 書き込みを足すかを選ぶ
+   （前者で一時ファイル → 置き換えが原子的になるかは未確認）
+4. **Cloud Run Job を作る**（例: `--tasks 1 --max-retries 0`。終了コード 2 を失敗として監視するかを決める）
+5. **Cloud Scheduler から毎分起動する。** 重複起動・再試行で新旧の実行が前後しうるので、
+   古い実行が新しい版を上書きしない仕組み（世代条件付きの書き込み等）を Job 化と同時に入れる
+6. **公開オブジェクトのメタデータ**を `Content-Type: application/json; charset=utf-8`、
+   `Cache-Control: public, max-age=30` 程度にし、CORS は GET/HEAD・認証なしに限る
+7. 予算アラート（上の「予算アラートを必ず設定する」）に、この Job と bucket の費用も含める
+
+#### 費用の目安（参照試算・実測ではない）
+
+出典: 2026-10-22 に作成した設計メモ（B5 静的フィード、配信方式と概算）の試算。単価は
+[Cloud Run pricing](https://cloud.google.com/run/pricing)・[Cloud Scheduler pricing](https://cloud.google.com/scheduler/pricing)・
+[Cloud Storage pricing](https://cloud.google.com/storage/pricing) の **us-central1（Iowa）表示**で、
+東京リージョンの見積ではありません。USD・税別・30 日、無料枠適用前。仮定は毎分 43,200 回/月・
+1 vCPU / 512 MiB・JSON 200 KiB（16 言語同梱を仮定した値。表示文を入れない今回の JSON はこれより小さい）。
+
+| 項目 | 目安/月 | 前提 |
+|---|---|---|
+| Scheduler → **Run Job** の生成 | **約 $49.25**（＋Scheduler 最大約 $0.10） | Job は 1 回ごとに最低 60 秒課金されるため、処理が 10 秒で終わっても 60 秒 × 43,200 回 |
+| 参考: Scheduler → 専用 Run service（認証付き・request-based） | 約 $10.93 | 1 回 10 秒の仮定（未実測）。45 秒かかれば約 $49.10 |
+| GCS 書き込み | 約 $0.43 | 版付き JSON と最新版の 2 書き込み/回 |
+| 閲覧 100 万回（各 200 KiB） | 約 $23.29 | アジア宛 Internet 転送 $0.12/GiB ＋ 読み取り操作。100 万人ではなく 100 万回の取得 |
+| サイネージ 100 台が毎分 latest（1 KiB）を読む | 約 $2.22 | 432 万 GET/月 |
+
+いずれも既存の通常 API（`disaster-api`）とは**別の計算資源**を追加します。
+「プロジェクト全体で 1 インスタンスだけ」という制約で運用している場合は、その扱いもあわせて判断してください。

@@ -2,12 +2,121 @@
 気象庁 津波情報サービス
 """
 import httpx
+from dataclasses import dataclass
 from typing import Optional
 from datetime import datetime
 from ..models import TsunamiInfo
 from ..utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# 「発表中」の判定（共有関数）
+#
+# list.json の `kind` 配列の要素は **`{"code": "100", "kind": "津波注意報"}` の形で、
+# `name` キーは存在しない**（2026-10-22 に実レスポンスで確認）。区域名も無くコードだけ。
+# 種別名は**完全一致**で分類する。部分一致だと「津波注意報解除」を注意報と誤認する。
+# 表に無い種別は "unknown" として残す（語彙が変わったときに 0 件へ潰さない）。
+#
+# 実データで観測できた種別は「津波予報（若干の海面変動）」のみ。警報・注意報・解除の
+# 名称は気象庁 XML のコード表（警報等情報要素／津波警報・注意報・予報）に合わせた推定で、
+# 実データでの観測はまだ無い。外れていれば "unknown" として表に出る。
+# ---------------------------------------------------------------------------
+
+#: 区域の津波種別 → 階級。発表中として扱うのは ACTIVE_TSUNAMI_LEVELS のみ
+TSUNAMI_KIND_LEVELS: dict[str, str] = {
+    "大津波警報": "major_warning",
+    "大津波警報：発表": "major_warning",
+    "津波警報": "warning",
+    "津波注意報": "advisory",
+    "津波予報（若干の海面変動）": "forecast",
+    "津波なし": "none",
+    "警報解除": "cancelled",
+    "津波注意報解除": "cancelled",
+}
+
+#: 発表中として表示する階級（重い順）
+ACTIVE_TSUNAMI_LEVELS: tuple[str, ...] = ("major_warning", "warning", "advisory")
+
+#: 取消報の InfoType（list.json の `ift`）。取消された報は発表中にしない
+CANCELLED_INFO_TYPES = frozenset({"取消"})
+
+_LEVEL_ORDER = {level: i for i, level in enumerate(ACTIVE_TSUNAMI_LEVELS)}
+
+
+def classify_tsunami_kind(name: str) -> str:
+    """区域の津波種別名を階級に分類する。表に無い名前は "unknown"。"""
+    return TSUNAMI_KIND_LEVELS.get(name, "unknown")
+
+
+@dataclass(frozen=True)
+class TsunamiAreaKind:
+    """発表中（または種別不明）の 1 区域。code は津波予報区のコード（名前は list.json に無い）。"""
+
+    code: str
+    kind_ja: str
+    level: str
+
+
+@dataclass(frozen=True)
+class ActiveTsunamiReport:
+    """イベント（eid）ごとの最新報のうち、発表中の区域を持つもの。
+
+    level は発表中の区域の最も重い階級。既知の階級が無く種別不明だけなら "unknown"。
+    """
+
+    report: dict
+    level: str
+    areas: tuple[TsunamiAreaKind, ...]
+
+
+def _report_order_key(report: dict) -> str:
+    # ctt は「YYYYMMDDHHMMSS」固定長の作成時刻なので文字列比較で時系列になる
+    return str(report.get("ctt") or "")
+
+
+def select_active_tsunami_reports(reports: list) -> list[ActiveTsunamiReport]:
+    """list.json の生の報から、現在発表中の津波警報・注意報をイベントごとに選ぶ。
+
+    - イベント（eid）ごとに**最新報だけ**を見る。過去報の注意報を発表中にしない
+    - 最新報が取消（ift=取消）なら発表中にしない
+    - 区域ごとに判定する。解除・予報・なしの区域は落とし、注意報以上と種別不明の区域を残す
+      （一部区域だけ解除された報でも、残りの区域は発表中のまま）
+    - 重い順に並べる
+    """
+    latest: dict[str, dict] = {}
+    for index, report in enumerate(reports):
+        if not isinstance(report, dict):
+            logger.warning("津波一覧に dict でない要素がある（飛ばす）")
+            continue
+        event_id = str(report.get("eid") or f"__no_eid_{index}")
+        current = latest.get(event_id)
+        if current is None or _report_order_key(report) > _report_order_key(current):
+            latest[event_id] = report
+
+    active: list[ActiveTsunamiReport] = []
+    for report in latest.values():
+        if report.get("ift") in CANCELLED_INFO_TYPES:
+            continue
+        areas: list[TsunamiAreaKind] = []
+        for entry in report.get("kind") or []:
+            if not isinstance(entry, dict):
+                continue
+            kind_ja = str(entry.get("kind") or "")
+            level = classify_tsunami_kind(kind_ja)
+            if level in ACTIVE_TSUNAMI_LEVELS or level == "unknown":
+                areas.append(TsunamiAreaKind(code=str(entry.get("code") or ""), kind_ja=kind_ja, level=level))
+        if not areas:
+            continue
+        known = [a.level for a in areas if a.level in _LEVEL_ORDER]
+        level = min(known, key=_LEVEL_ORDER.__getitem__) if known else "unknown"
+        active.append(ActiveTsunamiReport(report=report, level=level, areas=tuple(areas)))
+
+    # 新しい報を先に → 安定ソートで重い順（同じ階級の中は新しい順が保たれる）
+    active.sort(key=lambda r: _report_order_key(r.report), reverse=True)
+    active.sort(key=lambda r: _LEVEL_ORDER.get(r.level, len(_LEVEL_ORDER)))
+    return active
 
 
 class TsunamiService:
@@ -37,6 +146,21 @@ class TsunamiService:
         "津波予報（若干の海面変動）": "forecast",
         "なし": "none",
     }
+
+    async def fetch_tsunami_reports(self) -> list:
+        """list.json の生の報を全件取得する。**失敗は例外で返す**（[] に潰さない）。
+
+        Raises:
+            httpx.HTTPError: 通信・HTTP ステータスの失敗
+            ValueError: 本文が JSON でない、または配列でない
+        """
+        url = f"{self.BASE_URL}/tsunami/data/list.json"
+        response = await self._get_client().get(url, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, list):
+            raise ValueError(f"津波一覧が配列ではない: {type(data).__name__}")
+        return data
 
     async def get_tsunami_list(self, limit: int = 10) -> list[TsunamiInfo]:
         """
