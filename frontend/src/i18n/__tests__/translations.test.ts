@@ -53,6 +53,11 @@ const COMPONENT_KEYS = [
   'warning.advisory',
   'warning.selectArea',
   'tsunami.findShelter',
+  // このアプリが扱う範囲の帯・警報タブの県リンク（components/ScopeNotice.tsx）
+  'scope.jmaRelay',
+  'scope.notCovered',
+  'scope.prefectureLink',
+  'scope.travelerLink',
   // 低電力モード・最後に取得できた時刻（components/LowPower.tsx, ShelterMap の地図遅延）
   'lowPower.label',
   'lowPower.on',

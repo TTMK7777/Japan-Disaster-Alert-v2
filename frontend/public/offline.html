@@ -150,6 +150,21 @@
       font-variant-numeric: tabular-nums;
     }
 
+    /* このアプリが扱う範囲。行動指示より目立たせないが、読み飛ばされない枠にする */
+    .scope {
+      border: 1px solid rgba(251, 191, 36, 0.6);
+      border-radius: 12px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .scope p + p {
+      margin-top: 6px;
+      font-weight: 700;
+    }
+
     .retry-btn {
       display: block;
       width: 100%;
@@ -196,6 +211,19 @@
         <li id="step2">When the shaking stops, turn off fire. If you are near the sea, move to higher ground.</li>
         <li id="step3">Evacuate following official instructions. Do not decide alone.</li>
       </ol>
+    </section>
+
+    <!--
+      このアプリは気象庁の情報の中継で、市町村の避難指示・避難所の開設状況は扱わない。
+      オフライン画面は「何も出ていない」画面なので、ここに書かないと
+      「避難指示は出ていない」と読まれる。JS が動かない場合の英語を静的に入れておく
+      （offline.js が言語に応じて差し替える。文言は translations.ts の scope.* と同じ）。
+      公式ページへのリンクは置かない: オフラインでは開けず、外部参照を持たない方針（offline-page.test.ts）とも衝突する。
+      接続が戻れば本体の帯から 1 タップで行ける。
+    -->
+    <section class="scope">
+      <p id="scope-relay">This app relays information from the Japan Meteorological Agency (JMA). Its displays are not official announcements.</p>
+      <p id="scope-not-covered">This app does not provide evacuation orders or information on whether evacuation shelters are open.</p>
     </section>
 
     <section class="guide" aria-labelledby="emergency-title">

@@ -5,6 +5,7 @@ import { API_BASE_URL } from '@/config/api';
 import { getTranslation, getLocale } from '@/i18n/translations';
 import { formatRelativeTime } from '@/lib/relativeTime';
 import { PREFECTURES } from '@/lib/prefectures';
+import { OfficialInfoLink } from '@/components/ScopeNotice';
 import {
   normalizeSeverity,
   SEVERITY_STYLES,
@@ -190,6 +191,8 @@ export default function WarningBanner({
         >
           {t('retry')}
         </button>
+        {/* 取得に失敗したときこそ公式情報が要る */}
+        <OfficialInfoLink language={language} areaCode={selectedAreaCode} className="mt-3" />
       </div>
     );
   }
@@ -202,6 +205,9 @@ export default function WarningBanner({
           onAreaCodeChange={handleAreaCodeChange}
           language={language}
         />
+        {/* このアプリは避難指示・避難所の開設状況を扱わない。「警報なし」を「避難指示なし」と
+            読ませないよう、選んだ県の公式防災ページへ 1 タップで行けるようにする */}
+        <OfficialInfoLink language={language} areaCode={selectedAreaCode} />
         <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
           <div className="flex items-center gap-2">
             <span className="text-2xl">✅</span>
@@ -222,6 +228,7 @@ export default function WarningBanner({
         onAreaCodeChange={handleAreaCodeChange}
         language={language}
       />
+      <OfficialInfoLink language={language} areaCode={selectedAreaCode} />
       <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{t('title')} - {prefectureName}</h3>
       {/* 一覧であることを支援技術に伝える。従来はカードが平置きで、しかも全件に
           role="alert" が付いていたため、注意報が並ぶ日は読み上げが割り込みで埋まった */}
