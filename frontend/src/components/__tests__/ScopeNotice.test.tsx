@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/react';
 import ScopeNotice, { OfficialInfoLink } from '../ScopeNotice';
-import { LANGUAGES, translations } from '@/i18n/translations';
+import { LANGUAGES, translations, getTranslation } from '@/i18n/translations';
 import { NATIONAL_TRAVELER_URL, PREFECTURE_DISASTER_LINKS } from '@/lib/prefectureDisasterLinks';
 
 /**
@@ -90,5 +90,21 @@ describe('OfficialInfoLink — 外部リンクの作法', () => {
     expect(link).toHaveAttribute('target', '_blank');
     const rel = (link.getAttribute('rel') ?? '').split(/\s+/);
     expect(rel).toEqual(expect.arrayContaining(['noopener', 'noreferrer']));
+  });
+});
+
+describe('ScopeNotice — 地域未選択の案内（B8）', () => {
+  it('未選択なら「地域を選ぶと公式ページが切り替わる」をリンクのそばに出し、選択済みなら出さない', () => {
+    const { rerender } = render(<ScopeNotice language="en" prefCode={null} />);
+    expect(screen.getByTestId('official-switch-hint')).toHaveTextContent(
+      getTranslation('en', 'region.officialSwitchHint')
+    );
+    rerender(<ScopeNotice language="en" prefCode="130000" />);
+    expect(screen.queryByTestId('official-switch-hint')).toBeNull();
+  });
+
+  it('scope.jmaRelay は肯定形の新しい文言', () => {
+    render(<ScopeNotice language="ja" prefCode={null} />);
+    expect(screen.getByTestId('scope-notice')).toHaveTextContent('このアプリは、気象庁が発表した警報・情報をお伝えします。');
   });
 });

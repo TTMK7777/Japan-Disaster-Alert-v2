@@ -63,3 +63,14 @@ const PREFECTURE_CODES: ReadonlySet<string> = new Set(PREFECTURES.map((p) => p.c
 export function isPrefectureCode(value: unknown): value is string {
   return typeof value === 'string' && PREFECTURE_CODES.has(value);
 }
+
+/**
+ * 画面に出す地域名。警報タブのセレクタ・公式リンクと同じ表記規則
+ * （日本語・やさしい日本語は漢字、それ以外は気象庁のローマ字表記）。
+ * 訳文の `{pref}` に差し込んで使う（日本語県名に文を連結しない）。表に無いコードは null。
+ */
+export function prefectureDisplayName(code: string | null | undefined, language: string): string | null {
+  const pref = PREFECTURES.find((p) => p.code === code);
+  if (!pref) return null;
+  return language === 'ja' || language === 'easy_ja' ? pref.ja : pref.en;
+}

@@ -179,3 +179,52 @@ describe('poster/page.tsx の metadata', () => {
     expect(metadata.robots).toMatchObject({ index: false });
   });
 });
+
+describe('PosterClient: B8（印字する URL・地域名・開けない URL の警告・公開 URL の優先）', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('QR と同じ URL をポスター本体にも文字で印字する', async () => {
+    setUrl('/poster?pref=260000');
+    await renderPoster();
+    const sheet = document.querySelector('.poster-sheet') as HTMLElement;
+    expect(within(sheet).getByTestId('poster-sheet-url').textContent).toBe(qrText());
+  });
+
+  it('地域名をポスター本体に出す（英語はローマ字・やさしい日本語は漢字）。未指定なら「スマホで選ぶ」', async () => {
+    setUrl('/poster?pref=471000');
+    await renderPoster();
+    const area = screen.getByTestId('poster-area');
+    expect(area).toHaveTextContent('Area: Okinawa');
+    expect(area).toHaveTextContent('ちいき: 沖縄県');
+    fireEvent.change(areaSelect(), { target: { value: '' } });
+    expect(screen.getByTestId('poster-area')).toHaveTextContent('Area: choose on your phone');
+  });
+
+  it('origin が localhost（jsdom の既定）なら画面上に警告を出す。警告は印刷されない操作部の中', async () => {
+    await renderPoster();
+    expect(window.location.hostname).toBe('localhost');
+    const warning = screen.getByTestId('poster-local-warning');
+    expect(warning).toHaveTextContent('This URL cannot be opened from other devices.');
+    expect(warning.closest('.poster-controls')).not.toBeNull();
+    expect(warning.closest('.poster-sheet')).toBeNull();
+  });
+
+  it('NEXT_PUBLIC_SITE_URL があればそれで QR を作り、警告は出さない', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'https://alert.example.jp/');
+    setUrl('/poster?pref=130000');
+    await renderPoster();
+    expect(qrText()).toBe('https://alert.example.jp/?pref=130000');
+    expect(shownUrl()).toBe('https://alert.example.jp/?pref=130000');
+    expect(screen.getByTestId('poster-sheet-url').textContent).toBe('https://alert.example.jp/?pref=130000');
+    expect(screen.queryByTestId('poster-local-warning')).toBeNull();
+  });
+
+  it('NEXT_PUBLIC_SITE_URL 自体が私設 IP なら警告する（公開 URL の設定ミスに気づける）', async () => {
+    vi.stubEnv('NEXT_PUBLIC_SITE_URL', 'http://192.168.0.10:3000');
+    await renderPoster();
+    expect(qrText()).toBe('http://192.168.0.10:3000/');
+    expect(screen.getByTestId('poster-local-warning')).toBeInTheDocument();
+  });
+});

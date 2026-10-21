@@ -549,7 +549,8 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
             onClick={handleDismiss}
           >
             {t('understood')}
-            {countdown !== null && ` (${countdown}s)`}
+            {/* テストはこの要素だけを見る（ダイアログ全文には発表時刻の数字も入るため） */}
+            {countdown !== null && <span data-testid="alert-countdown"> ({countdown}s)</span>}
           </button>
         </div>
       </div>

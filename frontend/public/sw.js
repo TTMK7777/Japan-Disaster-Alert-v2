@@ -5,7 +5,7 @@
 // offline.html / offline.js を変えたら上げる。install は sw.js のバイト差分でしか走らないため、
 // 上げないと既存の利用者は古いオフライン画面（cache.addAll 済みのもの）を見続ける。
 // v3: オフライン画面に「このアプリが扱う範囲（避難指示・避難所は扱わない）」を追加
-const CACHE_NAME = 'disaster-alert-v3';
+const CACHE_NAME = 'disaster-alert-v4';
 
 // 地図タイルはアプリ資産と別のキャッシュに置く。
 // 同居させると、地図をパンするたびに際限なく増えたタイルが

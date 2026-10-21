@@ -31,7 +31,7 @@
     ja: {
       title: 'オフラインです',
       message: 'インターネットに接続されていません。以下は通信なしで読めます。',
-      jmaRelay: "気象庁の情報を中継しています。このアプリの表示は公式発表ではありません。",
+      jmaRelay: "このアプリは、気象庁が発表した警報・情報をお伝えします。避難については、市町村の指示に従ってください。",
       notCovered: "このアプリでは、避難指示と避難所の開設状況を扱いません。",
       retry: '再接続',
       guide: 'いま すること',
@@ -45,7 +45,7 @@
     en: {
       title: 'You are offline',
       message: 'No internet connection. The steps below work without a network.',
-      jmaRelay: "This app relays information from the Japan Meteorological Agency (JMA). Its displays are not official announcements.",
+      jmaRelay: "This app relays warnings and information issued by the Japan Meteorological Agency. For evacuation, follow instructions from your local municipality.",
       notCovered: "This app does not provide evacuation orders or information on whether evacuation shelters are open.",
       retry: 'Reconnect',
       guide: 'What to do now',
@@ -59,7 +59,7 @@
     zh: {
       title: '您处于离线状态',
       message: '没有网络连接。以下内容无需联网即可阅读。',
-      jmaRelay: "本应用转达日本气象厅的信息。本应用的显示内容并非官方发布。",
+      jmaRelay: "本应用转达日本气象厅发布的预警和信息。有关避难，请遵从当地市町村政府的指示。",
       notCovered: "本应用不提供避难指示或避难所是否开放的信息。",
       retry: '重新连接',
       guide: '现在该做什么',
@@ -73,7 +73,7 @@
     'zh-TW': {
       title: '您處於離線狀態',
       message: '沒有網路連線。以下內容無需連網即可閱讀。',
-      jmaRelay: "本應用程式轉達日本氣象廳的資訊。本應用程式顯示的內容並非官方發布。",
+      jmaRelay: "本應用程式轉達日本氣象廳發布的警報與資訊。有關避難，請遵從當地市町村政府的指示。",
       notCovered: "本應用程式不提供避難指示或避難所是否開放的資訊。",
       retry: '重新連線',
       guide: '現在該做什麼',
@@ -87,7 +87,7 @@
     ko: {
       title: '오프라인 상태입니다',
       message: '인터넷에 연결되어 있지 않습니다. 아래 내용은 통신 없이 읽을 수 있습니다.',
-      jmaRelay: "이 앱은 일본 기상청의 정보를 전달합니다. 이 앱의 표시 내용은 공식 발표가 아닙니다.",
+      jmaRelay: "이 앱은 일본 기상청이 발표한 경보와 정보를 전달합니다. 대피에 관해서는 현지 시정촌의 지시에 따라 주세요.",
       notCovered: "이 앱은 대피 지시나 대피소 개설 여부에 관한 정보를 제공하지 않습니다.",
       retry: '다시 연결',
       guide: '지금 할 일',
@@ -101,7 +101,7 @@
     vi: {
       title: 'Bạn đang ngoại tuyến',
       message: 'Không có kết nối internet. Các bước dưới đây đọc được khi không có mạng.',
-      jmaRelay: "Ứng dụng này chuyển tiếp thông tin từ Cơ quan Khí tượng Nhật Bản (JMA). Nội dung hiển thị trong ứng dụng không phải là thông báo chính thức.",
+      jmaRelay: "Ứng dụng này truyền đạt cảnh báo và thông tin do Cơ quan Khí tượng Nhật Bản công bố. Khi sơ tán, hãy làm theo chỉ dẫn của chính quyền thành phố, thị trấn hoặc làng tại địa phương.",
       notCovered: "Ứng dụng này không cung cấp lệnh sơ tán hoặc thông tin về việc nơi sơ tán có mở cửa hay không.",
       retry: 'Kết nối lại',
       guide: 'Việc cần làm ngay',
@@ -115,7 +115,7 @@
     th: {
       title: 'คุณออฟไลน์อยู่',
       message: 'ไม่มีการเชื่อมต่ออินเทอร์เน็ต ข้อความด้านล่างอ่านได้โดยไม่ต้องใช้เครือข่าย',
-      jmaRelay: "แอปนี้ถ่ายทอดข้อมูลจากกรมอุตุนิยมวิทยาญี่ปุ่น (JMA) เนื้อหาที่แสดงในแอปนี้ไม่ใช่ประกาศอย่างเป็นทางการ",
+      jmaRelay: "แอปนี้ถ่ายทอดคำเตือนและข้อมูลที่ประกาศโดยกรมอุตุนิยมวิทยาญี่ปุ่น สำหรับการอพยพ โปรดปฏิบัติตามคำสั่งของเทศบาลในพื้นที่",
       notCovered: "แอปนี้ไม่ให้ข้อมูลคำสั่งอพยพหรือข้อมูลว่าศูนย์อพยพเปิดอยู่หรือไม่",
       retry: 'เชื่อมต่ออีกครั้ง',
       guide: 'สิ่งที่ต้องทำตอนนี้',
@@ -129,7 +129,7 @@
     id: {
       title: 'Anda sedang offline',
       message: 'Tidak ada koneksi internet. Langkah di bawah bisa dibaca tanpa jaringan.',
-      jmaRelay: "Aplikasi ini meneruskan informasi dari Badan Meteorologi Jepang (JMA). Informasi yang ditampilkan aplikasi ini bukan pengumuman resmi.",
+      jmaRelay: "Aplikasi ini meneruskan peringatan dan informasi yang diterbitkan oleh Badan Meteorologi Jepang. Untuk evakuasi, ikuti instruksi pemerintah kota atau desa setempat.",
       notCovered: "Aplikasi ini tidak menyediakan perintah evakuasi atau informasi apakah tempat pengungsian sudah dibuka.",
       retry: 'Sambungkan ulang',
       guide: 'Yang harus dilakukan sekarang',
@@ -143,7 +143,7 @@
     ms: {
       title: 'Anda sedang offline',
       message: 'Tiada sambungan internet. Langkah di bawah boleh dibaca tanpa rangkaian.',
-      jmaRelay: "Aplikasi ini menyampaikan maklumat daripada Agensi Meteorologi Jepun (JMA). Paparan dalam aplikasi ini bukan pengumuman rasmi.",
+      jmaRelay: "Aplikasi ini menyampaikan amaran dan maklumat yang dikeluarkan oleh Agensi Meteorologi Jepun. Untuk pemindahan, ikut arahan pihak berkuasa perbandaran tempatan.",
       notCovered: "Aplikasi ini tidak menyediakan arahan pemindahan ke tempat selamat atau maklumat sama ada pusat pemindahan dibuka.",
       retry: 'Sambung semula',
       guide: 'Apa yang perlu dilakukan sekarang',
@@ -157,7 +157,7 @@
     tl: {
       title: 'Offline ka ngayon',
       message: 'Walang koneksyon sa internet. Mababasa ang mga hakbang sa ibaba kahit walang network.',
-      jmaRelay: "Ipinapasa ng app na ito ang impormasyon mula sa Japan Meteorological Agency (JMA). Ang ipinapakita ng app ay hindi opisyal na anunsyo.",
+      jmaRelay: "Ipinapabatid ng app na ito ang mga babala at impormasyong inilabas ng Japan Meteorological Agency. Para sa paglikas, sundin ang mga tagubilin ng lokal na pamahalaang lungsod, bayan o nayon.",
       notCovered: "Hindi nagbibigay ang app na ito ng mga utos sa paglikas o impormasyon kung bukas ang mga sentro ng paglikas.",
       retry: 'Kumonekta muli',
       guide: 'Ano ang gagawin ngayon',
@@ -171,7 +171,7 @@
     ne: {
       title: 'तपाईं अफलाइन छ',
       message: 'इन्टरनेट जडान छैन। तलका चरण नेटवर्क बिना पनि पढ्न सकिन्छ।',
-      jmaRelay: "यो एपले जापान मौसम विज्ञान निकाय (JMA) को जानकारी पुर्‍याउँछ। यस एपमा देखाइएको सामग्री आधिकारिक घोषणा होइन।",
+      jmaRelay: "यो एपले जापान मौसम विज्ञान निकायले जारी गरेका चेतावनी र जानकारी प्रस्तुत गर्छ। सुरक्षित स्थानमा सर्न स्थानीय नगर वा गाउँ सरकारका निर्देशन पालना गर्नुहोस्।",
       notCovered: "यो एपले सुरक्षित स्थानमा जान दिइएका निर्देशन वा आश्रयस्थल खुला छ कि छैन भन्ने जानकारी दिँदैन।",
       retry: 'पुनः जडान',
       guide: 'अहिले गर्नुपर्ने',
@@ -185,7 +185,7 @@
     fr: {
       title: 'Vous êtes hors ligne',
       message: 'Aucune connexion Internet. Les étapes ci-dessous sont lisibles sans réseau.',
-      jmaRelay: "Cette application relaie les informations de l'Agence météorologique du Japon (JMA). Ses affichages ne constituent pas des annonces officielles.",
+      jmaRelay: "Cette application relaie les alertes et les informations émises par l’Agence météorologique du Japon. Pour l’évacuation, suivez les consignes de votre municipalité.",
       notCovered: "Cette application ne fournit ni consignes d'évacuation ni informations sur l'ouverture des centres d'évacuation.",
       retry: 'Se reconnecter',
       guide: 'Que faire maintenant',
@@ -199,7 +199,7 @@
     de: {
       title: 'Sie sind offline',
       message: 'Keine Internetverbindung. Die folgenden Schritte sind ohne Netz lesbar.',
-      jmaRelay: "Diese App gibt Informationen der Japanischen Meteorologischen Behörde (JMA) weiter. Die Anzeigen dieser App sind keine amtlichen Bekanntmachungen.",
+      jmaRelay: "Diese App gibt Warnungen und Informationen der Japanischen Meteorologischen Behörde weiter. Befolgen Sie bei einer Evakuierung die Anweisungen Ihrer örtlichen Gemeinde.",
       notCovered: "Diese App bietet weder Evakuierungsanordnungen noch Informationen darüber, ob Evakuierungsunterkünfte geöffnet sind.",
       retry: 'Neu verbinden',
       guide: 'Was jetzt zu tun ist',
@@ -213,7 +213,7 @@
     it: {
       title: 'Sei offline',
       message: 'Nessuna connessione a Internet. I passaggi qui sotto si leggono senza rete.',
-      jmaRelay: "Questa app trasmette informazioni dell'Agenzia meteorologica giapponese (JMA). I contenuti visualizzati nell'app non sono comunicati ufficiali.",
+      jmaRelay: "Questa app riporta le allerte e le informazioni emesse dall’Agenzia meteorologica giapponese. Per l’evacuazione, segui le istruzioni del comune in cui ti trovi.",
       notCovered: "Questa app non fornisce ordini di evacuazione né informazioni sull'apertura dei centri di evacuazione.",
       retry: 'Riconnetti',
       guide: 'Cosa fare adesso',
@@ -227,7 +227,7 @@
     es: {
       title: 'Estás sin conexión',
       message: 'No hay conexión a Internet. Los pasos siguientes se leen sin red.',
-      jmaRelay: "Esta aplicación retransmite información de la Agencia Meteorológica de Japón (JMA). Lo que muestra la aplicación no constituye un comunicado oficial.",
+      jmaRelay: "Esta aplicación transmite las alertas y la información emitidas por la Agencia Meteorológica de Japón. Para la evacuación, sigue las instrucciones del municipio donde te encuentres.",
       notCovered: "Esta aplicación no proporciona órdenes de evacuación ni información sobre la apertura de los centros de evacuación.",
       retry: 'Reconectar',
       guide: 'Qué hacer ahora',
@@ -241,7 +241,7 @@
     easy_ja: {
       title: 'インターネットが つかえません',
       message: 'いんたーねっとに つながって いません。したの ことは よめます。',
-      jmaRelay: "きしょうちょうの じょうほうを つたえます。この アプリの ひょうじは、こうしき はっぴょうでは ありません。",
+      jmaRelay: "このアプリは、気象庁が出した警報や情報を伝えます。避難するときは、今いる市・町・村の指示に従ってください。",
       notCovered: "この アプリでは、「にげて ください」という まちの しじや、ひなんじょに いま はいれるかは わかりません。",
       retry: 'もう いちど つなぐ',
       guide: 'いま する こと',

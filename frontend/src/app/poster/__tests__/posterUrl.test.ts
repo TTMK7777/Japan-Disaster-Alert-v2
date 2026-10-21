@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildPosterTargetUrl } from '../posterUrl';
+import { buildPosterTargetUrl, isLocalOnlyOrigin, resolvePosterOrigin } from '../posterUrl';
 import { PREFECTURES } from '@/lib/prefectures';
 
 const ORIGIN = 'https://example.test';
@@ -43,5 +43,54 @@ describe('buildPosterTargetUrl（QR に入れる URL）', () => {
 
   it('origin は渡されたものをそのまま使う（URL を埋め込まない）', () => {
     expect(buildPosterTargetUrl('http://127.0.0.1:3000', '260000')).toBe('http://127.0.0.1:3000/?pref=260000');
+  });
+});
+
+describe('resolvePosterOrigin（QR の土台にする origin）', () => {
+  it('NEXT_PUBLIC_SITE_URL があればそれを優先する（パス・末尾スラッシュは落として origin だけ）', () => {
+    expect(resolvePosterOrigin('https://alert.example.jp/', 'http://localhost:3000')).toBe('https://alert.example.jp');
+    expect(resolvePosterOrigin(' https://alert.example.jp/app?x=1 ', 'http://localhost:3000')).toBe('https://alert.example.jp');
+  });
+
+  it.each([
+    ['未設定', undefined],
+    ['空', ''],
+    ['URL でない', 'not a url'],
+    ['http(s) 以外', 'javascript:alert(1)'],
+  ])('SITE_URL が%sならページの origin を使う', (_label, raw) => {
+    expect(resolvePosterOrigin(raw, 'http://192.168.1.5:3000')).toBe('http://192.168.1.5:3000');
+  });
+});
+
+describe('isLocalOnlyOrigin（他の端末から開けない origin）', () => {
+  it.each([
+    'http://localhost:3000',
+    'http://LOCALHOST',
+    'http://127.0.0.1:3100',
+    'http://127.1.2.3',
+    'http://[::1]:3000',
+    'http://0.0.0.0:3000',
+    'http://10.0.0.8:3000',
+    'http://172.16.0.1',
+    'http://172.31.255.255',
+    'http://192.168.1.5:3000',
+  ])('%s は他の端末から開けない', (origin) => {
+    expect(isLocalOnlyOrigin(origin)).toBe(true);
+  });
+
+  it.each([
+    'https://alert.example.jp',
+    'https://disaster-web-abc-an.a.run.app',
+    'http://172.15.0.1',
+    'http://172.32.0.1',
+    'http://192.169.0.1',
+    'http://11.0.0.1',
+    'https://10.example.com',
+  ])('%s は公開されうる（警告しない）', (origin) => {
+    expect(isLocalOnlyOrigin(origin)).toBe(false);
+  });
+
+  it('読めない値は警告側に倒す（QR が他端末で開けるか確かめられない）', () => {
+    expect(isLocalOnlyOrigin('not a url')).toBe(true);
   });
 });

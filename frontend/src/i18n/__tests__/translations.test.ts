@@ -58,6 +58,12 @@ const COMPONENT_KEYS = [
   'scope.notCovered',
   'scope.prefectureLink',
   'scope.travelerLink',
+  // 地域の明示・特別警報の帯（B8。components/RegionBar.tsx・SpecialWarningBand.tsx）
+  'region.showing',
+  'region.change',
+  'region.officialSwitchHint',
+  'warning.specialBanner',
+  'warning.view',
   // 低電力モード・最後に取得できた時刻（components/LowPower.tsx, ShelterMap の地図遅延）
   'lowPower.label',
   'lowPower.on',
@@ -266,5 +272,37 @@ describe('boundaryErrorMessages', () => {
       expect(boundaryErrorMessages[code].message).toBeTruthy();
       expect(boundaryErrorMessages[code].retry).toBeTruthy();
     });
+  });
+});
+
+describe('B8 の文言', () => {
+  const langCodes = LANGUAGES.map((l) => l.code);
+
+  it('地域名を差し込む 2 キーは全 16 言語で {pref} をちょうど 1 つ持つ（訳で崩れていない）', () => {
+    for (const code of langCodes) {
+      for (const key of ['region.showing', 'warning.specialBanner']) {
+        const text = translations[code][key];
+        expect(text.split('{pref}').length - 1, `${code}.${key}`).toBe(1);
+      }
+    }
+  });
+
+  it('scope.jmaRelay は肯定形（「公式発表ではない」で警報そのものを疑わせない）', () => {
+    expect(translations.ja['scope.jmaRelay']).toBe(
+      'このアプリは、気象庁が発表した警報・情報をお伝えします。避難については、市町村の指示に従ってください。'
+    );
+    expect(translations.ja['scope.jmaRelay']).not.toContain('公式発表ではありません');
+    expect(translations.en['scope.jmaRelay']).not.toMatch(/not official/i);
+  });
+
+  it('未訳のキー（ja/en のみ）は他言語で英語にフォールバックし、空やキー名を出さない', () => {
+    const untranslated = Object.keys(translations.en).filter(
+      (k) => k.startsWith('region.') && !translations.ko[k]
+    );
+    expect(untranslated.length).toBeGreaterThan(0);
+    for (const key of untranslated) {
+      expect(translations.ja[key], key).toBeTruthy();
+      expect(getTranslation('ko', key)).toBe(translations.en[key]);
+    }
   });
 });
