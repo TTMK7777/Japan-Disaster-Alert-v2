@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
+import { readStorage, writeStorage } from '@/lib/safeStorage';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -26,7 +27,7 @@ export function useTheme() {
 
   // Initialize from localStorage
   useEffect(() => {
-    const stored = localStorage.getItem('theme') as Theme | null;
+    const stored = readStorage('theme') as Theme | null;
     if (stored && ['light', 'dark', 'system'].includes(stored)) {
       setThemeState(stored);
     }
@@ -48,7 +49,7 @@ export function useTheme() {
 
   const setTheme = useCallback((newTheme: Theme) => {
     setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
+    writeStorage('theme', newTheme);
   }, []);
 
   return { theme, resolvedTheme, setTheme };
