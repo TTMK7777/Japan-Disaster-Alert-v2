@@ -173,3 +173,95 @@ class TestSse:
         await manager._check_tsunamis()
         payload = json.loads(queue.get_nowait().split("data: ", 1)[1])
         assert payload["tsunamis"] == []
+
+
+# ---- DIR レビュー must-fix（2026-10-22）----
+
+def _broken_fields_report() -> dict:
+    """発表中だが、必須の文字列項目が null・欠落している報（anm=null・ttl=null・ctt 欠落）。"""
+    report = _report("20261022010500", "20261022010000", [("210", "津波警報")])
+    report["anm"] = None
+    report["ttl"] = None
+    report["mag"] = None
+    del report["ctt"]
+    return report
+
+
+class TestEndpointFailure:
+    @pytest.mark.asyncio
+    async def test_上流の取得失敗は503で空配列にしない(self, client, monkeypatch):
+        """200 の [] を返すと、フロントは「津波なし」と受け取り表示中の警報を消す。"""
+        monkeypatch.setattr(main_module.limiter, "enabled", False)
+        stub = _Client(httpx.ConnectError("down"))
+        monkeypatch.setattr(main_module.tsunami_service, "_get_client", lambda: stub)
+        res = await client.get("/api/v1/tsunami/active")
+        assert res.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_壊れた本文も503(self, client, monkeypatch):
+        monkeypatch.setattr(main_module.limiter, "enabled", False)
+        stub = _Client(json.JSONDecodeError("x", "<html>", 0))
+        monkeypatch.setattr(main_module.tsunami_service, "_get_client", lambda: stub)
+        res = await client.get("/api/v1/tsunami/active")
+        assert res.status_code == 503
+
+    @pytest.mark.asyncio
+    async def test_確認済みの0件は200で空配列(self, client, monkeypatch):
+        monkeypatch.setattr(main_module.limiter, "enabled", False)
+        stub = _Client([REAL_FORECAST_REPORT])
+        monkeypatch.setattr(main_module.tsunami_service, "_get_client", lambda: stub)
+        res = await client.get("/api/v1/tsunami/active")
+        assert res.status_code == 200
+        assert res.json() == []
+
+
+class TestBrokenFieldsStillShown:
+    @pytest.mark.asyncio
+    async def test_必須項目がnullでも発表中の報を捨てない(self, monkeypatch):
+        active = await _service(monkeypatch, [_broken_fields_report()]).fetch_active_warnings()
+        assert len(active) == 1
+        assert active[0].warning_level == "warning"
+        assert active[0].event_id == "20261022010000"
+        assert active[0].id, "ctt が無くても id は空にしない（SSE の差分・閉じた警報の抑制に使う）"
+        assert [a["code"] for a in active[0].areas] == ["210"]
+        assert "None" not in active[0].message
+
+    @pytest.mark.asyncio
+    async def test_必須項目がnullでもactiveエンドポイントに出る(self, client, monkeypatch):
+        monkeypatch.setattr(main_module.limiter, "enabled", False)
+        stub = _Client([_broken_fields_report()])
+        monkeypatch.setattr(main_module.tsunami_service, "_get_client", lambda: stub)
+        res = await client.get("/api/v1/tsunami/active")
+        assert res.status_code == 200
+        assert [t["warning_level"] for t in res.json()] == ["warning"]
+
+    @pytest.mark.asyncio
+    async def test_必須項目がnullでもSSEに出る(self, monkeypatch):
+        manager = EventManager()
+        manager._tsunami_service = _service(monkeypatch, [_broken_fields_report()])
+        queue = await manager.connect()
+        await manager._check_tsunamis()
+        payload = json.loads(queue.get_nowait().split("data: ", 1)[1])
+        assert [t["warning_level"] for t in payload["tsunamis"]] == ["warning"]
+
+    @pytest.mark.asyncio
+    async def test_モデルの組み立て自体が失敗しても最小限の項目で出す(self, monkeypatch):
+        """正規化をすり抜ける想定外の形でも、発表中の報は捨てない。"""
+        service = _service(monkeypatch, [_broken_fields_report()])
+
+        def boom(item, warning_level):
+            raise TypeError("unexpected shape")
+
+        monkeypatch.setattr(service, "_build_tsunami_info", boom)
+        active = await service.fetch_active_warnings()
+        assert len(active) == 1
+        assert active[0].warning_level == "warning"
+        assert active[0].event_id == "20261022010000"
+        assert [a["code"] for a in active[0].areas] == ["210"]
+
+    @pytest.mark.asyncio
+    async def test_履歴一覧でもnullの項目で落とさない(self, monkeypatch):
+        reports = await _service(monkeypatch, [_broken_fields_report()]).get_tsunami_list()
+        assert len(reports) == 1
+        assert reports[0].earthquake_location == ""
+        assert reports[0].title == ""

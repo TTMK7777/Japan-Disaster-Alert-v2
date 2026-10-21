@@ -287,3 +287,72 @@ class TestFetchReports:
         monkeypatch.setattr(service, "_get_client", lambda: _Client())
         with pytest.raises(ValueError):
             await service.fetch_tsunami_reports()
+
+
+class TestUnreadableShape:
+    """200 で配列なのに読める報が 1 件も無い（キー改名など）を「津波なし」にしない。"""
+
+    @pytest.mark.asyncio
+    async def test_kindをkindsに改名した形は例外(self, monkeypatch):
+        renamed = dict(REAL_FORECAST_REPORT)
+        renamed["kinds"] = renamed.pop("kind")
+        service = TsunamiService()
+
+        class _Client:
+            async def get(self, url, timeout=None):
+                return _Response([renamed])
+
+        monkeypatch.setattr(service, "_get_client", lambda: _Client())
+        with pytest.raises(ValueError):
+            await service.fetch_tsunami_reports()
+
+    @pytest.mark.asyncio
+    async def test_dictでない要素だけでも例外(self, monkeypatch):
+        service = TsunamiService()
+
+        class _Client:
+            async def get(self, url, timeout=None):
+                return _Response(["壊れた報"])
+
+        monkeypatch.setattr(service, "_get_client", lambda: _Client())
+        with pytest.raises(ValueError):
+            await service.fetch_tsunami_reports()
+
+    @pytest.mark.asyncio
+    async def test_空の一覧と全部予報の一覧は正当な0件(self, monkeypatch):
+        service = TsunamiService()
+        payload = {"data": []}
+
+        class _Client:
+            async def get(self, url, timeout=None):
+                return _Response(payload["data"])
+
+        monkeypatch.setattr(service, "_get_client", lambda: _Client())
+        assert await service.fetch_tsunami_reports() == []
+        payload["data"] = [REAL_FORECAST_REPORT, REAL_EMPTY_KIND_REPORT]
+        reports = await service.fetch_tsunami_reports()
+        assert select_active_tsunami_reports(reports) == []
+
+
+class TestReportsWithoutKind:
+    """kind が空・欠落の報（観測情報など・推測）を最新報に採って警報を消さない。"""
+
+    def test_後から来たkind無しの報で警報を消さない(self):
+        warning = _report("20261022010000", "20261022005500", [("210", "津波警報")])
+        observation = _report("20261022012000", "20261022005500", [])
+        active = select_active_tsunami_reports([observation, warning])
+        assert len(active) == 1
+        assert active[0].level == "warning"
+        assert active[0].report["ctt"] == "20261022010000"
+
+    def test_kindキーが無い報でも消さない(self):
+        warning = _report("20261022010000", "20261022005500", [("210", "津波警報")])
+        observation = _report("20261022012000", "20261022005500", [])
+        del observation["kind"]
+        assert [r.level for r in select_active_tsunami_reports([observation, warning])] == ["warning"]
+
+    def test_kindを持つ解除報は引き続き効く(self):
+        warning = _report("20261022010000", "20261022005500", [("210", "津波警報")])
+        observation = _report("20261022012000", "20261022005500", [])
+        lifted = _report("20261022030000", "20261022005500", [("210", "警報解除")])
+        assert select_active_tsunami_reports([lifted, observation, warning]) == []

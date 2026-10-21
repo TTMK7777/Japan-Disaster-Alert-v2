@@ -95,6 +95,28 @@ class ActiveTsunamiReport:
     areas: tuple[TsunamiAreaKind, ...]
 
 
+def _text(value) -> str:
+    """上流の値を文字列へ。null・欠落は空文字（`.get(key, "")` は null のキーを素通しする）。"""
+    return "" if value is None else str(value)
+
+
+def _optional_text(value) -> Optional[str]:
+    return None if value is None or value == "" else str(value)
+
+
+def _report_id(report: dict) -> str:
+    """報の ID。ctt が無ければ eid と発表時刻から作る（空にしない: SSE の差分と抑制の鍵）。"""
+    ctt = _text(report.get("ctt"))
+    if ctt:
+        return ctt
+    return f"eid-{_text(report.get('eid')) or 'unknown'}-{_text(report.get('rdt'))}"
+
+
+def _is_readable_report(report) -> bool:
+    """判定に使える形の報か（dict で、kind が配列）。"""
+    return isinstance(report, dict) and isinstance(report.get("kind"), list)
+
+
 def _report_order_key(report: dict) -> str:
     # ctt は「YYYYMMDDHHMMSS」固定長の作成時刻なので文字列比較で時系列になる
     return str(report.get("ctt") or "")
@@ -103,7 +125,8 @@ def _report_order_key(report: dict) -> str:
 def select_active_tsunami_reports(reports: list) -> list[ActiveTsunamiReport]:
     """list.json の生の報から、現在発表中の津波警報・注意報をイベントごとに選ぶ。
 
-    - イベント（eid）ごとに**最新報だけ**を見る。過去報の注意報を発表中にしない
+    - イベント（eid）ごとに**最新報だけ**を見る。過去報の注意報を発表中にしない。
+      ただし kind（区域）が空・欠落の報は最新報の候補にしない（後から来た観測情報などで警報を消さない）
     - 最新報が取消（ift=取消）なら発表中にしない
     - 区域ごとに判定する。解除・予報・なしの区域は落とし、注意報以上と種別不明の区域を残す
       （一部区域だけ解除された報でも、残りの区域は発表中のまま）
@@ -113,6 +136,11 @@ def select_active_tsunami_reports(reports: list) -> list[ActiveTsunamiReport]:
     for index, report in enumerate(reports):
         if not isinstance(report, dict):
             logger.warning("津波一覧に dict でない要素がある（飛ばす）")
+            continue
+        if not report.get("kind"):
+            # 区域（kind）を持たない報は「最新報」の候補にしない。観測情報などで kind が
+            # 空・欠落の報が後から来ると、その報を最新として採り、同じイベントの警報が
+            # 消えてしまう。解除報は kind を持つので、解除は引き続き効く
             continue
         event_id = str(report.get("eid") or f"__no_eid_{index}")
         current = latest.get(event_id)
@@ -184,6 +212,10 @@ class TsunamiService:
         data = response.json()
         if not isinstance(data, list):
             raise ValueError(f"津波一覧が配列ではない: {type(data).__name__}")
+        if data and not any(_is_readable_report(r) for r in data):
+            # キー改名などで形が変わり、全報が読めないのを「津波なし」に見せない。
+            # 区域が全部 解除・予報 で発表中が 0 件になるのは正当な 0 件なのでここでは見ない
+            raise ValueError(f"津波一覧の {len(data)} 件に読める報が無い（形が変わった可能性）")
         return data
 
     async def get_tsunami_list(self, limit: int = 10) -> list[TsunamiInfo]:
@@ -210,34 +242,37 @@ class TsunamiService:
 
         for item in data:
             try:
-                # 座標情報のパース
-                coordinates = item.get("cod", "")
-                lat, lon = self._parse_coordinates(coordinates)
-
-                # 警報レベルの判定
-                warning_level = self._determine_warning_level(item.get("kind", []))
-
-                tsunami = TsunamiInfo(
-                    id=item.get("ctt", ""),
-                    event_id=item.get("eid", ""),
-                    title=item.get("ttl", ""),
-                    title_en=item.get("en_ttl"),
-                    report_datetime=item.get("rdt", ""),
-                    earthquake_time=item.get("at"),
-                    earthquake_location=item.get("anm", ""),
-                    earthquake_location_en=item.get("en_anm"),
-                    magnitude=item.get("mag"),
-                    coordinates=coordinates,
-                    warning_level=warning_level,
-                    areas=item.get("kind", []),
-                    message=self._generate_message(item, warning_level)
-                )
-                tsunamis.append(tsunami)
+                warning_level = self._determine_warning_level(item.get("kind") or [])
+                tsunamis.append(self._build_tsunami_info(item, warning_level))
             except Exception as e:
                 logger.error(f"津波情報パースエラー: {e}", exc_info=True)
                 continue
 
         return tsunamis
+
+    def _build_tsunami_info(self, item: dict, warning_level: str) -> TsunamiInfo:
+        """1 報を TsunamiInfo にする。上流の null・欠落・数値は文字列へ正規化する。
+
+        `item.get("anm", "")` は**キーが null で存在する**ときに None を返し、
+        必須の str 項目の検証で落ちる。`or ""` で正規化する。
+        """
+        coordinates = _text(item.get("cod"))
+        kinds = item.get("kind")
+        return TsunamiInfo(
+            id=_report_id(item),
+            event_id=_text(item.get("eid")),
+            title=_text(item.get("ttl")),
+            title_en=_optional_text(item.get("en_ttl")),
+            report_datetime=_text(item.get("rdt")),
+            earthquake_time=_optional_text(item.get("at")),
+            earthquake_location=_text(item.get("anm")),
+            earthquake_location_en=_optional_text(item.get("en_anm")),
+            magnitude=_optional_text(item.get("mag")),
+            coordinates=coordinates or None,
+            warning_level=warning_level,
+            areas=[k for k in kinds if isinstance(k, dict)] if isinstance(kinds, list) else [],
+            message=self._generate_message(item, warning_level),
+        )
 
     def _parse_coordinates(self, coord_str: str) -> tuple[Optional[float], Optional[float]]:
         """座標文字列をパース（例: +40.9+143.0-20000/）"""
@@ -286,9 +321,9 @@ class TsunamiService:
         title（ttl）は「津波警報・注意報・予報」のように全種別を並べた名前のことがあり、
         部分一致で決めると注意報や予報にまで「直ちに高台へ避難」を出してしまう。
         """
-        location = item.get("anm", "不明")
-        magnitude = item.get("mag", "不明")
-        title = item.get("ttl", "")
+        location = _text(item.get("anm")) or "不明"
+        magnitude = _text(item.get("mag")) or "不明"
+        title = _text(item.get("ttl"))
 
         if warning_level in ("major_warning", "warning"):
             return f"【{title}】{location}でマグニチュード{magnitude}の地震が発生しました。直ちに高台へ避難してください。"
@@ -309,15 +344,25 @@ class TsunamiService:
         reports = await self.fetch_tsunami_reports()
         result: list[TsunamiInfo] = []
         for active in select_active_tsunami_reports(reports):
-            parsed = self._parse_tsunami_list([active.report])
-            if not parsed:
-                continue
-            info = parsed[0]
-            info.warning_level = active.level
-            info.areas = [
+            areas = [
                 {"code": area.code, "kind": area.kind_ja, "level": area.level} for area in active.areas
             ]
-            info.message = self._generate_message(active.report, active.level)
+            try:
+                info = self._build_tsunami_info(active.report, active.level)
+            except Exception as e:
+                # **発表中の報は捨てない。** 解析できない項目があっても、
+                # イベント・階級・区域だけの最小限の形で必ず返す
+                logger.error(f"発表中の津波情報の解析エラー（最小限の項目で返す）: {e}", exc_info=True)
+                info = TsunamiInfo(
+                    id=_report_id(active.report),
+                    event_id=_text(active.report.get("eid")),
+                    title="",
+                    report_datetime="",
+                    earthquake_location="",
+                    warning_level=active.level,
+                    message="",
+                )
+            info.areas = areas
             result.append(info)
         return result
 
