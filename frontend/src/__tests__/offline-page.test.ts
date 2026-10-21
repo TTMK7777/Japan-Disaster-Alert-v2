@@ -8,7 +8,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { LANGUAGES } from '@/i18n/translations';
+import { LANGUAGES, translations } from '@/i18n/translations';
 
 const OFFLINE_HTML = readFileSync(
   join(process.cwd(), 'public', 'offline.html'),
@@ -156,5 +156,42 @@ describe('CSP との整合（2026-07-30 の実測で発覚した事故の再発�
   it('イベントハンドラ属性に依存しない（onclick を使わない）', () => {
     // CSP の script-src に 'unsafe-inline' が無いため onclick 属性も実行されない
     expect(OFFLINE_HTML).not.toMatch(/\son[a-z]+\s*=/i);
+  });
+});
+
+describe('offline.html — このアプリが扱う範囲（避難指示・避難所は扱わない）', () => {
+  /**
+   * オフライン画面は「何も出ていない」状態の画面そのもの。ここに範囲が書いていないと、
+   * 「避難指示はこのアプリに出ていない＝出ていない」と読まれる。
+   * 文言は本体（translations.ts の scope.*）と同じ文を JSON 文字列で埋め込む。
+   */
+  function chunks(): Record<string, string> {
+    const perLang = translationBlock()
+      .split(/\n    (?='?[a-zA-Z_-]+'?:\s*\{)/)
+      .filter((s) => s.trim());
+    return Object.fromEntries(perLang.map((c) => [c.match(/^'?([a-zA-Z_-]+)'?:/)![1], c]));
+  }
+
+  it.each(LANGUAGES.map((l) => [l.code]))('%s: jmaRelay と notCovered が本体と同じ文で入っている', (code) => {
+    const chunk = chunks()[code];
+    expect(chunk, `${code} のブロックが無い`).toBeDefined();
+    for (const key of ['jmaRelay', 'notCovered'] as const) {
+      const expected = translations[code]?.[`scope.${key}`];
+      expect(expected, `translations.ts の ${code} に scope.${key} が無い`).toBeTruthy();
+      expect(chunk, `${code} の ${key}`).toContain(`${key}: ${JSON.stringify(expected)}`);
+    }
+  });
+
+  it('範囲の要素があり、JS が動かなくても英語で読める', () => {
+    for (const [id, key] of [['scope-relay', 'scope.jmaRelay'], ['scope-not-covered', 'scope.notCovered']]) {
+      const m = OFFLINE_HTML.match(new RegExp(`<p id="${id}"[^>]*>([^<]*)</p>`));
+      expect(m, `${id} の要素が見つからない`).not.toBeNull();
+      expect(m![1].trim()).toBe(translations.en[key]);
+    }
+  });
+
+  it('言語切替で範囲の文も差し替える', () => {
+    expect(OFFLINE_JS).toContain("getElementById('scope-relay').textContent = t.jmaRelay");
+    expect(OFFLINE_JS).toContain("getElementById('scope-not-covered').textContent = t.notCovered");
   });
 });

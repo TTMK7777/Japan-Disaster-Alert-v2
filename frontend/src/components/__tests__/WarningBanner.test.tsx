@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import WarningBanner from '../WarningBanner';
 import { getTranslation } from '@/i18n/translations';
+import { PREFECTURE_DISASTER_LINKS } from '@/lib/prefectureDisasterLinks';
 
 /**
  * 気象庁の警報表示。
@@ -158,3 +159,52 @@ describe('WarningBanner — 地域の受け渡し（URL の ?pref= 用）', () =
     await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('270000'));
   });
 });
+
+describe('WarningBanner — 選んだ県の公式防災ページへのボタン', () => {
+  // このアプリは避難指示・避難所の開設状況を扱わない。警報タブでは県が決まっているので、
+  // 「警報なし」を「避難指示なし」と読ませないよう、その県の公式ページへ 1 タップで行けるようにする
+  const okinawa = PREFECTURE_DISASTER_LINKS.find((l) => l.pref === '47')!;
+  const osaka = PREFECTURE_DISASTER_LINKS.find((l) => l.pref === '27')!;
+
+  async function findOfficialLink() {
+    return screen.findByRole('link', { name: new RegExp(escapeRegExp(getTranslation('th', 'scope.prefectureLink'))) });
+  }
+
+  it('警報なしの画面に、県の外国語ページへのボタンが出る（タイ語）', async () => {
+    mockFetch([]);
+    render(<WarningBanner areaCode="471000" language="th" />);
+    const link = await findOfficialLink();
+    expect(link).toHaveAttribute('href', okinawa.foreignUrl!);
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('警報が出ている画面にも出る', async () => {
+    mockFetch([NEW_WARNING]);
+    render(<WarningBanner areaCode="471000" language="th" />);
+    await screen.findByRole('listitem');
+    expect(await findOfficialLink()).toHaveAttribute('href', okinawa.foreignUrl!);
+  });
+
+  it('警報の取得に失敗した画面にも出る（いちばん公式情報が要る場面）', async () => {
+    mockFetch({}, false);
+    render(<WarningBanner areaCode="471000" language="th" />);
+    await screen.findByText(getTranslation('th', 'warning.error'));
+    expect(await findOfficialLink()).toHaveAttribute('href', okinawa.foreignUrl!);
+  });
+
+  it('セレクタで県を変えるとボタンの行き先も変わる', async () => {
+    mockFetch([]);
+    render(<WarningBanner areaCode="471000" language="th" />);
+    await findOfficialLink();
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: '270000' } });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('link', { name: new RegExp(escapeRegExp(getTranslation('th', 'scope.prefectureLink'))) })
+      ).toHaveAttribute('href', osaka.foreignUrl ?? osaka.disasterUrl)
+    );
+  });
+});
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}

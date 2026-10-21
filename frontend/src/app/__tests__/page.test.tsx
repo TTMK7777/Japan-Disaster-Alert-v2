@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react';
 import { LOW_POWER_STORAGE_KEY } from '@/hooks/useLowPowerMode';
 import { getTranslation } from '@/i18n/translations';
+import { NATIONAL_TRAVELER_URL, PREFECTURE_DISASTER_LINKS } from '@/lib/prefectureDisasterLinks';
 
 /**
  * page.tsx の配線を本物のフック・コンポーネントのまま固定する結合テスト。
@@ -244,5 +245,55 @@ describe('page.tsx — 低電力モード', () => {
       expect(document.getElementById('low-power-toggle')).not.toBeNull();
       expect(screen.getByTestId('last-success')).toBeInTheDocument();
     }
+  });
+});
+
+describe('page.tsx — 「このアプリが扱う範囲」の帯', () => {
+  /** 帯の中のリンク（警報タブのボタンと区別するため帯の中に絞る） */
+  const bandLink = () => within(screen.getByTestId('scope-notice')).getByRole('link');
+
+  it('どのタブでも、タブの中身より前（フッターではない位置）に出る', async () => {
+    localStorage.setItem('disaster-app-lang', 'ja');
+    await renderHome();
+    for (const tab of ['earthquake', 'warning', 'emergency', 'shelter']) {
+      fireEvent.click(document.getElementById(`tab-${tab}`) as HTMLElement);
+      const band = await screen.findByTestId('scope-notice');
+      expect(band).toHaveTextContent(getTranslation('ja', 'scope.notCovered'));
+      expect(band.closest('footer')).toBeNull();
+      const following = (el: Element | null) =>
+        !!el && (band.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      expect(following(document.querySelector('footer')), tab).toBe(true);
+      // タブの中身より前にある。緊急連絡・避難所タブはこのモック（全 API が []）では
+      // ErrorBoundary の代替表示になるので、代替表示（role=alert）も「中身」として扱う
+      const content =
+        document.getElementById(`tabpanel-${tab}`) ??
+        document.querySelector('#main-content [role="alert"]');
+      expect(content, `${tab} の中身`).not.toBeNull();
+      expect(following(content), tab).toBe(true);
+    }
+  });
+
+  it('言語を切り替えると帯もその言語になる', async () => {
+    await renderHome();
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'ko' } });
+    await waitFor(() =>
+      expect(screen.getByTestId('scope-notice')).toHaveTextContent(getTranslation('ko', 'scope.notCovered'))
+    );
+  });
+
+  it('?pref= が無ければ全国リンク、?pref= があればその県、警報タブで選び直すと追従する', async () => {
+    const first = await renderHome();
+    await waitFor(() => expect(bandLink()).toHaveAttribute('href', NATIONAL_TRAVELER_URL));
+    first.unmount();
+
+    setUrl('/?pref=471000&lang=ja');
+    await renderHome();
+    const okinawa = PREFECTURE_DISASTER_LINKS.find((l) => l.pref === '47')!;
+    await waitFor(() => expect(bandLink()).toHaveAttribute('href', okinawa.disasterUrl));
+
+    openWarningTab();
+    fireEvent.change(await findAreaSelect(), { target: { value: '260000' } });
+    const kyoto = PREFECTURE_DISASTER_LINKS.find((l) => l.pref === '26')!;
+    await waitFor(() => expect(bandLink()).toHaveAttribute('href', kyoto.disasterUrl));
   });
 });

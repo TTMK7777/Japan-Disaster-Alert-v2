@@ -9,6 +9,7 @@ import WarningBanner from '@/components/WarningBanner';
 import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
 import TransitLinks from '@/components/TransitLinks';
+import ScopeNotice from '@/components/ScopeNotice';
 import ThemeToggle from '@/components/ThemeToggle';
 import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
@@ -362,6 +363,10 @@ export default function Home() {
             onDismiss={battery.dismiss}
           />
         )}
+
+        {/* このアプリが扱う範囲（気象庁の中継・避難指示と避難所の開設状況は扱わない）と公式情報への導線。
+            フッターに置くと初回表示で見えないため、全タブ共通でタブの中身より上に置く */}
+        <ScopeNotice language={language} prefCode={prefCode} />
 
         {/* タブコンテンツ（アクセシビリティ強化） */}
         <ErrorBoundary language={language}>
