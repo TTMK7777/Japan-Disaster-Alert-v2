@@ -75,6 +75,27 @@ export function detectLanguage(candidates?: readonly string[] | null): Supported
 }
 
 /**
+ * URL の `?lang=` のような、利用者（またはリンクの作り手）が明示した 1 つの値を
+ * 対応言語に解釈する。解釈できなければ null（呼び出し側は従来の判定へ落とす）。
+ *
+ * 正規化はブラウザ判定（`resolveTag`）と同じものを使う（大文字小文字・`en-US`・`zh-Hant`）。
+ * ただし `easy_ja` は明示指定なので受け付ける（自動判定の対象外にしている理由は
+ * 「ブラウザ設定からは必要性を判別できない」ためで、明示されていればその理由は無い）。
+ */
+export function resolveLanguageParam(value: string | null | undefined): SupportedLanguage | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  const explicit = LANGUAGES.find((l) => l.code.toLowerCase() === normalized);
+  if (explicit) return explicit.code as SupportedLanguage;
+  return resolveTag(value);
+}
+
+/** 対応言語のコードそのものか（大文字小文字・地域付きは認めない厳密な判定） */
+export function isSupportedLanguage(value: unknown): value is SupportedLanguage {
+  return typeof value === 'string' && LANGUAGES.some((l) => l.code === value);
+}
+
+/**
  * 実行中のブラウザから言語タグを優先度順に取得する。
  * SSR や navigator が無い環境では空配列を返す。
  */

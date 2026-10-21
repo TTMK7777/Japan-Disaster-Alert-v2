@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
 import WarningBanner from '../WarningBanner';
 import { getTranslation } from '@/i18n/translations';
 
@@ -118,5 +118,43 @@ describe('WarningBanner — 継続中の警報', () => {
     expect(within(item).getByText('注意報')).toBeInTheDocument();
     expect(within(item).getByText('継続中')).toBeInTheDocument();
     expect(within(item).getByText('注意報')).not.toBe(within(item).getByText('継続中'));
+  });
+});
+
+describe('WarningBanner — 地域の受け渡し（URL の ?pref= 用）', () => {
+  it('利用者がセレクタで地域を変えたら onAreaCodeChange に新しいコードを渡す', async () => {
+    mockFetch([]);
+    const onAreaCodeChange = vi.fn();
+    render(<WarningBanner areaCode="130000" language="ja" onAreaCodeChange={onAreaCodeChange} />);
+    const select = await screen.findByRole('combobox');
+
+    fireEvent.change(select, { target: { value: '260000' } });
+
+    expect(onAreaCodeChange).toHaveBeenCalledWith('260000');
+    expect(select).toHaveValue('260000');
+  });
+
+  it('親から渡す areaCode が後から変わったら、その地域に切り替えて取得し直す', async () => {
+    const fetchMock = mockFetch([]);
+    const { rerender } = render(<WarningBanner areaCode="130000" language="ja" />);
+    await screen.findByRole('combobox');
+
+    rerender(<WarningBanner areaCode="260000" language="ja" />);
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('260000'));
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes('area_code=260000'))).toBe(true);
+  });
+
+  it('areaCode を変えない親のもとでは、利用者の選択を保つ（従来の非制御の挙動）', async () => {
+    mockFetch([]);
+    const { rerender } = render(<WarningBanner areaCode="130000" language="ja" />);
+    const select = await screen.findByRole('combobox');
+    fireEvent.change(select, { target: { value: '270000' } });
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('270000'));
+
+    rerender(<WarningBanner areaCode="130000" language="en" />);
+
+    await waitFor(() => expect(screen.getByRole('combobox')).toHaveValue('270000'));
   });
 });
