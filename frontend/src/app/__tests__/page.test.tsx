@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react';
 import { LOW_POWER_STORAGE_KEY } from '@/hooks/useLowPowerMode';
 
 /**
@@ -57,6 +57,11 @@ function openWarningTab() {
   fireEvent.click(document.getElementById('tab-warning') as HTMLElement);
 }
 
+/** 警報タブの地域セレクタ（ヘッダーの言語セレクタも combobox なのでパネル内に絞る） */
+async function findAreaSelect(): Promise<HTMLSelectElement> {
+  const panel = document.getElementById('tabpanel-warning') as HTMLElement;
+  return (await within(panel).findByRole('combobox')) as HTMLSelectElement;
+}
 
 beforeEach(() => {
   FakeEventSource.instances = [];
@@ -81,6 +86,40 @@ afterEach(() => {
   vi.useRealTimers();
   localStorage.clear();
   setUrl('/');
+});
+
+describe('page.tsx — 警報タブの地域セレクタと URL の配線', () => {
+  it('?pref= で開き、セレクタで選び直すと URL と取得先が変わり、再マウントしても残る', async () => {
+    setUrl('/?pref=260000&utm=x#h');
+    const first = await renderHome();
+    openWarningTab();
+
+    // URL の地域（京都）で取りに行く
+    await waitFor(() => expect(urls().some((u) => u.includes('area_code=260000'))).toBe(true));
+    const select = await findAreaSelect();
+    expect(select.value).toBe('260000');
+
+    fireEvent.change(select, { target: { value: '270000' } });
+
+    // URL: pref だけが変わり、他のクエリと hash は残る
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get('pref')).toBe('270000');
+    expect(params.get('utm')).toBe('x');
+    expect(window.location.hash).toBe('#h');
+
+    // 取得先も大阪に変わる
+    await waitFor(() => expect(urls().some((u) => u.includes('area_code=270000'))).toBe(true));
+
+    // 再マウント（再読み込み相当）しても大阪のまま
+    first.unmount();
+    fetchMock().mockClear();
+    await renderHome();
+    openWarningTab();
+    await waitFor(() => expect(countOf('/api/v1/alerts')).toBeGreaterThan(0));
+    const alertUrls = urls().filter((u) => u.includes('/api/v1/alerts'));
+    expect(alertUrls.every((u) => u.includes('area_code=270000'))).toBe(true);
+    expect((await findAreaSelect()).value).toBe('270000');
+  });
 });
 
 describe('page.tsx — ストレージ拒否', () => {
