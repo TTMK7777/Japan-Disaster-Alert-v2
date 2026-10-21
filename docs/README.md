@@ -18,6 +18,7 @@ Japan Disaster Alert のドキュメントハブです。読者のロール別�
 内部構造やコントリビュートを行う方:
 - [アーキテクチャ](dev/architecture.md) — コンポーネント構成とデータフロー
 - [要件と実装のギャップ分析](dev/requirements-gap-2026.md) — 訪日客ニーズに対する現状実装の差分と優先度
+- [接点戦略](dev/touchpoints-2026.md) — 好みの入口（QR・サイネージ・埋め込み等）から使えるようにする方針と順番
 - [用語集](glossary.md) — プロジェクト固有用語の定義
 - [コントリビューションガイド](../CONTRIBUTING.md) — 開発フロー・コーディング規約
 - [変更履歴 / CHANGELOG](../CHANGELOG.md) — リリースごとの変更点
@@ -42,6 +43,7 @@ Japan Disaster Alert のドキュメントハブです。読者のロール別�
 | [docs/research/inbound-disaster-needs-2026.md](research/inbound-disaster-needs-2026.md) | Reference | 訪日外国人の災害時ニーズ調査（公的調査の棚卸し） |
 | [docs/research/b2b-pivot-demand-2026.md](research/b2b-pivot-demand-2026.md) | Reference | 訪日客に接する日本側の主体（宿泊施設・雇用主・自治体）の需要調査 |
 | [docs/dev/requirements-gap-2026.md](dev/requirements-gap-2026.md) | Explanation | 要件と実装のギャップ分析・優先度提案 |
+| [docs/dev/touchpoints-2026.md](dev/touchpoints-2026.md) | Explanation | 接点戦略（QR・サイネージ・埋め込み・公開フィードの順番と責任範囲） |
 | [docs/strategy/differentiation-and-social-impact.md](strategy/differentiation-and-social-impact.md) | Explanation | 差別化戦略・社会貢献方針 |
 
 ## 質問・不具合報告 (Support)
