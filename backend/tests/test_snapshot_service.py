@@ -406,3 +406,81 @@ class TestDefaultFetchers:
         await builder.build()
         hits = [u for u in router.requests if u.endswith("data/warning.json")]
         assert len(hits) == 2
+
+
+class TestStaleLimit:
+    """最後の成功から 15 分を過ぎた dataset は error（items=null）に落とす。
+
+    表示側が fetched_at を見なくても、古い「津波なし」が出続けないようにする。
+    """
+
+    @pytest.mark.asyncio
+    async def test_15分以内はstale_過ぎたらerror(self):
+        clock = _Clock()
+        quakes = _Switch([_eq_item("first")])
+        builder = _builder(clock=clock, earthquakes=quakes)
+        await builder.build()
+        quakes.exc = httpx.ConnectError("down")
+
+        clock.now = T0 + timedelta(seconds=snapshot_service.SNAPSHOT_STALE_LIMIT_SECONDS)
+        assert (await builder.build()).datasets.earthquakes.status == DatasetStatus.stale
+
+        clock.now = T0 + timedelta(seconds=snapshot_service.SNAPSHOT_STALE_LIMIT_SECONDS + 1)
+        ds = (await builder.build()).datasets.earthquakes
+        assert ds.status == DatasetStatus.error
+        assert ds.items is None and ds.fetched_at is None
+
+    def test_上限は15分(self):
+        assert snapshot_service.SNAPSHOT_STALE_LIMIT_SECONDS == 15 * 60
+
+    @pytest.mark.asyncio
+    async def test_前回ファイルから引き継いだ値にも上限が効く(self):
+        previous = await _builder(tsunami=_ok([])).build()
+        clock = _Clock(T0 + timedelta(minutes=16))
+        builder = _builder(clock=clock, tsunami=_fail(httpx.ConnectError("down")))
+        builder.seed(previous)
+        assert (await builder.build()).datasets.tsunami.status == DatasetStatus.error
+
+
+class TestUnreadableUpstream:
+    @pytest.mark.asyncio
+    async def test_津波のkindをkindsに改名した形はokにしない(self, services):
+        p2p, tsunami, volcano, router = services
+        renamed = dict(TSUNAMI_ADVISORY)
+        renamed["kinds"] = renamed.pop("kind")
+        router.routes["/tsunami/data/list.json"] = [renamed]
+        snap = await SnapshotBuilder(build_default_fetchers(p2p, tsunami, volcano), clock=_Clock()).build()
+        assert snap.datasets.tsunami.status != DatasetStatus.ok
+
+    @pytest.mark.asyncio
+    async def test_津波が全部予報なら正当な0件でok(self, services):
+        p2p, tsunami, volcano, router = services
+        forecast = dict(TSUNAMI_ADVISORY, kind=[{"code": "100", "kind": "津波予報（若干の海面変動）"}])
+        router.routes["/tsunami/data/list.json"] = [forecast]
+        snap = await SnapshotBuilder(build_default_fetchers(p2p, tsunami, volcano), clock=_Clock()).build()
+        assert snap.datasets.tsunami.status == DatasetStatus.ok
+        assert snap.datasets.tsunami.items == []
+
+    @pytest.mark.asyncio
+    async def test_噴火のレコードが全部読めなければokにしない(self, services):
+        p2p, tsunami, volcano, router = services
+        router.routes["/volcano/data/warning.json"] = [{"volcanoInfo": "改名された形"}, "壊れた要素"]
+        snap = await SnapshotBuilder(build_default_fetchers(p2p, tsunami, volcano), clock=_Clock()).build()
+        assert snap.datasets.volcano_warnings.status != DatasetStatus.ok
+
+    @pytest.mark.asyncio
+    async def test_噴火が全部解除なら正当な0件でok(self, services):
+        p2p, tsunami, volcano, router = services
+        lifted = json.loads(json.dumps(VOLCANO_WARNING))
+        lifted[0]["volcanoInfos"][0]["items"][0]["condition"] = "解除"
+        router.routes["/volcano/data/warning.json"] = lifted
+        snap = await SnapshotBuilder(build_default_fetchers(p2p, tsunami, volcano), clock=_Clock()).build()
+        assert snap.datasets.volcano_warnings.status == DatasetStatus.ok
+        assert snap.datasets.volcano_warnings.items == []
+
+    @pytest.mark.asyncio
+    async def test_既存の噴火警報エンドポイント経路は従来どおり空(self, services):
+        """get_volcano_warnings（既存 API 用）は全滅でも [] のまま（変えない）。"""
+        _, _, volcano, router = services
+        router.routes["/volcano/data/warning.json"] = [{"volcanoInfo": "改名された形"}]
+        assert await volcano.get_volcano_warnings() == []

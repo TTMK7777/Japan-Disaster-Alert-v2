@@ -173,14 +173,27 @@ class VolcanoService:
         data = await self._fetch_json_fresh(self.WARNING_PATH)
         if not isinstance(data, list):
             raise ValueError(f"噴火警報が配列ではない: {type(data).__name__}")
-        return await self._warnings_from_raw(data)
+        return await self._warnings_from_raw(data, strict=True)
 
-    async def _warnings_from_raw(self, data) -> list[VolcanoWarning]:
+    async def _warnings_from_raw(self, data, *, strict: bool = False) -> list[VolcanoWarning]:
+        """生の warning.json から警報を組み立てる。
+
+        strict=True（スナップショット用）では、data が空でないのに読めたレコードが
+        1 件も無ければ ValueError にする（形の変化を「噴火警報なし」に見せない）。
+        全部が解除で 0 件になるのは正当な 0 件。既存エンドポイントの経路（strict=False）は従来どおり。
+        """
         # カタログ（英字名・座標）は補助情報。取れなくても警報自体は返す
         catalogue = {v.code: v for v in await self.get_volcano_list()}
         warnings: list[VolcanoWarning] = []
+        readable = 0
         for record in data:
-            warnings.extend(self._parse_warning_record(record, catalogue))
+            try:
+                warnings.extend(self._parse_warning_record_strict(record, catalogue))
+                readable += 1
+            except Exception as e:
+                logger.error(f"火山警報パースエラー: {e}", exc_info=True)
+        if strict and data and readable == 0:
+            raise ValueError(f"噴火警報の {len(data)} 件に読めるレコードが無い（形が変わった可能性）")
         # 危険な方から並べる
         order = {"extreme": 0, "high": 1, "advisory": 2}
         warnings.sort(key=lambda w: (order.get(w.severity, 3), -(w.alert_level or 0)))
@@ -195,37 +208,45 @@ class VolcanoService:
     def _parse_warning_record(
         self, record: dict, catalogue: dict[str, VolcanoInfo]
     ) -> list[VolcanoWarning]:
-        """warning.json の 1 レコードを火山ごとの警報に開く。"""
+        """warning.json の 1 レコードを火山ごとの警報に開く。解析できなければ []。"""
         try:
-            issued_at = record.get("reportDatetime", "")
-            municipalities = self._extract_municipalities(record)
-
-            results: list[VolcanoWarning] = []
-            for info in record.get("volcanoInfos", []):
-                if info.get("type") != self.VOLCANO_INFO_TYPE:
-                    continue
-                for item in info.get("items", []):
-                    condition = item.get("condition", "")
-                    # 解除された警報を画面に出さない。
-                    # 気象庁の condition は 発表 / 継続 / 切替 / 引上げ / 引下げ / 解除
-                    if condition in LIFTED_CONDITIONS:
-                        continue
-                    name_ja = item.get("name", "")
-                    for area in item.get("areas", []):
-                        warning = self._build_warning(
-                            area=area,
-                            name_ja=name_ja,
-                            condition=condition,
-                            issued_at=issued_at,
-                            municipalities=municipalities,
-                            catalogue=catalogue,
-                        )
-                        if warning is not None:
-                            results.append(warning)
-            return results
+            return self._parse_warning_record_strict(record, catalogue)
         except Exception as e:
             logger.error(f"火山警報パースエラー: {e}", exc_info=True)
             return []
+
+    def _parse_warning_record_strict(
+        self, record: dict, catalogue: dict[str, VolcanoInfo]
+    ) -> list[VolcanoWarning]:
+        """1 レコードを開く。dict でない・volcanoInfos が配列でない形は例外にする。"""
+        if not isinstance(record, dict) or not isinstance(record.get("volcanoInfos"), list):
+            raise ValueError("噴火警報のレコードの形が想定と違う（volcanoInfos が配列でない）")
+        issued_at = record.get("reportDatetime", "")
+        municipalities = self._extract_municipalities(record)
+
+        results: list[VolcanoWarning] = []
+        for info in record.get("volcanoInfos", []):
+            if info.get("type") != self.VOLCANO_INFO_TYPE:
+                continue
+            for item in info.get("items", []):
+                condition = item.get("condition", "")
+                # 解除された警報を画面に出さない。
+                # 気象庁の condition は 発表 / 継続 / 切替 / 引上げ / 引下げ / 解除
+                if condition in LIFTED_CONDITIONS:
+                    continue
+                name_ja = item.get("name", "")
+                for area in item.get("areas", []):
+                    warning = self._build_warning(
+                        area=area,
+                        name_ja=name_ja,
+                        condition=condition,
+                        issued_at=issued_at,
+                        municipalities=municipalities,
+                        catalogue=catalogue,
+                    )
+                    if warning is not None:
+                        results.append(warning)
+        return results
 
     def _extract_municipalities(self, record: dict) -> list[str]:
         names: list[str] = []

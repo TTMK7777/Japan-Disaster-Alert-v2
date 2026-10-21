@@ -8,8 +8,8 @@ JSON Schema の書き出し先は docs/dev/snapshot-schema.json（テストで�
   文言はフロントの辞書で描く
 - dataset ごとに status を持つ。「取得失敗」と「0 件」を区別する
   - ok    : 今回取得に成功。items は空配列もありうる（確認済みの 0 件）
-  - stale : 今回は失敗。items と fetched_at は**前回成功時**のもの
-  - error : 今回失敗し、前回成功も無い。items は null（0 件ではない）
+  - stale : 今回は失敗。items と fetched_at は**前回成功時**のもの（前回成功から 15 分以内に限る）
+  - error : 今回失敗し、15 分以内の前回成功も無い。items は null（0 件ではない）
 - 未確定・不明な値は null。0 や番兵値（-1・-200）を入れない
 - 互換のない変更は schema_version の上位桁を上げる。キーの追加は下位桁
 """
@@ -122,7 +122,10 @@ class Dataset(BaseModel, Generic[ItemT]):
 
     status: DatasetStatus
     fetched_at: Optional[datetime] = Field(
-        description="上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null"
+        description=(
+            "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。"
+            "前回成功から 15 分を過ぎた dataset は stale ではなく error になる"
+        )
     )
     items: Optional[list[ItemT]] = Field(
         description="ok は今回の値（空配列 = 確認済みの 0 件）、stale は前回成功時の値、error は null"

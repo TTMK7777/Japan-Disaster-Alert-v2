@@ -42,8 +42,12 @@ logger = get_logger(__name__)
 
 #: スナップショットを作り直す間隔（秒）。Cache-Control の max-age と同じ値
 SNAPSHOT_MAX_AGE_SECONDS = 60
-#: 期限切れ後もキャッシュが古い版を返しながら再検証してよい秒数
-SNAPSHOT_STALE_WHILE_REVALIDATE_SECONDS = 300
+#: 期限切れ後もキャッシュが古い版を返しながら再検証してよい秒数。
+#: max-age（生成からの残り秒）と合わせ、利用者が見る最悪の古さを約 2 分に抑える
+SNAPSHOT_STALE_WHILE_REVALIDATE_SECONDS = 30
+#: 前回成功値を stale として出し続けてよい上限（秒）。超えたら error（items=null）に落とす。
+#: 表示側が fetched_at を見なくても、古い「津波なし」が出続けないようにする
+SNAPSHOT_STALE_LIMIT_SECONDS = 15 * 60
 #: 1 つの dataset の取得にかける上限（秒）。超えたらその dataset だけ失敗扱い
 SNAPSHOT_FETCH_TIMEOUT_SECONDS = 25.0
 #: 直近の地震の取得件数（P2P /history の limit）
@@ -138,6 +142,9 @@ class SnapshotBuilder:
                     raise result
                 self._log_failure(name, result)
                 previous = self._last_success.get(name)
+                if previous is not None and self._too_old(previous[0]):
+                    logger.warning(f"スナップショット: {name} の前回成功値が古すぎるので error にする")
+                    previous = None
                 if previous is None:
                     datasets[name] = model(status=DatasetStatus.error, fetched_at=None, items=None)
                 else:
@@ -153,6 +160,9 @@ class SnapshotBuilder:
             source=SOURCE,
             datasets=SnapshotDatasets(**datasets),
         )
+
+    def _too_old(self, fetched_at: datetime) -> bool:
+        return (self._clock() - fetched_at).total_seconds() > SNAPSHOT_STALE_LIMIT_SECONDS
 
     @staticmethod
     def _log_failure(name: str, exc: Exception) -> None:
@@ -291,6 +301,10 @@ class SnapshotCache:
         self._monotonic = monotonic
         self._entry: Optional[CachedSnapshot] = None
         self._lock: Optional[asyncio.Lock] = None
+
+    def remaining_seconds(self, entry: CachedSnapshot) -> int:
+        """この版をあと何秒キャッシュしてよいか（Cache-Control の max-age。0 以上の整数）。"""
+        return max(0, int(self.max_age_seconds - (self._monotonic() - entry.built_at)))
 
     def _fresh(self) -> Optional[CachedSnapshot]:
         entry = self._entry

@@ -43,6 +43,9 @@ EXIT_OK = 0
 EXIT_WRITE_FAILED = 1
 EXIT_DEGRADED = 2
 
+#: 書き出すファイルの権限（所有者が読み書き・他は読み取りのみ）
+PUBLISHED_FILE_MODE = 0o644
+
 
 def _load_previous(path: Path) -> Snapshot | None:
     try:
@@ -59,6 +62,10 @@ def _write_atomic(path: Path, data: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        # mkstemp は 0600 で作る。公開する JSON として読めるよう 0644 にしてから置き換える
+        os.chmod(tmp, PUBLISHED_FILE_MODE)
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

@@ -120,8 +120,33 @@ class TestEndpoint:
     @pytest.mark.asyncio
     async def test_キャッシュ用ヘッダ(self, client, fresh_cache):
         res = await client.get("/api/v1/snapshot")
-        assert res.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=300"
+        assert res.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=30"
         assert res.headers["etag"].startswith('"') and res.headers["etag"].endswith('"')
+
+    @pytest.mark.asyncio
+    async def test_max_ageは生成からの経過秒を引く(self, client, monkeypatch):
+        """最悪の古さを約 2 分（60 + 30 + 生成間隔のずれ）に抑える。"""
+        clock = _Monotonic()
+        monkeypatch.setattr(main_module, "snapshot_cache", SnapshotCache(_CountingBuilder(), monotonic=clock))
+        monkeypatch.setattr(main_module.limiter, "enabled", False)
+        await client.get("/api/v1/snapshot")
+        clock.now += 20.4
+        res = await client.get("/api/v1/snapshot")
+        assert res.headers["cache-control"] == "public, max-age=39, stale-while-revalidate=30"
+        clock.now += 39.5  # 経過 59.9 秒
+        res = await client.get("/api/v1/snapshot")
+        assert res.headers["cache-control"] == "public, max-age=0, stale-while-revalidate=30"
+
+    @pytest.mark.asyncio
+    async def test_304でもmax_ageは経過秒を引く(self, client, monkeypatch):
+        clock = _Monotonic()
+        monkeypatch.setattr(main_module, "snapshot_cache", SnapshotCache(_CountingBuilder(), monotonic=clock))
+        monkeypatch.setattr(main_module.limiter, "enabled", False)
+        first = await client.get("/api/v1/snapshot")
+        clock.now += 30
+        res = await client.get("/api/v1/snapshot", headers={"If-None-Match": first.headers["etag"]})
+        assert res.status_code == 304
+        assert res.headers["cache-control"] == "public, max-age=30, stale-while-revalidate=30"
 
     @pytest.mark.asyncio
     async def test_ETagが一致すれば304で本文なし(self, client, fresh_cache):
@@ -131,7 +156,7 @@ class TestEndpoint:
         assert second.status_code == 304
         assert second.content == b""
         assert second.headers["etag"] == etag
-        assert second.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=300"
+        assert second.headers["cache-control"] == "public, max-age=60, stale-while-revalidate=30"
 
     @pytest.mark.asyncio
     async def test_ETagが違えば200(self, client, fresh_cache):

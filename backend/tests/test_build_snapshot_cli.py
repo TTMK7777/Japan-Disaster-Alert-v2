@@ -98,3 +98,18 @@ def test_引数なしは使い方の誤り(cli):
     with pytest.raises(SystemExit) as exc:
         cli.main([])
     assert exc.value.code != 0
+
+
+@pytest.mark.asyncio
+async def test_置き換え前に権限を644にしてfsyncする(cli, tmp_path, monkeypatch):
+    calls = []
+    real_chmod, real_fsync, real_replace = cli.os.chmod, cli.os.fsync, cli.os.replace
+    monkeypatch.setattr(cli.os, "chmod", lambda path, mode: (calls.append(("chmod", mode)), real_chmod(path, mode)))
+    monkeypatch.setattr(cli.os, "fsync", lambda fd: (calls.append(("fsync", None)), real_fsync(fd)))
+    monkeypatch.setattr(cli.os, "replace", lambda a, b: (calls.append(("replace", None)), real_replace(a, b)))
+    out = tmp_path / "snapshot.json"
+    assert await cli.run(out, fetchers=_fetchers()) == 0
+    names = [c[0] for c in calls]
+    assert names.index("fsync") < names.index("replace")
+    assert names.index("chmod") < names.index("replace")
+    assert ("chmod", 0o644) in calls

@@ -263,7 +263,7 @@ curl -sS "${API_URL}/api/v1/earthquakes?lang=en&limit=3" | head -5
 | もの | 場所 | 内容 |
 |---|---|---|
 | 生成関数 | `backend/app/services/snapshot_service.py` | 地震（直近 10 件）・発表中の津波警報/注意報・発表中の噴火警報を、dataset ごとの成否と取得成功時刻つきでまとめる |
-| API | `GET /api/v1/snapshot` | 最後の版をメモリに持ち、60 秒より古ければ作り直す（同時リクエストは 1 本の生成を待つ）。`Cache-Control: public, max-age=60, stale-while-revalidate=300` と `ETag`（`If-None-Match` 一致で 304）。レート制限は他の API と同じ `RATE_LIMIT_GENERAL` |
+| API | `GET /api/v1/snapshot` | 最後の版をメモリに持ち、60 秒より古ければ作り直す（同時リクエストは 1 本の生成を待つ）。`Cache-Control: public, max-age=<60 − 生成からの経過秒>, stale-while-revalidate=30` と `ETag`（`If-None-Match` 一致で 304）。利用者が見る最悪の古さは約 2 分レート制限は他の API と同じ `RATE_LIMIT_GENERAL` |
 | CLI | `scripts/build_snapshot.py --out <path>` | 同じ生成関数でファイルに書き出す。終了コード 0 = 全部 ok / 2 = 書き出したが stale・error を含む / 1 = 書き出せなかった。`--out` に前回の出力があれば前回値として読む |
 | スキーマ | `docs/dev/snapshot-schema.json` | pydantic モデル（`backend/app/snapshot_models.py`）から生成。更新は `--write-schema docs/dev/snapshot-schema.json`。モデルとの不一致はテストが止める |
 
@@ -271,8 +271,11 @@ dataset の `status` は次の 3 つです。**「取得失敗」と「0 件」�
 失敗を空配列で表すことはありません。
 
 - `ok`: 今回取得に成功。`items: []` は「取得時点で対象なし」を確認済みという意味
-- `stale`: 今回は失敗。`items` と `fetched_at` は**前回成功時**のまま（古さは `fetched_at` から計算する）
-- `error`: 今回失敗し、前回の成功も無い。`items` と `fetched_at` は `null`
+- `stale`: 今回は失敗。`items` と `fetched_at` は**前回成功時**のまま（古さは `fetched_at` から計算する）。
+  前回成功から **15 分を過ぎたら `error` に落とす**（表示側が `fetched_at` を見なくても、古い「津波なし」が出続けないように）
+- `error`: 今回失敗し、15 分以内の前回成功も無い。`items` と `fetched_at` は `null`
+- 上流が 200 を返しても、読める報・レコードが 1 件も無い（キー改名など形の変化）ときは失敗として扱う。
+  区域が全部 解除・予報 で発表中が 0 件になるのは正当な 0 件（`ok` と `[]`）
 
 言語別の表示文は入れていません（事実・コード・気象庁の日本語名だけを持ち、文言はフロントの辞書で描く）。
 `source.official` は常に `false` で、気象庁の発表を中継したものであり公式発表ではないことを示します。

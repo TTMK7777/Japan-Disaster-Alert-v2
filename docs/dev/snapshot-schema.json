@@ -150,7 +150,7 @@
               "type": "null"
             }
           ],
-          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null",
+          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。前回成功から 15 分を過ぎた dataset は stale ではなく error になる",
           "title": "Fetched At"
         },
         "items": {
@@ -329,7 +329,7 @@
               "type": "null"
             }
           ],
-          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null",
+          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。前回成功から 15 分を過ぎた dataset は stale ではなく error になる",
           "title": "Fetched At"
         },
         "items": {
@@ -594,7 +594,7 @@
               "type": "null"
             }
           ],
-          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null",
+          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。前回成功から 15 分を過ぎた dataset は stale ではなく error になる",
           "title": "Fetched At"
         },
         "items": {

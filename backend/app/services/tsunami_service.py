@@ -95,6 +95,28 @@ class ActiveTsunamiReport:
     areas: tuple[TsunamiAreaKind, ...]
 
 
+def _text(value) -> str:
+    """上流の値を文字列へ。null・欠落は空文字（`.get(key, "")` は null のキーを素通しする）。"""
+    return "" if value is None else str(value)
+
+
+def _optional_text(value) -> Optional[str]:
+    return None if value is None or value == "" else str(value)
+
+
+def _report_id(report: dict) -> str:
+    """報の ID。ctt が無ければ eid と発表時刻から作る（空にしない: SSE の差分と抑制の鍵）。"""
+    ctt = _text(report.get("ctt"))
+    if ctt:
+        return ctt
+    return f"eid-{_text(report.get('eid')) or 'unknown'}-{_text(report.get('rdt'))}"
+
+
+def _is_readable_report(report) -> bool:
+    """判定に使える形の報か（dict で、kind が配列）。"""
+    return isinstance(report, dict) and isinstance(report.get("kind"), list)
+
+
 def _report_order_key(report: dict) -> str:
     # ctt は「YYYYMMDDHHMMSS」固定長の作成時刻なので文字列比較で時系列になる
     return str(report.get("ctt") or "")
@@ -103,7 +125,8 @@ def _report_order_key(report: dict) -> str:
 def select_active_tsunami_reports(reports: list) -> list[ActiveTsunamiReport]:
     """list.json の生の報から、現在発表中の津波警報・注意報をイベントごとに選ぶ。
 
-    - イベント（eid）ごとに**最新報だけ**を見る。過去報の注意報を発表中にしない
+    - イベント（eid）ごとに**最新報だけ**を見る。過去報の注意報を発表中にしない。
+      ただし kind（区域）が空・欠落の報は最新報の候補にしない（後から来た観測情報などで警報を消さない）
     - 最新報が取消（ift=取消）なら発表中にしない
     - 区域ごとに判定する。解除・予報・なしの区域は落とし、注意報以上と種別不明の区域を残す
       （一部区域だけ解除された報でも、残りの区域は発表中のまま）
@@ -113,6 +136,11 @@ def select_active_tsunami_reports(reports: list) -> list[ActiveTsunamiReport]:
     for index, report in enumerate(reports):
         if not isinstance(report, dict):
             logger.warning("津波一覧に dict でない要素がある（飛ばす）")
+            continue
+        if not report.get("kind"):
+            # 区域（kind）を持たない報は「最新報」の候補にしない。観測情報などで kind が
+            # 空・欠落の報が後から来ると、その報を最新として採り、同じイベントの警報が
+            # 消えてしまう。解除報は kind を持つので、解除は引き続き効く
             continue
         event_id = str(report.get("eid") or f"__no_eid_{index}")
         current = latest.get(event_id)
@@ -184,6 +212,10 @@ class TsunamiService:
         data = response.json()
         if not isinstance(data, list):
             raise ValueError(f"津波一覧が配列ではない: {type(data).__name__}")
+        if data and not any(_is_readable_report(r) for r in data):
+            # キー改名などで形が変わり、全報が読めないのを「津波なし」に見せない。
+            # 区域が全部 解除・予報 で発表中が 0 件になるのは正当な 0 件なのでここでは見ない
+            raise ValueError(f"津波一覧の {len(data)} 件に読める報が無い（形が変わった可能性）")
         return data
 
     async def get_tsunami_list(self, limit: int = 10) -> list[TsunamiInfo]:
