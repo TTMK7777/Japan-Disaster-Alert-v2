@@ -141,9 +141,13 @@ class EventManager:
             logger.error(f"地震情報チェックエラー: {e}")
 
     async def _check_tsunamis(self) -> None:
-        """津波警報の更新をチェック"""
+        """津波警報の更新をチェック
+
+        取得に失敗したときは**何も配信しない**（前回の状態を保つ）。失敗を 0 件として
+        配信すると、一時的な通信エラーで画面の津波警報が消える。
+        """
         try:
-            active = await self._tsunami_service.get_active_warnings()
+            active = await self._tsunami_service.fetch_active_warnings()
             current_ids = {t.id for t in active}
 
             if current_ids != self._last_tsunami_ids:
