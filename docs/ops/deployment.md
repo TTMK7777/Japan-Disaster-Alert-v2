@@ -178,12 +178,13 @@ gcloud run deploy disaster-web \
   --project japan-disaster-alert \
   --region asia-northeast1 \
   --allow-unauthenticated \
-  --min-instances 1 --max-instances 3 \
+  --min-instances 0 --max-instances 1 \
   --memory 512Mi --cpu 1
 ```
 
-> `--min-instances 1` はコールドスタート回避のため。災害時に初回表示が数秒遅れるのを避ける意図で、
-> ここだけ常時課金を受け入れています。コストを切り詰めるなら `0` に下げられます。
+> `--min-instances 0 --max-instances 1` は費用上限を構造で固定するため（オーナー裁定）。
+> 誰も見ていない間は停止しているので、**しばらくアクセスが無かった後の最初の表示はコールドスタートで
+> 数秒かかります**。常時起動による課金はありません。
 
 > **API の URL を変えたときは②からやり直すこと。** 焼き込み済みのバンドルは
 > 再デプロイだけでは更新されません。
@@ -209,7 +210,8 @@ gcloud run services update disaster-api \
 | `disaster-api` min-instances | **0** | 誰も見ていない間は課金ゼロ。SSE 接続がある間だけ起きる |
 | `disaster-api` max-instances | **1** | 費用上限（2026-09-23 の裁定）。SSE は1接続でインスタンスを占有し続けるため上限必須。アクセス集中は §7 のスナップショットとキャッシュで受ける |
 | `disaster-api` timeout | **300秒** | SSE を5分で切ってクライアントに再接続させる。無制限に張らせない |
-| `disaster-web` min-instances | **1** | コールドスタート回避（常時課金が発生する唯一の箇所） |
+| `disaster-web` min-instances | **0** | 費用上限を構造で固定する（オーナー裁定）。誰も見ていない間は課金ゼロ。代わりにアクセスが途絶えた後の初回表示はコールドスタートで数秒かかる |
+| `disaster-web` max-instances | **1** | 費用上限（オーナー裁定）。アクセス集中は §7 のスナップショットとキャッシュで受ける |
 
 Cloud Run には月間無料枠（180,000 vCPU秒 / 360,000 GiB秒 / 200万リクエスト）があります。
 **注意すべきは SSE**で、タブを開きっぱなしにされると接続中ずっと vCPU 秒を消費します。
