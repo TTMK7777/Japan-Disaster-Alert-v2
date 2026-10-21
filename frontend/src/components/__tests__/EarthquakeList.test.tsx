@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EarthquakeList from '../EarthquakeList';
 import type { Earthquake } from '@/types/earthquake';
+import { getTranslation } from '@/i18n/translations';
 
 // テスト用の地震データ
 const mockEarthquakes: Earthquake[] = [
@@ -71,7 +72,7 @@ describe('EarthquakeList', () => {
     expect(screen.getByText('ネットワークエラー')).toBeInTheDocument();
 
     // リトライボタンが表示されること
-    const retryButton = screen.getByText('再試行');
+    const retryButton = screen.getByText(getTranslation('ja', 'status.retry'));
     expect(retryButton).toBeInTheDocument();
 
     // リトライボタンをクリック
@@ -92,7 +93,7 @@ describe('EarthquakeList', () => {
     );
 
     expect(screen.getByText('サーバーエラー')).toBeInTheDocument();
-    expect(screen.queryByText('再試行')).not.toBeInTheDocument();
+    expect(screen.queryByText(getTranslation('ja', 'status.retry'))).not.toBeInTheDocument();
   });
 
   // 空メッセージの表示テスト

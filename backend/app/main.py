@@ -11,6 +11,7 @@ from typing import Optional
 import asyncio
 import time
 import secrets
+from urllib.parse import quote
 
 import httpx
 
@@ -23,6 +24,7 @@ from .config import settings
 from .database import init_db, close_db, engine
 from .utils.logger import get_logger
 from .utils.error_handler import handle_errors
+from .exceptions import UpstreamUnavailableError
 
 logger = get_logger(__name__)
 
@@ -99,6 +101,7 @@ from .services.warning_service import WarningService
 from .services.tsunami_service import TsunamiService
 from .services.volcano_service import VolcanoService
 from .services.location_composer import localize_prefecture
+from .services.area_display import resolve_area_name
 from .services.volcano_levels import (
     LEVEL_LABEL,
     localize_volcano_name,
@@ -180,12 +183,19 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()  # 空文字列を除外
 ]
 
+#: /api/v1/alerts で、取得できなかった府県予報区（一部失敗）を示すヘッダ。
+#: 値はカンマ区切りのコードと、表示言語の地名（UTF-8 のパーセントエンコード・カンマ区切り）
+FAILED_AREAS_HEADER = "X-Failed-Areas"
+FAILED_AREA_NAMES_HEADER = "X-Failed-Area-Names"
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ALLOWED_ORIGINS,  # 環境変数で制限
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],  # 必要なメソッドのみ許可
     allow_headers=["Content-Type", "Authorization"],  # 必要なヘッダーのみ許可
+    # 警報の一部の予報区が取れなかったことを示すヘッダ。フロントは別オリジンなので公開しないと読めない
+    expose_headers=[FAILED_AREAS_HEADER, FAILED_AREA_NAMES_HEADER],
 )
 
 
@@ -343,7 +353,13 @@ async def get_earthquakes(request: Request, limit: int = Query(default=10, ge=1,
     - **lang**: 言語コード（ja, en, zh, ko, vi, ne, easy_ja）
     """
     lang = _validate_lang(lang)
-    earthquakes = await p2p_service.get_recent_earthquakes(limit=limit)
+    # 取得失敗は 503（[] にしない）。200 の [] はフロントで「地震情報はありません」になり、
+    # すでに表示していた地震まで消える
+    try:
+        earthquakes = await p2p_service.fetch_recent_earthquakes(limit=limit)
+    except (httpx.HTTPError, ValueError) as e:
+        logger.error(f"地震情報の取得に失敗（503 を返す）: {type(e).__name__}")
+        raise HTTPException(status_code=503, detail="地震情報を取得できませんでした")
 
     # 多言語翻訳（ハイブリッド方式）
     if lang != "ja":
@@ -406,7 +422,7 @@ async def get_weather(request: Request, area_code: str = Path(pattern=r"^\d{6}$"
 @app.get("/api/v1/alerts", response_model=list[DisasterAlert])
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_alerts(request: Request, area_code: str = Query(default="130000", pattern=r"^\d{6}$"), lang: str = "ja"):
+async def get_alerts(request: Request, response: Response, area_code: str = Query(default="130000", pattern=r"^\d{6}$"), lang: str = "ja"):
     """
     現在発令中の警報・注意報を取得
 
@@ -414,9 +430,22 @@ async def get_alerts(request: Request, area_code: str = Query(default="130000", 
     - **lang**: 言語コード（ja, en, zh, ko, vi, easy_ja）
     """
     lang = _validate_lang(lang)
-    # 警報サービスに多言語翻訳が組み込まれているため直接取得
-    alerts = await warning_service.get_warnings(area_code, lang)
-    return alerts
+    # 警報サービスに多言語翻訳が組み込まれているため直接取得。
+    # すべての予報区が取れなければ 503（200 の [] は画面で緑の「警報なし」になる）
+    try:
+        result = await warning_service.fetch_warnings(area_code, lang)
+    except UpstreamUnavailableError as e:
+        logger.error(f"警報の取得に失敗（503 を返す）: {e}")
+        raise HTTPException(status_code=503, detail="警報情報を取得できませんでした")
+    if result.failed_offices:
+        # 一部の予報区だけ取れなかった。応答は配列のまま（既存の利用者・SW キャッシュとの互換）、
+        # 欠けた予報区をヘッダで示す。名前は表示言語の地名を UTF-8 のパーセントエンコードで
+        # （ヘッダは latin-1 しか載らない）。カンマは quote(safe="") でエンコードされるので区切りに使える
+        response.headers[FAILED_AREAS_HEADER] = ",".join(result.failed_offices)
+        response.headers[FAILED_AREA_NAMES_HEADER] = ",".join(
+            quote(resolve_area_name(code, lang, code), safe="") for code in result.failed_offices
+        )
+    return result.alerts
 
 
 @app.get("/api/v1/warnings/special", response_model=list[DisasterAlert])
@@ -653,7 +682,12 @@ async def get_volcano_warnings(request: Request, lang: str = "ja"):
     - **lang**: 言語コード
     """
     lang = _validate_lang(lang)
-    warnings = await volcano_service.get_volcano_warnings()
+    # 取得できず使える値も無ければ 503（[] にしない。フロントでは噴火警報の枠が消え「無い」と読める）
+    try:
+        warnings = await volcano_service.get_volcano_warnings()
+    except (httpx.HTTPError, ValueError, UpstreamUnavailableError) as e:
+        logger.error(f"噴火警報の取得に失敗（503 を返す）: {type(e).__name__}")
+        raise HTTPException(status_code=503, detail="噴火警報を取得できませんでした")
     for warning in warnings:
         name, action = localize_warning(
             level=warning.alert_level, name_ja=warning.warning_name_ja, lang=lang

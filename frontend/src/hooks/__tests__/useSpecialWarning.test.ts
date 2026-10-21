@@ -128,3 +128,54 @@ describe('useSpecialWarning', () => {
     expect(alertCalls()).toHaveLength(1);
   });
 });
+
+describe('useSpecialWarning — 取得失敗・一部欠落を「特別警報なし」に読まない（B4a）', () => {
+  function respondWithHeaders(body: unknown, headers: Record<string, string>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: (n: string) => headers[n] ?? null },
+        json: async () => body,
+      }))
+    );
+  }
+
+  it('一部の予報区が取れず、取れた分に特別警報が無ければ前回の判定を保つ', async () => {
+    const { result } = renderHook(() => useSpecialWarning({ prefCode: '471000', language: 'en', paused: false }));
+    await flush();
+    expect(result.current.active).toBe(true);
+    respondWithHeaders(ADVISORY, { 'X-Failed-Areas': '474000' });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SPECIAL_WARNING_POLL_MS);
+    });
+    expect(result.current.active).toBe(true);
+  });
+
+  it('一部欠落でも、取れた分に特別警報があれば出す', async () => {
+    respondWithHeaders(EXTREME, { 'X-Failed-Areas': '474000' });
+    const { result } = renderHook(() => useSpecialWarning({ prefCode: '471000', language: 'en', paused: false }));
+    await flush();
+    expect(result.current.active).toBe(true);
+  });
+
+  it('report の partial も同じ扱い（警報タブから渡される結果）', async () => {
+    const { result } = renderHook(() => useSpecialWarning({ prefCode: '471000', language: 'en', paused: true }));
+    act(() => result.current.report('471000', EXTREME));
+    act(() => result.current.report('471000', ADVISORY, { partial: true }));
+    expect(result.current.active).toBe(true);
+    act(() => result.current.report('471000', ADVISORY));
+    expect(result.current.active).toBe(false);
+  });
+
+  it('期限超過でも前回の判定を保つ', async () => {
+    const { result } = renderHook(() => useSpecialWarning({ prefCode: '130000', language: 'en', paused: false }));
+    await flush();
+    respond = () => 'hang';
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(SPECIAL_WARNING_POLL_MS + 10_000);
+    });
+    expect(result.current.active).toBe(true);
+  });
+});

@@ -9,7 +9,7 @@ import WarningBanner from '@/components/WarningBanner';
 import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
 import TransitLinks from '@/components/TransitLinks';
-import ScopeNotice from '@/components/ScopeNotice';
+import ScopeNotice, { OfficialInfoLink } from '@/components/ScopeNotice';
 import RegionBar from '@/components/RegionBar';
 import SpecialWarningBand from '@/components/SpecialWarningBand';
 import ThemeToggle from '@/components/ThemeToggle';
@@ -93,6 +93,7 @@ const ShelterMap = dynamic(() => import('@/components/ShelterMap'), {
 
 import type { Earthquake } from '@/types/earthquake';
 import { API_BASE_URL } from '@/config/api';
+import { createTimedAbort, classifyFetchError, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
 
 type TabType = 'earthquake' | 'warning' | 'emergency' | 'shelter';
 type EarthquakeViewType = 'list' | 'map';
@@ -126,7 +127,11 @@ function TabIcon({ tab, active }: { tab: TabType; active: boolean }) {
 interface ApiError {
   message: string;
   retryable: boolean;
+  reason?: FailureReason;
 }
+
+/** 地震一覧の取得期限。過ぎたら失敗として出す */
+const EARTHQUAKE_FETCH_TIMEOUT_MS = 10_000;
 
 export default function Home() {
   // 表示言語と警報タブの地域。URL（?lang= / ?pref=）・保存値・ブラウザ言語から決め、
@@ -140,7 +145,8 @@ export default function Home() {
     paused: activeTab === 'warning',
   });
   const handleWarningsUpdate = useCallback(
-    (warnings: unknown[], areaCode: string) => reportRegionWarnings(areaCode, warnings),
+    (warnings: unknown[], areaCode: string, status: { partial: boolean }) =>
+      reportRegionWarnings(areaCode, warnings, status),
     [reportRegionWarnings]
   );
   // 帯の「警報を見る」: アプリ内の警報タブへ移り、タブにフォーカスを置いて先頭から読めるようにする
@@ -163,6 +169,8 @@ export default function Home() {
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
   const [earthquakeLoading, setEarthquakeLoading] = useState(true);
   const [earthquakeError, setEarthquakeError] = useState<ApiError | null>(null);
+  // 地震一覧を最後に取得できた時刻（失敗の枠に出す。初回で未取得なら null）
+  const [earthquakeLastSuccessAt, setEarthquakeLastSuccessAt] = useState<number | null>(null);
 
   const t = useCallback(
     (key: keyof typeof translations.ja) => translations[language]?.[key] || translations.ja[key],
@@ -180,6 +188,7 @@ export default function Home() {
     setEarthquakes(data.earthquakes);
     setEarthquakeLoading(false);
     setEarthquakeError(null);
+    setEarthquakeLastSuccessAt(Date.now());
   }, []);
 
   // SSE で届いた津波情報を保持して EmergencyAlert に渡す。
@@ -214,39 +223,43 @@ export default function Home() {
   // **前回の取得を必ず中断してから始める。** 言語切替の直後などで
   // 古いリクエストが遅れて返ると、後着の setEarthquakes が勝って
   // 旧言語のデータが新言語の UI に載る（レスポンス順序の逆転）
-  const earthquakeFetchRef = useRef<AbortController | null>(null);
+  //
+  // 失敗（503・通信・期限超過）は**一覧を消さず**失敗の枠を出す。失敗表示は再取得の成功でだけ消す
+  // （以前は開始時に消し、期限超過は黙って捨てていたため、初回なら「地震情報はありません」になった）
+  const earthquakeFetchRef = useRef<TimedAbort | null>(null);
   const fetchEarthquakes = useCallback(async () => {
     earthquakeFetchRef.current?.abort();
-    const controller = new AbortController();
-    earthquakeFetchRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const request = createTimedAbort(EARTHQUAKE_FETCH_TIMEOUT_MS);
+    earthquakeFetchRef.current = request;
     try {
       setEarthquakeLoading(true);
-      setEarthquakeError(null);
       const response = await fetch(
         `${API_BASE_URL}/api/v1/earthquakes?lang=${encodeURIComponent(language)}&limit=20`,
-        { signal: controller.signal }
+        { signal: request.signal }
       );
-      if (response.ok) {
-        const data = await response.json();
-        if (!controller.signal.aborted) setEarthquakes(data);
-      } else {
-        throw new Error('Server error');
-      }
+      if (!response.ok) throw new Error(`Server error ${response.status}`);
+      const data = await response.json();
+      if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (!Array.isArray(data)) throw new Error('Unexpected earthquakes payload');
+      setEarthquakes(data);
+      setEarthquakeError(null);
+      setEarthquakeLastSuccessAt(Date.now());
     } catch (err) {
-      // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
-      if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
+      // 自分で中断した分（言語の切替など）はエラー表示にしない。期限超過は失敗として出す
+      const reason = classifyFetchError(request, err);
+      if (reason === null) return;
       console.error('Failed to fetch earthquakes:', err);
       reportFailure();
       const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
       setEarthquakeError({
-        message: isNetworkError ? getErrorMessage('networkError') : getErrorMessage('serverError'),
+        message: isNetworkError || reason === 'timeout' ? getErrorMessage('networkError') : getErrorMessage('serverError'),
         retryable: true,
+        reason,
       });
     } finally {
-      clearTimeout(timeoutId);
+      request.clear();
       // 後続の取得が始まっていたら loading 表示はそちらに任せる
-      if (earthquakeFetchRef.current === controller) setEarthquakeLoading(false);
+      if (earthquakeFetchRef.current === request) setEarthquakeLoading(false);
     }
   }, [language, getErrorMessage, reportFailure]);
 
@@ -468,6 +481,8 @@ export default function Home() {
                   loading={earthquakeLoading}
                   error={earthquakeError}
                   onRetry={fetchEarthquakes}
+                  lastSuccessAt={earthquakeLastSuccessAt}
+                  officialLink={<OfficialInfoLink language={language} areaCode={prefCode} />}
                 />
               )}
 

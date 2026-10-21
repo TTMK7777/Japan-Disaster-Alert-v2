@@ -12,6 +12,7 @@ import json
 
 import pytest
 
+from app.exceptions import UpstreamUnavailableError
 from app.services import volcano_service as volcano_module
 from app.services.volcano_service import VolcanoService
 
@@ -149,7 +150,10 @@ class TestDecodeFailure:
     async def test_壊れたJSONで500にならない(self, monkeypatch):
         service = VolcanoService()
         monkeypatch.setattr(service, "_get_client", lambda: _CountingClient(broken=True))
-        assert await service.get_volcano_warnings() == []
+        # 警報は「取得できない」を [] にしない（B4a: 画面で「噴火警報なし」と読めるため）。
+        # エンドポイントはこれを 503 にする（tests/test_outage_states.py）
+        with pytest.raises(UpstreamUnavailableError):
+            await service.get_volcano_warnings()
         assert await service.get_volcano_list() == []
 
     @pytest.mark.asyncio
