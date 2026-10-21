@@ -1,0 +1,66 @@
+{
+  "ja": {
+    "title": "Japan Disaster Alert｜16言語・インストール不要",
+    "description": "日本の災害情報を16言語で。インストール不要。気象庁情報を中継する非公式サービスです。避難指示・避難所の開設状況は扱いません。"
+  },
+  "en": {
+    "title": "Japan Disaster Alert | 16 languages, no install",
+    "description": "Japan disaster info: 16 languages. No install. Independent JMA relay; no evacuation orders or shelter status."
+  },
+  "zh": {
+    "title": "Japan Disaster Alert｜16种语言，无需安装",
+    "description": "16种语言查看日本灾害信息，无需安装。本服务转达日本气象厅信息，并非官方服务。不提供避难指示或避难所开放信息。"
+  },
+  "zh-TW": {
+    "title": "Japan Disaster Alert｜16種語言，免安裝",
+    "description": "以16種語言查看日本災害資訊，免安裝。本服務轉達日本氣象廳資訊，並非官方服務。不提供避難指示或避難所開放資訊。"
+  },
+  "ko": {
+    "title": "Japan Disaster Alert｜16개 언어, 설치 불필요",
+    "description": "일본 재난 정보를 16개 언어로. 설치 불필요. 일본 기상청 정보를 전달하는 비공식 서비스. 대피 지시·대피소 개설 정보는 제공하지 않습니다."
+  },
+  "vi": {
+    "title": "Japan Disaster Alert | 16 ngôn ngữ, không cần cài đặt",
+    "description": "Tin thiên tai Nhật, 16 ngôn ngữ. Không cần cài. Chuyển tin JMA, không phải dịch vụ chính thức."
+  },
+  "th": {
+    "title": "Japan Disaster Alert | 16 ภาษา ไม่ต้องติดตั้ง",
+    "description": "ข้อมูลภัยพิบัติญี่ปุ่น 16 ภาษา ไม่ต้องติดตั้ง ถ่ายทอดข้อมูล JMA ไม่ใช่บริการทางการ"
+  },
+  "id": {
+    "title": "Japan Disaster Alert | 16 bahasa, tanpa instalasi",
+    "description": "Info bencana Jepang, 16 bahasa. Tanpa instalasi. Penerus info JMA, bukan layanan resmi."
+  },
+  "ms": {
+    "title": "Japan Disaster Alert | 16 bahasa, tanpa pemasangan",
+    "description": "Info bencana Jepun, 16 bahasa. Tanpa pemasangan. Penyampai info JMA, bukan perkhidmatan rasmi."
+  },
+  "tl": {
+    "title": "Japan Disaster Alert | 16 wika, walang kailangang i-install",
+    "description": "Sakuna sa Japan, 16 wika. Walang kailangang i-install. Relay ng info ng JMA; di-opisyal na serbisyo."
+  },
+  "ne": {
+    "title": "Japan Disaster Alert | १६ भाषा, इन्स्टल गर्नुपर्दैन",
+    "description": "जापानको विपद् जानकारी १६ भाषामा। इन्स्टल नचाहिने। JMA जानकारीको रिले; आधिकारिक सेवा होइन।"
+  },
+  "fr": {
+    "title": "Japan Disaster Alert | 16 langues, sans installation",
+    "description": "Catastrophes au Japon, 16 langues. Sans installation. Relais JMA, service non officiel."
+  },
+  "de": {
+    "title": "Japan Disaster Alert | 16 Sprachen, ohne Installation",
+    "description": "Japan: Katastropheninfos in 16 Sprachen, ohne Installation. JMA-Infos; kein amtlicher Dienst."
+  },
+  "it": {
+    "title": "Japan Disaster Alert | 16 lingue, senza installazione",
+    "description": "Calamità in Giappone, 16 lingue. Senza installazione. Dati JMA, servizio non ufficiale."
+  },
+  "es": {
+    "title": "Japan Disaster Alert | 16 idiomas, sin instalar",
+    "description": "Desastres en Japón, 16 idiomas. Sin instalar. Información de JMA; servicio no oficial."
+  },
+  "easy_ja": {
+    "title": "Japan Disaster Alert｜16の ことば・いれる ひつようなし",
+    "description": "にほんの さいがい じょうほうを 16の ことばで。アプリを いれずに ひらけます。きしょうちょうの じょうほうを つたえます。こうしき サービスでは ありません。"
+  }
+}

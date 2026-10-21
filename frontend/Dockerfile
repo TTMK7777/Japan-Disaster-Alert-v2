@@ -19,6 +19,10 @@ COPY . .
 # バックエンド（Cloud Run）の公開 URL。未指定ならローカル開発の既定値になる
 ARG NEXT_PUBLIC_API_URL=http://localhost:8000
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
+# フロント自身の公開 URL。SNS 共有時の og:image を絶対 URL にするために使う。
+# 未指定（空）なら og:image を出さず、言語別の文言だけで共有される
+ARG NEXT_PUBLIC_SITE_URL=
+ENV NEXT_PUBLIC_SITE_URL=${NEXT_PUBLIC_SITE_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build

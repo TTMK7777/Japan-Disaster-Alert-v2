@@ -90,6 +90,7 @@ Windows では同梱の `start.bat` / `start_with_browser.bat`（WSL 経由）�
 | `DATABASE_URL` | DB URL（既定: `data/app.db` の SQLite） | 任意 |
 | `HOST` / `PORT` | バインドアドレス・ポート | 任意 |
 | `NEXT_PUBLIC_API_URL` | フロントエンドが参照するバックエンド URL | 任意 |
+| `NEXT_PUBLIC_SITE_URL` | フロント自身の公開 URL（SNS 共有の og:image を絶対 URL にする。ビルド時に焼き込むので `cloudbuild.yaml` の `_SITE_URL` で渡す。未設定なら画像なしで共有） | 任意 |
 
 > シークレット（API キー・VAPID 秘密鍵）は `.env` に保存し、リポジトリへコミットしないでください。`.env` は `.gitignore` 済みです。
 

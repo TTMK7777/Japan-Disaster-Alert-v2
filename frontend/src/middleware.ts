@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { applyShareLangHeader } from '@/lib/shareLangHeader';
 
 /**
  * HIGH-1 修正: nonce ベース CSP ミドルウェア (Edge Runtime 互換)
@@ -54,6 +55,8 @@ export function middleware(request: NextRequest) {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
+  // 共有用 OGP の言語（許可リストを通した値だけ。layout の generateMetadata が読む）
+  applyShareLangHeader(requestHeaders, request.nextUrl.search);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy', csp);
