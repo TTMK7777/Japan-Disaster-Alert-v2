@@ -146,7 +146,7 @@ gcloud run deploy disaster-api \
   --project japan-disaster-alert \
   --region asia-northeast1 \
   --allow-unauthenticated \
-  --min-instances 0 --max-instances 3 \
+  --min-instances 0 --max-instances 1 \
   --memory 512Mi --cpu 1 \
   --timeout 300 --concurrency 80 \
   --set-env-vars ENVIRONMENT=production,LOG_LEVEL=INFO
@@ -207,13 +207,13 @@ gcloud run services update disaster-api \
 | 設定 | 値 | 理由 |
 |---|---|---|
 | `disaster-api` min-instances | **0** | 誰も見ていない間は課金ゼロ。SSE 接続がある間だけ起きる |
-| `disaster-api` max-instances | **3** | 暴走課金の上限。SSE は1接続でインスタンスを占有し続けるため上限必須 |
+| `disaster-api` max-instances | **1** | 費用上限（2026-09-23 の裁定）。SSE は1接続でインスタンスを占有し続けるため上限必須。アクセス集中は §7 のスナップショットとキャッシュで受ける |
 | `disaster-api` timeout | **300秒** | SSE を5分で切ってクライアントに再接続させる。無制限に張らせない |
 | `disaster-web` min-instances | **1** | コールドスタート回避（常時課金が発生する唯一の箇所） |
 
 Cloud Run には月間無料枠（180,000 vCPU秒 / 360,000 GiB秒 / 200万リクエスト）があります。
 **注意すべきは SSE**で、タブを開きっぱなしにされると接続中ずっと vCPU 秒を消費します。
-`--timeout 300` と `max-instances 3` がその上限装置です。
+`--timeout 300` と `max-instances 1` がその上限装置です。
 
 #### 予算アラートを必ず設定する
 
