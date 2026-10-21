@@ -156,3 +156,35 @@ describe('津波の見出し', () => {
     expect(new Set(names).size, `${lang}: ${names.join(' / ')}`).toBe(3);
   });
 });
+
+// --- 種別不明（unknown）の扱い（DIR 2026-10-22: 見落とさない方向に倒す） ---
+// backend は種別名が想定と違う津波情報を warning_level="unknown" で返す。
+// 一次資料で種別名を確認できていないため、ここで捨てると本物の警報を見落とす
+describe('種別不明（unknown）の津波情報', () => {
+  it('unknown は全画面警報の対象になる', () => {
+    expect(toSeverity('unknown')).toBe('unknown');
+  });
+
+  it('unknown だけでも選ばれる', () => {
+    expect(selectAlert([tsunami('t1', 'unknown')])?.severity).toBe('unknown');
+  });
+
+  it('注意報より重く、警報より軽い', () => {
+    expect(selectAlert([tsunami('a', 'advisory'), tsunami('u', 'unknown')])?.id).toBe('u');
+    expect(selectAlert([tsunami('u', 'unknown'), tsunami('w', 'warning')])?.id).toBe('w');
+  });
+
+  it('自動では閉じない', () => {
+    expect(canAutoDismiss('unknown')).toBe(false);
+  });
+});
+
+describe('種別不明の見出し', () => {
+  const LANGS = ['ja','en','zh','zh-TW','ko','vi','th','id','ms','tl','ne','fr','de','it','es','easy_ja'];
+
+  it.each(LANGS)('%s を持ち、3段階のどれとも違う', (lang) => {
+    const title = TSUNAMI_TITLES.unknown[lang];
+    expect(title, `unknown/${lang} が欠けている`).toBeTruthy();
+    expect([TSUNAMI_TITLES.emergency[lang], TSUNAMI_TITLES.warning[lang], TSUNAMI_TITLES.advisory[lang]]).not.toContain(title);
+  });
+});

@@ -115,9 +115,52 @@ class TestClassify:
         """「津波注意報解除」は「津波注意報」を含むが、発表中ではない。"""
         assert classify_tsunami_kind("津波注意報解除") != "advisory"
 
-    @pytest.mark.parametrize("name", ["津波注意報（訂正）", "", "新しい種別"])
-    def test_未知の種別はunknown(self, name):
+    @pytest.mark.parametrize("name", ["謎の種別", "", "新しい種別"])
+    def test_手がかりの無い種別はunknown(self, name):
         assert classify_tsunami_kind(name) == "unknown"
+
+
+class TestClassifyFallback:
+    """表に無い名前の扱い（DIR 2026-10-22: 見落とさない方向に倒す。出しすぎは許容）。
+
+    種別名の一次資料が見つかっていないため、名前が推定と違っても警報を落とさない。
+    順番: 完全一致 →「解除」を含む → 大津波警報 → 津波警報 → 津波注意報 → 津波予報 → unknown。
+    「解除」を先に見るので、部分一致でも注意報解除を注意報と誤認しない。
+    """
+
+    @pytest.mark.parametrize(
+        "name,level",
+        [
+            ("大津波警報：発表", "major_warning"),
+            ("津波警報（発表を継続）", "warning"),
+            ("津波注意報解除", "cancelled"),
+            ("警報解除", "cancelled"),
+            ("謎の種別", "unknown"),
+            # 表に無い言い回し
+            ("大津波警報（継続）", "major_warning"),
+            ("大津波警報解除", "cancelled"),
+            ("津波警報解除", "cancelled"),
+            ("津波注意報（訂正）", "advisory"),
+            ("津波予報（若干の海面変動）（継続）", "forecast"),
+        ],
+    )
+    def test_表に無い名前も見落とさない(self, name, level):
+        assert classify_tsunami_kind(name) == level
+
+    @pytest.mark.parametrize(
+        "name,shown",
+        [
+            ("大津波警報：発表", True),
+            ("津波警報（発表を継続）", True),
+            ("津波注意報解除", False),
+            ("警報解除", False),
+            ("謎の種別", True),
+        ],
+    )
+    def test_発表中として表示されるか(self, name, shown):
+        report = _report("20261022010500", "20261022010000", [("100", name)])
+        active = select_active_tsunami_reports([report])
+        assert bool(active) is shown
 
 
 class TestLifecycle:

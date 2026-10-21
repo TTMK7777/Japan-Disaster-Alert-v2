@@ -9,11 +9,17 @@
  * fetch も SSE も無く **一度も表示されないコンポーネント**だった。
  */
 
-/** バックエンドの TsunamiInfo.warning_level（backend/app/models.py） */
-export type TsunamiWarningLevel = 'none' | 'advisory' | 'warning' | 'major_warning';
+/** バックエンドの TsunamiInfo.warning_level。定義は共有型（src/types/earthquake.ts）にある */
+export type { TsunamiWarningLevel } from '@/types/earthquake';
 
-/** 画面表示の重大度。alertStyles のキーと対応する */
-export type AlertSeverity = 'advisory' | 'warning' | 'emergency';
+/**
+ * 画面表示の重大度。alertStyles のキーと対応する。
+ *
+ * `unknown` は**種別名が想定と違う津波情報**（backend の warning_level="unknown"）。
+ * 気象庁の種別名を一次資料で確認できていないため、名前が推定と違っても
+ * 本物の警報を見落とさないよう、注意報相当以上として全画面に出す（DIR 2026-10-22）。
+ */
+export type AlertSeverity = 'advisory' | 'unknown' | 'warning' | 'emergency';
 
 export interface TsunamiLike {
   id: string;
@@ -46,6 +52,8 @@ export function toSeverity(level: string): AlertSeverity | null {
       return 'warning';
     case 'advisory': // 津波注意報
       return 'advisory';
+    case 'unknown': // 種別名が想定と違う津波情報。捨てると本物の警報を見落とす
+      return 'unknown';
     case 'none':
     default:
       return null;
@@ -55,8 +63,10 @@ export function toSeverity(level: string): AlertSeverity | null {
 /** 重大度の順序。数値が大きいほど重い */
 const SEVERITY_RANK: Record<AlertSeverity, number> = {
   advisory: 1,
-  warning: 2,
-  emergency: 3,
+  // 種別不明は警報の可能性があるので、確かな注意報より上に置く（軽い方を見せて安心させない）
+  unknown: 2,
+  warning: 3,
+  emergency: 4,
 };
 
 export function severityRank(severity: AlertSeverity): number {

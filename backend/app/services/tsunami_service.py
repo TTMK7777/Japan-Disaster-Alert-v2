@@ -16,8 +16,9 @@ logger = get_logger(__name__)
 #
 # list.json の `kind` 配列の要素は **`{"code": "100", "kind": "津波注意報"}` の形で、
 # `name` キーは存在しない**（2026-10-22 に実レスポンスで確認）。区域名も無くコードだけ。
-# 種別名は**完全一致**で分類する。部分一致だと「津波注意報解除」を注意報と誤認する。
-# 表に無い種別は "unknown" として残す（語彙が変わったときに 0 件へ潰さない）。
+# 種別名はまず**完全一致**で分類し、表に無い名前は「解除」を先に見てから部分一致で分類する
+# （単純な部分一致だと「津波注意報解除」を注意報と誤認する）。手がかりの無い名前は
+# "unknown" として発表中に残す（語彙が変わったときに 0 件へ潰さない）。
 #
 # 実データで観測できた種別は「津波予報（若干の海面変動）」のみ。警報・注意報・解除の
 # 名称は気象庁 XML のコード表（警報等情報要素／津波警報・注意報・予報）に合わせた推定で、
@@ -45,9 +46,32 @@ CANCELLED_INFO_TYPES = frozenset({"取消"})
 _LEVEL_ORDER = {level: i for i, level in enumerate(ACTIVE_TSUNAMI_LEVELS)}
 
 
+#: 表に無い名前を分類する手がかり（上から順に見る）。種別名の一次資料が見つかっていないため、
+#: 名前が推定と違っても**警報を見落とさない方向に倒す**（出しすぎは許容、出さないのは不可）。
+#: 「解除」を最初に見るので、「津波注意報解除」を部分一致で注意報と誤認しない。
+#: 「大津波警報」は「津波警報」を含むので、必ずその前に置く
+TSUNAMI_KIND_FALLBACK_HINTS: tuple[tuple[str, str], ...] = (
+    ("解除", "cancelled"),
+    ("大津波警報", "major_warning"),
+    ("津波警報", "warning"),
+    ("津波注意報", "advisory"),
+    ("津波予報", "forecast"),
+)
+
+
 def classify_tsunami_kind(name: str) -> str:
-    """区域の津波種別名を階級に分類する。表に無い名前は "unknown"。"""
-    return TSUNAMI_KIND_LEVELS.get(name, "unknown")
+    """区域の津波種別名を階級に分類する。
+
+    完全一致の既知名 → 表に無い名前は TSUNAMI_KIND_FALLBACK_HINTS の順に部分一致 →
+    手がかりが無ければ "unknown"（発表中として表示する側に倒す）。
+    """
+    known = TSUNAMI_KIND_LEVELS.get(name)
+    if known is not None:
+        return known
+    for hint, level in TSUNAMI_KIND_FALLBACK_HINTS:
+        if hint in name:
+            return level
+    return "unknown"
 
 
 @dataclass(frozen=True)

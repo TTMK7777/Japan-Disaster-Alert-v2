@@ -113,3 +113,32 @@ describe('フォーカス管理', () => {
     outside.remove();
   });
 });
+
+describe('種別不明（unknown）の津波情報', () => {
+  const UNKNOWN: TsunamiLike[] = [{ id: 't-unk', warning_level: 'unknown' }];
+
+  it('全画面に出て、公式情報の確認を促す', () => {
+    render(<EmergencyAlert language="en" tsunamis={UNKNOWN} />);
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.textContent).toContain('Tsunami Information Issued');
+    expect(dialog.textContent).toContain('Check official information');
+  });
+
+  it('日本語でも出る', () => {
+    render(<EmergencyAlert language="ja" tsunamis={UNKNOWN} />);
+    expect(screen.getByRole('alertdialog').textContent).toContain('公式情報を確認してください');
+  });
+
+  it('自動では閉じない', async () => {
+    render(<EmergencyAlert language="en" tsunamis={UNKNOWN} />);
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+  });
+
+  it('避難所を探すボタンを出す', () => {
+    render(<EmergencyAlert language="en" tsunamis={UNKNOWN} />);
+    expect(screen.getByRole('button', { name: 'Find Shelter' })).toBeTruthy();
+  });
+});
