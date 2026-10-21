@@ -37,3 +37,12 @@ class PushNotificationError(DisasterAlertError):
     """プッシュ通知エラー"""
     pass
 
+
+
+class UpstreamUnavailableError(ServiceError):
+    """上流（気象庁・P2P）から取得できず、使える値も無い。
+
+    「取得できなかった」を空リストにすると、画面は「警報なし」「地震なし」と読める。
+    呼び出し側（エンドポイント）はこれを 503 にする。
+    """
+    pass

@@ -1,16 +1,20 @@
 'use client';
 
-import { memo } from 'react';
+import React, { memo } from 'react';
 import type { Earthquake } from '@/types/earthquake';
 import { getTranslation } from '@/i18n/translations';
 import IntensityGauge from './IntensityGauge';
 import IntensityImpact from './IntensityImpact';
 import { formatMagnitude, formatDepth } from '@/lib/earthquakeFormat';
+import FetchFailureNotice from './FetchFailureNotice';
+import type { FailureReason } from '@/lib/fetchFailure';
 
 // page.tsx の ApiError と互換の型
 interface ApiError {
   message: string;
   retryable: boolean;
+  /** 失敗の種類。期限超過は「時間内に応答がない」と出す（省略時は failed） */
+  reason?: FailureReason;
 }
 
 interface EarthquakeListProps {
@@ -19,6 +23,10 @@ interface EarthquakeListProps {
   loading: boolean;
   error: ApiError | null;
   onRetry?: () => void;
+  /** 地震一覧を最後に取得できた時刻（ms）。未取得なら null */
+  lastSuccessAt?: number | null;
+  /** 取得できなかったときに並べる公式情報への導線 */
+  officialLink?: React.ReactNode;
 }
 
 // 震度に応じた色クラスを返す
@@ -120,8 +128,10 @@ const EarthquakeItem = memo(function EarthquakeItem({ earthquake: eq, language }
   );
 });
 
-export default function EarthquakeList({ language, earthquakes, loading, error, onRetry }: EarthquakeListProps) {
-  if (loading) {
+export default function EarthquakeList({ language, earthquakes, loading, error, onRetry, lastSuccessAt = null, officialLink }: EarthquakeListProps) {
+  // 手元に一覧があるときは、再取得中も失敗後も消さない（以前はエラーで一覧を隠し、
+  // P2P が落ちると「地震がない」と読める画面になっていた）
+  if (loading && earthquakes.length === 0 && !error) {
     return (
       <div className="flex justify-center items-center py-12">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-disaster-blue"></div>
@@ -129,21 +139,27 @@ export default function EarthquakeList({ language, earthquakes, loading, error, 
     );
   }
 
+  const failureNotice = error && (
+    <FetchFailureNotice
+      language={language}
+      reason={error.reason ?? 'failed'}
+      lastSuccessAt={lastSuccessAt}
+      onRetry={error.retryable ? onRetry : undefined}
+      testId="earthquake-fetch-failure"
+      heading={error.message}
+    >
+      {officialLink}
+    </FetchFailureNotice>
+  );
+
+  // 失敗は「地震情報はありません」にしない。一覧があれば失敗の枠の下に残す
   if (error) {
     return (
-      <div className="bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 rounded-lg p-4 flex items-center gap-3" role="alert">
-        <span className="text-2xl" aria-hidden="true">&#x26A0;&#xFE0F;</span>
-        <div className="flex-1">
-          <p className="text-amber-800 dark:text-amber-200 font-medium">{error.message}</p>
-        </div>
-        {error.retryable && onRetry && (
-          <button
-            onClick={onRetry}
-            className="px-3 py-1.5 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2"
-          >
-            {getTranslation(language, 'common.retry')}
-          </button>
-        )}
+      <div className="space-y-4">
+        {failureNotice}
+        {earthquakes.map((eq) => (
+          <EarthquakeItem key={eq.id} earthquake={eq} language={language} />
+        ))}
       </div>
     );
   }

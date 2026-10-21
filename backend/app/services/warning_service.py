@@ -7,8 +7,10 @@
 """
 import asyncio
 import httpx
+from dataclasses import dataclass, field
 from typing import Optional
 from datetime import datetime
+from ..exceptions import UpstreamUnavailableError
 from ..models import ALLOWED_LANGUAGES, DisasterAlert
 from ..utils.logger import get_logger
 from ..utils.area_codes import AREA_CODES, get_area_code
@@ -46,6 +48,14 @@ logger = get_logger(__name__)
 #
 # 解除済み（"解除"）と、警報が無いとき（"発表警報・注意報はなし"）は当然除外する。
 ACTIVE_WARNING_STATUSES = frozenset({"発表", "継続"})
+
+
+@dataclass
+class WarningFetchResult:
+    """1 地域ぶんの警報と、取得できなかった府県予報区コード（欠けが無ければ空）。"""
+
+    alerts: list[DisasterAlert]
+    failed_offices: list[str] = field(default_factory=list)
 
 
 class WarningService:
@@ -136,20 +146,40 @@ class WarningService:
             鹿児島は 2 に分かれている。代表コードだけを見ると宮古島・八重山・奄美や
             北海道の大半が丸ごと抜け落ちる。
         """
+        try:
+            return (await self.fetch_warnings(area_code, lang)).alerts
+        except UpstreamUnavailableError:
+            # 旧契約（失敗を [] に潰す）。画面の経路（/api/v1/alerts）は fetch_warnings を使う。
+            # ここに残すのは、成否を区別しない内部利用のためだけ
+            return []
+
+    async def fetch_warnings(self, area_code: str, lang: str = "ja") -> WarningFetchResult:
+        """指定地域の警報・注意報を、**取得できなかった予報区と一緒に**返す。
+
+        - すべての予報区が取得できなければ UpstreamUnavailableError（[] にしない。
+          [] は画面で緑の「警報なし」になり、取得不能を安全と読ませる）
+        - 一部だけ取得できなければ、取れた分の警報と、取れなかった予報区コードを返す
+          （欠けた予報区があるのに県全域を確認済みと読ませない）
+        """
         office_codes = expand_to_offices(area_code)
         payloads = await asyncio.gather(
             *(self._fetch_warning_payload(code) for code in office_codes)
         )
-        data = self._combine_payloads([p for p in payloads if p])
+        failed = [code for code, payload in zip(office_codes, payloads) if payload is None]
+        data = self._combine_payloads([p for p in payloads if p is not None])
         if data is None:
-            return []
+            raise UpstreamUnavailableError(
+                f"警報を取得できた予報区がない（{area_code}: {len(office_codes)} 区すべて失敗）"
+            )
 
         # 16 言語すべてが静的マッピングで完結する（warning_names / area_display /
         # warning_guidance がそろっているため）。静的なら停電・低回線・API キー
         # 未設定でも同じ結果が出る（docs の R2）。かつて存在した AI 翻訳経路は
         # `_validate_lang` が許可する全言語が静的対応になった時点で到達不能に
         # なっていたため、メソッドごと削除した
-        return self._parse_warnings(data, area_code, lang)
+        return WarningFetchResult(
+            alerts=self._parse_warnings(data, area_code, lang), failed_offices=failed
+        )
 
     async def _fetch_warning_payload(self, area_code: str) -> Optional[dict]:
         """1 予報区ぶんの警報 JSON を取得する。失敗したら None。
