@@ -64,11 +64,11 @@ export interface EventStreamResult extends EventStreamState, Freshness {
   /** 今すぐ取りに行く。取得中・圏外では新しいリクエストを出さない */
   refresh: () => void;
   /**
-   * 呼び出し側が自前で取得した結果を「最後に取得できた時刻」の表示に反映する。
-   * 表示だけに使い、低電力ポーリングの予定（いつ次を取るか）には使わない
-   * （地震だけ取れた結果で津波の取得を先送りしないため）
+   * 呼び出し側が自前で行った取得の**失敗だけ**を表示に反映する（成功時刻は書き換えない）。
+   * 成功は報告させない: page の地震だけの取得が成功しても、津波が取れていなければ
+   * 「最新・失敗なし」にしてはいけないため（PR#97 レビュー must-fix 2）
    */
-  reportResult: (ok: boolean) => void;
+  reportFailure: () => void;
 }
 
 /** ポーリング間隔の上限。連続失敗のたびに倍にして、ここで頭打ちにする */
@@ -173,6 +173,16 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
   const lastFreshAtRef = useRef<number | null>(null);
   const lastAttemptFailedRef = useRef(false);
 
+  // いまの SSE 接続で、地震と津波の取り直しが一度でも成功したか。
+  // **SSE は接続時に現在の状態を送らず、津波は ID 集合が変わったときだけ配信される**
+  // （backend/app/services/event_manager.py）。接続し直した直後の heartbeat で「最新」と
+  // 表示すると、切れていた間（低電力中・圏外・バックグラウンド）に出た津波警報が
+  // 届かないまま「最新・津波なし」に見える。取り直しが成功するまでは heartbeat を数えない
+  const connectionVerifiedRef = useRef(false);
+
+  // 表示状態（mode）の最新値。refresh から参照する（依存に state を入れないため）
+  const modeRef = useRef<EventStreamState['mode']>('disconnected');
+
   const recordSuccess = useCallback(() => {
     const now = Date.now();
     lastFreshAtRef.current = now;
@@ -186,12 +196,8 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
     setFreshness((prev) => (prev.lastFailed ? prev : { ...prev, lastFailed: true }));
   }, []);
 
-  const reportResult = useCallback((ok: boolean) => {
-    if (ok) {
-      setFreshness({ lastSuccessAt: Date.now(), lastFailed: false });
-    } else {
-      setFreshness((prev) => (prev.lastFailed ? prev : { ...prev, lastFailed: true }));
-    }
+  const reportFailure = useCallback(() => {
+    setFreshness((prev) => (prev.lastFailed ? prev : { ...prev, lastFailed: true }));
   }, []);
 
   // ポーリング停止
@@ -254,6 +260,7 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
 
       const ok = earthquakes.status === 'fulfilled' && tsunamiOk;
       if (ok) {
+        connectionVerifiedRef.current = true;
         recordSuccess();
         setState((prev) => ({ ...prev, lastEvent: updatedAt }));
       } else {
@@ -318,6 +325,9 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
 
       const ok = await runSnapshot();
       if (!isMountedRef.current || generation !== generationRef.current) return;
+      // 待っている間に止められた（圏外・バックグラウンド・SSE への切替）なら、
+      // 次の予約も表示状態の上書きもしない
+      if (pollNowRef.current !== pollNow) return;
       if (ok) {
         pollFailuresRef.current = 0;
         setState((prev) => ({ ...prev, mode: 'polling' }));
@@ -327,13 +337,14 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
       scheduleNext();
     };
 
-    pollNowRef.current = () => {
+    const pollNow = () => {
       if (pollingTimerRef.current) {
         clearTimeout(pollingTimerRef.current);
         pollingTimerRef.current = null;
       }
       void poll();
     };
+    pollNowRef.current = pollNow;
 
     if (initialDelay > 0) {
       scheduleIn(initialDelay);
@@ -344,6 +355,9 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
 
   // SSE接続を確立
   const connect = useCallback(() => {
+    // 新しい接続（またはポーリング）では、取り直しが成功するまで「最新」と扱わない
+    connectionVerifiedRef.current = false;
+
     // 既存の接続をクリーンアップ
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
@@ -393,6 +407,8 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
           mode: 'sse',
           lastEvent: null,
         });
+        // 接続のたびに地震と津波を取り直す（接続時に現在の状態は届かないため）
+        void runSnapshot();
       };
 
       // 地震イベント
@@ -400,7 +416,7 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
         try {
           const data: EarthquakeEventData = JSON.parse(event.data);
           callbacksRef.current.onEarthquake?.(data);
-          recordSuccess();
+          if (connectionVerifiedRef.current) recordSuccess();
           setState((prev) => ({
             ...prev,
             lastEvent: new Date().toISOString(),
@@ -415,7 +431,7 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
         try {
           const data: TsunamiEventData = JSON.parse(event.data);
           callbacksRef.current.onTsunami?.(data);
-          recordSuccess();
+          if (connectionVerifiedRef.current) recordSuccess();
           setState((prev) => ({
             ...prev,
             lastEvent: new Date().toISOString(),
@@ -431,7 +447,7 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
         try {
           const data: HeartbeatEventData = JSON.parse(event.data);
           callbacksRef.current.onHeartbeat?.(data);
-          recordSuccess();
+          if (connectionVerifiedRef.current) recordSuccess();
           setState((prev) => ({
             ...prev,
             lastEvent: new Date().toISOString(),
@@ -488,10 +504,11 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
       console.error('[EventStream] SSE接続の初期化に失敗:', err);
       startPolling();
     }
-  }, [lang, lowPower, lowPowerInterval, startPolling, stopPolling, recordSuccess]);
+  }, [lang, lowPower, lowPowerInterval, startPolling, stopPolling, recordSuccess, runSnapshot]);
 
   // HIGH #1: connectRef を最新の connect に同期
   connectRef.current = connect;
+  modeRef.current = state.mode;
 
   /** 「今すぐ更新」。取得中は何もしない（連打で多重リクエストしない） */
   const refresh = useCallback(() => {
@@ -501,13 +518,19 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
       recordFailure();
       return;
     }
+    if (!pollNowRef.current && (lowPower || modeRef.current === 'disconnected')) {
+      // 止まっている（online / visibilitychange を取りこぼした等）。
+      // 接続し直して自動更新も再開する。低電力ならこのあと今すぐ取る
+      connectRef.current?.();
+      if (!lowPower) return; // SSE は onopen で取り直す
+    }
     if (pollNowRef.current) {
       // ポーリング中なら今取り、次の自動取得はそこから数え直す
-      pollNowRef.current();
+      if (!inFlightRef.current) pollNowRef.current();
     } else {
       void runSnapshot();
     }
-  }, [recordFailure, runSnapshot]);
+  }, [lowPower, recordFailure, runSnapshot]);
 
   // SSE接続のライフサイクル管理
   useEffect(() => {
@@ -597,6 +620,6 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
     refreshing,
     nextPollAt,
     refresh,
-    reportResult,
+    reportFailure,
   };
 }

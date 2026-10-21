@@ -373,19 +373,25 @@ describe('useEventStream — 低電力モード', () => {
     const stream = FakeEventSource.instances[0];
     act(() => {
       stream.onopen?.();
+    });
+    await flush(); // 接続時の取り直し（地震＋津波 1 組）
+    expect(countOf('/api/v1/tsunami/active')).toBe(1);
+    act(() => {
       stream.emit('heartbeat', { time: 'x', clients: 1 });
     });
 
     rerender({ lowPower: true });
     await flush();
     expect(stream.closed).toBe(true);
-    expect(fetchMock()).not.toHaveBeenCalled();
+    expect(countOf('/api/v1/tsunami/active')).toBe(1);
 
     await advance(FIVE_MIN);
-    expect(countOf('/api/v1/tsunami/active')).toBe(1);
+    expect(countOf('/api/v1/tsunami/active')).toBe(2);
   });
 
-  it('津波を受信済みの状態でオンにしても、表示中の津波を消さない（空で上書きしない）', async () => {
+  it('津波を受信済みの状態でオンにしても、表示中の津波を空で上書きしない', async () => {
+    // サーバーには今も津波 t1 が出ている
+    routeFetch({ tsunamis: [{ id: 't1' }] });
     const onTsunami = vi.fn();
     const { rerender } = renderHook(
       ({ lowPower }) => useEventStream({ lang: 'ja', lowPower, onTsunami }),
@@ -394,12 +400,13 @@ describe('useEventStream — 低電力モード', () => {
     act(() => {
       FakeEventSource.instances[0].emit('tsunami', { tsunamis: [{ id: 't1' }], updated_at: 'x' });
     });
-    expect(onTsunami).toHaveBeenCalledTimes(1);
 
     rerender({ lowPower: true });
     await flush();
-    // 切替で onTsunami を空配列で呼ばない（次の取得まで前の情報を保つ）
-    expect(onTsunami).toHaveBeenCalledTimes(1);
+    // 切替で空配列を渡さない（渡すのは取得した実データだけ）
+    for (const call of onTsunami.mock.calls) {
+      expect(call[0].tsunamis).toEqual([{ id: 't1' }]);
+    }
   });
 
   it('オフにした瞬間: ポーリングを止めて SSE に戻る', async () => {
@@ -429,12 +436,138 @@ describe('useEventStream — 低電力モード', () => {
     expect(countOf('/api/v1/tsunami/active')).toBe(1);
   });
 
-  it('通常モードでも SSE を受信したら最後に取得できた時刻が進む', () => {
+  /*
+   * SSE は接続時に現在の状態を送らず、津波は ID 集合が変わったときだけ配信される
+   * （backend/app/services/event_manager.py _check_tsunamis）。
+   * 接続し直したときに取り直さないと、切れていた間に出た津波警報が届かないまま、
+   * 直後の heartbeat で「最新」と表示されてしまう。
+   */
+  it('SSE に接続するたびに地震と津波を取り直す（再接続でも）', async () => {
+    renderHook(() => useEventStream({ lang: 'ja' }));
+    act(() => {
+      FakeEventSource.instances[0].onopen?.();
+    });
+    await flush();
+    expect(countOf('/api/v1/earthquakes')).toBe(1);
+    expect(countOf('/api/v1/tsunami/active')).toBe(1);
+
+    // 圏外 → 復帰で接続し直したら、もう一度取り直す
+    act(() => {
+      setOnline(false);
+      window.dispatchEvent(new Event('offline'));
+    });
+    act(() => {
+      setOnline(true);
+      window.dispatchEvent(new Event('online'));
+    });
+    act(() => {
+      FakeEventSource.instances[1].onopen?.();
+    });
+    await flush();
+    expect(countOf('/api/v1/tsunami/active')).toBe(2);
+  });
+
+  it('低電力で「津波なし」を取った後にオフへ戻すと、接続時に津波を取り直して届ける', async () => {
+    const onTsunami = vi.fn();
+    const { rerender } = renderHook(
+      ({ lowPower }) => useEventStream({ lang: 'ja', lowPower, onTsunami }),
+      { initialProps: { lowPower: true } }
+    );
+    await flush();
+    expect(onTsunami).toHaveBeenLastCalledWith(expect.objectContaining({ tsunamis: [] }));
+
+    // その間に津波警報が出た（SSE は変化時にしか配信しないので、接続しても届かない）
+    routeFetch({ tsunamis: [{ id: 't1', grade: 'Warning' }] });
+    rerender({ lowPower: false });
+    act(() => {
+      FakeEventSource.instances[0].onopen?.();
+    });
+    await flush();
+    expect(onTsunami).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tsunamis: [{ id: 't1', grade: 'Warning' }] })
+    );
+  });
+
+  it('接続直後の取り直しが成功するまでは、heartbeat で「最新」扱いしない', async () => {
+    routeFetch({ tsunamiOk: false });
     const { result } = renderHook(() => useEventStream({ lang: 'ja' }));
-    expect(result.current.lastSuccessAt).toBeNull();
+    act(() => {
+      FakeEventSource.instances[0].onopen?.();
+    });
+    await flush();
+    expect(result.current.lastFailed).toBe(true);
+
+    await advance(30 * 1000);
     act(() => {
       FakeEventSource.instances[0].emit('heartbeat', { time: 'x', clients: 1 });
     });
+    expect(result.current.lastSuccessAt).toBeNull();
+    expect(result.current.lastFailed).toBe(true);
+
+    // 「今すぐ更新」で取れたら、以後の heartbeat は時刻を進める
+    routeFetch();
+    act(() => {
+      result.current.refresh();
+    });
+    await flush();
+    const refreshedAt = result.current.lastSuccessAt;
+    expect(refreshedAt).toBe(Date.now());
+    expect(result.current.lastFailed).toBe(false);
+
+    await advance(30 * 1000);
+    act(() => {
+      FakeEventSource.instances[0].emit('heartbeat', { time: 'x', clients: 1 });
+    });
+    expect(result.current.lastSuccessAt).toBe(Date.now());
+    expect(result.current.lastSuccessAt).toBeGreaterThan(refreshedAt as number);
+  });
+
+  it('低電力で止まっている状態から「今すぐ更新」を押すと、取得して自動更新も再開する', async () => {
+    const { result } = renderHook(() => useEventStream({ lang: 'ja', lowPower: true }));
+    await flush();
+    expect(countOf('/api/v1/tsunami/active')).toBe(1);
+    act(() => {
+      setOnline(false);
+      window.dispatchEvent(new Event('offline'));
+    });
+    // online イベントを取りこぼしたまま回線が戻った（自動更新は止まったまま）
+    setOnline(true);
+    expect(result.current.nextPollAt).toBeNull();
+
+    act(() => {
+      result.current.refresh();
+    });
+    await flush();
+    expect(countOf('/api/v1/tsunami/active')).toBe(2);
+
+    // 自動更新も再開している（5 分後にもう一度）
+    expect(result.current.nextPollAt).toBe(Date.now() + FIVE_MIN);
+  });
+
+  it('取得中に圏外になったら、返ってきた結果で次の予約や表示状態を上書きしない', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    global.fetch = vi.fn(async () => {
+      await gate;
+      return { ok: true, status: 200, json: async () => [] };
+    }) as unknown as typeof fetch;
+
+    const { result } = renderHook(() => useEventStream({ lang: 'ja', lowPower: true }));
+    await flush();
+    act(() => {
+      setOnline(false);
+      window.dispatchEvent(new Event('offline'));
+    });
+    await act(async () => {
+      release();
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.mode).toBe('disconnected');
+    expect(result.current.nextPollAt).toBeNull();
+    // 取れたデータ自体は有効なので成功時刻は進めてよい
     expect(result.current.lastSuccessAt).toBe(Date.now());
   });
 

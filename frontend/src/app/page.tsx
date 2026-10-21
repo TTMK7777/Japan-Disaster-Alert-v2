@@ -182,8 +182,9 @@ export default function Home() {
     onEarthquake: handleEarthquake,
     onTsunami: handleTsunami,
   });
-  // 安定した関数（useCallback []）。eventStream オブジェクト自体は毎回作り直されるので依存に入れない
-  const { reportResult } = eventStream;
+  // 安定した関数（useCallback []）。eventStream オブジェクト自体は毎回作り直されるので依存に入れない。
+  // 成功は報告しない: ここの取得は地震だけで、津波が取れていないのに「最新」にしてしまうため
+  const { reportFailure } = eventStream;
 
   // 地震データの取得（ポーリングフォールバック・手動リトライ用）。
   // **前回の取得を必ず中断してから始める。** 言語切替の直後などで
@@ -204,10 +205,7 @@ export default function Home() {
       );
       if (response.ok) {
         const data = await response.json();
-        if (!controller.signal.aborted) {
-          setEarthquakes(data);
-          reportResult(true);
-        }
+        if (!controller.signal.aborted) setEarthquakes(data);
       } else {
         throw new Error('Server error');
       }
@@ -215,7 +213,7 @@ export default function Home() {
       // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
       if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
       console.error('Failed to fetch earthquakes:', err);
-      reportResult(false);
+      reportFailure();
       const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
       setEarthquakeError({
         message: isNetworkError ? getErrorMessage('networkError') : getErrorMessage('serverError'),
@@ -226,7 +224,7 @@ export default function Home() {
       // 後続の取得が始まっていたら loading 表示はそちらに任せる
       if (earthquakeFetchRef.current === controller) setEarthquakeLoading(false);
     }
-  }, [language, getErrorMessage, reportResult]);
+  }, [language, getErrorMessage, reportFailure]);
 
   // 初回マウント時のデータ取得（SSE接続前のフォールバック）
   useEffect(() => {

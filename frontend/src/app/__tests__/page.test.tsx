@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react';
 import { LOW_POWER_STORAGE_KEY } from '@/hooks/useLowPowerMode';
+import { getTranslation } from '@/i18n/translations';
 
 /**
  * page.tsx の配線を本物のフック・コンポーネントのまま固定する結合テスト。
@@ -202,6 +203,35 @@ describe('page.tsx — 低電力モード', () => {
     expect(FakeEventSource.instances[0].closed).toBe(true);
     expect(main.classList.contains('low-power')).toBe(true);
     expect(localStorage.getItem(LOW_POWER_STORAGE_KEY)).toBe('1');
+  });
+
+  it('津波だけ取れていない間は、言語切替で地震が取れても失敗表示を消さない', async () => {
+    vi.useFakeTimers();
+    localStorage.setItem(LOW_POWER_STORAGE_KEY, '1');
+    localStorage.setItem('disaster-app-lang', 'ja');
+    // 津波: 最初の 2 回（EmergencyAlert の初回取得とポーリングの初回）は 503、以降は返ってこない
+    let tsunamiCalls = 0;
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v1/tsunami/active')) {
+        tsunamiCalls += 1;
+        if (tsunamiCalls <= 2) return { ok: false, status: 503, json: async () => ({}) };
+        return new Promise(() => {});
+      }
+      return { ok: true, status: 200, json: async () => [] };
+    }) as unknown as typeof fetch;
+
+    await renderHome();
+    await flush();
+    expect(screen.getByTestId('fetch-failed')).toBeInTheDocument();
+    expect(screen.getByTestId('last-success')).toHaveTextContent(getTranslation('ja', 'freshness.never'));
+
+    // 言語を切り替える → page 側の地震の取り直しは成功する（津波は取れていない）
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'en' } });
+    await flush();
+    expect(countOf('/api/v1/earthquakes?lang=en')).toBeGreaterThan(0);
+    expect(screen.getByTestId('fetch-failed')).toBeInTheDocument();
+    expect(screen.getByTestId('last-success')).toHaveTextContent(getTranslation('en', 'freshness.never'));
   });
 
   it('どのタブを開いていてもトグルと最終取得表示が見える', async () => {

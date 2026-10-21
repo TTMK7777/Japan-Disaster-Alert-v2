@@ -43,7 +43,8 @@ export default async function RootLayout({
 
   // HIGH-1: dangerouslySetInnerHTML の代わりに nonce 付き script タグを使用
   // これにより 'unsafe-inline' なしで CSP を適用できる
-  const themeScript = `(function(){var t=localStorage.getItem('theme')||'system';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.classList.add('dark');})();`;
+  // ストレージが拒否された端末では localStorage の参照で例外になるので握る（既定 = system）
+  const themeScript = `(function(){var t='system';try{t=localStorage.getItem('theme')||'system';}catch(e){}var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.classList.add('dark');})();`;
 
   return (
     <html lang="ja" suppressHydrationWarning>
