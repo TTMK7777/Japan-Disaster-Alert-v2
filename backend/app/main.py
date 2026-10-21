@@ -109,6 +109,12 @@ from .services.shelter_service import ShelterService
 from .services.push_service import PushNotificationService, TokenAuthError
 from .services.transit_links import build_transit_links
 from .services.event_manager import EventManager
+from .services.snapshot_service import (
+    SNAPSHOT_STALE_WHILE_REVALIDATE_SECONDS,
+    SnapshotBuilder,
+    SnapshotCache,
+    build_default_fetchers,
+)
 
 # サービスインスタンス
 jma_service = JMAService()
@@ -122,6 +128,10 @@ volcano_service = VolcanoService()
 shelter_service = ShelterService()
 push_service = PushNotificationService()
 event_manager = EventManager()
+# 表示用スナップショット（B5）。上の 3 サービスを共有し、最後の版をメモリに持つ
+snapshot_cache = SnapshotCache(
+    SnapshotBuilder(build_default_fetchers(p2p_service, tsunami_service, volcano_service))
+)
 
 
 @asynccontextmanager
@@ -586,6 +596,47 @@ async def get_volcanoes(request: Request, monitored_only: bool = True):
         return await volcano_service.get_monitored_volcanoes()
     else:
         return await volcano_service.get_volcano_list()
+
+
+def _snapshot_cache_control(max_age: int) -> str:
+    # max-age は「60 − 生成からの経過秒」。固定 60 だと、生成から 59 秒の版を
+    # さらに 60 秒キャッシュさせることになり、利用者が見る古さが 2 分を超える
+    return (
+        f"public, max-age={max_age}, "
+        f"stale-while-revalidate={SNAPSHOT_STALE_WHILE_REVALIDATE_SECONDS}"
+    )
+
+
+def _etag_matches(if_none_match: Optional[str], etag: str) -> bool:
+    if not if_none_match:
+        return False
+    candidates = [c.strip() for c in if_none_match.split(",")]
+    # 弱い比較（W/ を外して比べる）。If-None-Match は弱い比較で判定する（RFC 9110 13.1.2）
+    return "*" in candidates or etag in [c.removeprefix("W/") for c in candidates]
+
+
+@app.get("/api/v1/snapshot")
+# @handle_errors は付けない: RateLimitExceeded（starlette の HTTPException）を 500 に
+# 変えてしまい 429 にならない（既存エンドポイントは現状そうなっている・別途修正）
+@limiter.limit(settings.rate_limit_general)
+async def get_snapshot(request: Request):
+    """
+    表示用スナップショット（地震・発表中の津波警報/注意報・噴火警報）
+
+    埋め込み・サイネージなど、アクセスが集中する表示向け。最後に作った版をメモリに持ち、
+    60 秒より古ければ作り直す（同時に来たリクエストは 1 本の生成を待つ）。
+    Cache-Control の max-age は生成からの残り秒、stale-while-revalidate は 30 秒。
+    dataset ごとに status（ok / stale / error）と取得成功時刻を持つ。
+    スキーマ: docs/dev/snapshot-schema.json
+    """
+    cached = await snapshot_cache.get()
+    headers = {
+        "Cache-Control": _snapshot_cache_control(snapshot_cache.remaining_seconds(cached)),
+        "ETag": cached.etag,
+    }
+    if _etag_matches(request.headers.get("if-none-match"), cached.etag):
+        return Response(status_code=304, headers=headers)
+    return Response(content=cached.body, media_type="application/json", headers=headers)
 
 
 @app.get("/api/v1/volcanoes/warnings", response_model=list[VolcanoWarning])

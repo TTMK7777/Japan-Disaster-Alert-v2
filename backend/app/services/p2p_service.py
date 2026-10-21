@@ -51,6 +51,40 @@ class P2PQuakeService:
         "Warning": "津波警報"
     }
 
+    async def fetch_recent_earthquakes(self, limit: int = 10) -> list[EarthquakeInfo]:
+        """最新の地震情報を取得する。**失敗は例外で返す**（[] に潰さない）。
+
+        「取得できなかった」と「地震が 0 件」を区別したい呼び出し元（スナップショット）向け。
+        get_recent_earthquakes はこれを呼んで失敗を [] に落とす。
+
+        Raises:
+            httpx.HTTPError: 通信・HTTP ステータスの失敗
+            ValueError: 本文が JSON でない・配列でない・1 件以上あるのに全件パースできない
+        """
+        url = f"{self.BASE_URL}/history"
+        params = {
+            "codes": 551,  # 地震情報コード
+            "limit": limit
+        }
+
+        client = self._get_client()
+        response = await client.get(url, params=params, timeout=self.timeout)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, list):
+            raise ValueError(f"P2P /history が配列ではない: {type(data).__name__}")
+
+        earthquakes = []
+        for item in data:
+            eq = self._parse_earthquake(item) if isinstance(item, dict) else None
+            if eq:
+                earthquakes.append(eq)
+        if data and not earthquakes:
+            # 形が変わって全件パースに失敗したのを「地震 0 件」に見せない
+            raise ValueError(f"P2P /history の {len(data)} 件をすべてパースできなかった")
+
+        return self._deduplicate(earthquakes)
+
     async def get_recent_earthquakes(self, limit: int = 10) -> list[EarthquakeInfo]:
         """
         最新の地震情報を取得
@@ -64,25 +98,8 @@ class P2PQuakeService:
         Raises:
             httpx.HTTPError: APIリクエストに失敗した場合（内部でキャッチされ、空リストを返す）
         """
-        url = f"{self.BASE_URL}/history"
-        params = {
-            "codes": 551,  # 地震情報コード
-            "limit": limit
-        }
-
-        client = self._get_client()
         try:
-            response = await client.get(url, params=params, timeout=self.timeout)
-            response.raise_for_status()
-            data = response.json()
-
-            earthquakes = []
-            for item in data:
-                eq = self._parse_earthquake(item)
-                if eq:
-                    earthquakes.append(eq)
-
-            return self._deduplicate(earthquakes)
+            return await self.fetch_recent_earthquakes(limit=limit)
         except (httpx.HTTPError, ValueError) as e:
             # ValueError は response.json() のデコード失敗（json.JSONDecodeError は
             # ValueError のサブクラスで、httpx.HTTPError では捕捉できない）。

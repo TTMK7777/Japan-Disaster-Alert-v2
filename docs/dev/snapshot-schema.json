@@ -1,0 +1,654 @@
+{
+  "$defs": {
+    "DatasetStatus": {
+      "enum": [
+        "ok",
+        "stale",
+        "error"
+      ],
+      "title": "DatasetStatus",
+      "type": "string"
+    },
+    "EarthquakeItem": {
+      "additionalProperties": false,
+      "description": "直近の地震（P2P 地震情報が中継する気象庁の地震情報）。同じ地震の複数報は 1 件にまとめる。",
+      "properties": {
+        "id": {
+          "description": "P2P の発表 ID",
+          "title": "Id",
+          "type": "string"
+        },
+        "occurred_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "発生時刻（JST のオフセット付き）。解釈できなければ null",
+          "title": "Occurred At"
+        },
+        "location_ja": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "震源地名（気象庁の日本語名）。調査中は null",
+          "title": "Location Ja"
+        },
+        "magnitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "マグニチュード。未確定は null",
+          "title": "Magnitude"
+        },
+        "depth_km": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "震源の深さ km。0 は『ごく浅い』。未確定は null",
+          "title": "Depth Km"
+        },
+        "max_intensity": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "最大震度（気象庁の表記: 1〜4, 5弱, 5強, 6弱, 6強, 7）。不明は null",
+          "title": "Max Intensity"
+        },
+        "max_scale": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "P2P の震度コード（10〜70）。不明は null",
+          "title": "Max Scale"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Latitude"
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Longitude"
+        },
+        "domestic_tsunami": {
+          "description": "P2P の国内津波コード（None / Unknown / Checking / NonEffective / Watch / Warning）",
+          "title": "Domestic Tsunami",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "occurred_at",
+        "location_ja",
+        "magnitude",
+        "depth_km",
+        "max_intensity",
+        "max_scale",
+        "latitude",
+        "longitude",
+        "domestic_tsunami"
+      ],
+      "title": "EarthquakeItem",
+      "type": "object"
+    },
+    "EarthquakesDataset": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/DatasetStatus"
+        },
+        "fetched_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。前回成功から 15 分を過ぎた dataset は stale ではなく error になる",
+          "title": "Fetched At"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/EarthquakeItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ok は今回の値（空配列 = 確認済みの 0 件）、stale は前回成功時の値、error は null",
+          "title": "Items"
+        }
+      },
+      "required": [
+        "status",
+        "fetched_at",
+        "items"
+      ],
+      "title": "EarthquakesDataset",
+      "type": "object"
+    },
+    "SnapshotDatasets": {
+      "additionalProperties": false,
+      "properties": {
+        "earthquakes": {
+          "$ref": "#/$defs/EarthquakesDataset"
+        },
+        "tsunami": {
+          "$ref": "#/$defs/TsunamiDataset"
+        },
+        "volcano_warnings": {
+          "$ref": "#/$defs/VolcanoWarningsDataset"
+        }
+      },
+      "required": [
+        "earthquakes",
+        "tsunami",
+        "volcano_warnings"
+      ],
+      "title": "SnapshotDatasets",
+      "type": "object"
+    },
+    "SnapshotSource": {
+      "additionalProperties": false,
+      "properties": {
+        "providers": {
+          "items": {
+            "$ref": "#/$defs/SourceProvider"
+          },
+          "title": "Providers",
+          "type": "array"
+        },
+        "official": {
+          "const": false,
+          "default": false,
+          "title": "Official",
+          "type": "boolean"
+        },
+        "notice_ja": {
+          "title": "Notice Ja",
+          "type": "string"
+        },
+        "notice_en": {
+          "title": "Notice En",
+          "type": "string"
+        }
+      },
+      "required": [
+        "providers",
+        "notice_ja",
+        "notice_en"
+      ],
+      "title": "SnapshotSource",
+      "type": "object"
+    },
+    "SourceProvider": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "enum": [
+            "jma",
+            "p2pquake"
+          ],
+          "title": "Id",
+          "type": "string"
+        },
+        "name_ja": {
+          "title": "Name Ja",
+          "type": "string"
+        },
+        "name_en": {
+          "title": "Name En",
+          "type": "string"
+        },
+        "url": {
+          "title": "Url",
+          "type": "string"
+        },
+        "role": {
+          "enum": [
+            "origin",
+            "distributor"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "datasets": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Datasets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "name_ja",
+        "name_en",
+        "url",
+        "role",
+        "datasets"
+      ],
+      "title": "SourceProvider",
+      "type": "object"
+    },
+    "TsunamiArea": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "description": "津波予報区コード（気象庁）。区域名は上流に無いのでコードのみ",
+          "title": "Code",
+          "type": "string"
+        },
+        "kind_ja": {
+          "description": "上流の種別名そのまま",
+          "title": "Kind Ja",
+          "type": "string"
+        },
+        "level": {
+          "enum": [
+            "major_warning",
+            "warning",
+            "advisory",
+            "unknown"
+          ],
+          "title": "Level",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "kind_ja",
+        "level"
+      ],
+      "title": "TsunamiArea",
+      "type": "object"
+    },
+    "TsunamiDataset": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/DatasetStatus"
+        },
+        "fetched_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。前回成功から 15 分を過ぎた dataset は stale ではなく error になる",
+          "title": "Fetched At"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/TsunamiItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ok は今回の値（空配列 = 確認済みの 0 件）、stale は前回成功時の値、error は null",
+          "title": "Items"
+        }
+      },
+      "required": [
+        "status",
+        "fetched_at",
+        "items"
+      ],
+      "title": "TsunamiDataset",
+      "type": "object"
+    },
+    "TsunamiItem": {
+      "additionalProperties": false,
+      "description": "発表中の津波警報・注意報（イベントごとの最新報）。",
+      "properties": {
+        "event_id": {
+          "title": "Event Id",
+          "type": "string"
+        },
+        "report_id": {
+          "description": "list.json の ctt（報の作成時刻）",
+          "title": "Report Id",
+          "type": "string"
+        },
+        "report_datetime": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "発表時刻（上流の文字列そのまま）",
+          "title": "Report Datetime"
+        },
+        "info_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "発表 / 訂正 など（上流の ift）",
+          "title": "Info Type"
+        },
+        "warning_level": {
+          "enum": [
+            "major_warning",
+            "warning",
+            "advisory",
+            "unknown"
+          ],
+          "title": "Warning Level",
+          "type": "string"
+        },
+        "earthquake_time": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Earthquake Time"
+        },
+        "epicenter_ja": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Epicenter Ja"
+        },
+        "epicenter_en": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Epicenter En"
+        },
+        "magnitude": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "上流の文字列そのまま（『M8を超える』等がありうる）",
+          "title": "Magnitude"
+        },
+        "areas": {
+          "items": {
+            "$ref": "#/$defs/TsunamiArea"
+          },
+          "title": "Areas",
+          "type": "array"
+        }
+      },
+      "required": [
+        "event_id",
+        "report_id",
+        "report_datetime",
+        "info_type",
+        "warning_level",
+        "earthquake_time",
+        "epicenter_ja",
+        "epicenter_en",
+        "magnitude",
+        "areas"
+      ],
+      "title": "TsunamiItem",
+      "type": "object"
+    },
+    "VolcanoWarningItem": {
+      "additionalProperties": false,
+      "description": "発表中の噴火警報・予報（解除は含まない）。",
+      "properties": {
+        "volcano_code": {
+          "title": "Volcano Code",
+          "type": "string"
+        },
+        "volcano_name_ja": {
+          "title": "Volcano Name Ja",
+          "type": "string"
+        },
+        "volcano_name_en": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Volcano Name En"
+        },
+        "alert_level": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "噴火警戒レベル 1〜5。レベル制でない火山は null",
+          "title": "Alert Level"
+        },
+        "warning_name_ja": {
+          "title": "Warning Name Ja",
+          "type": "string"
+        },
+        "condition": {
+          "description": "発表 / 継続 / 切替 / 引上げ / 引下げ",
+          "title": "Condition",
+          "type": "string"
+        },
+        "severity": {
+          "description": "advisory / high / extreme",
+          "title": "Severity",
+          "type": "string"
+        },
+        "issued_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Issued At"
+        },
+        "municipalities_ja": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Municipalities Ja",
+          "type": "array"
+        },
+        "latitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "火山の位置。警戒範囲ではない",
+          "title": "Latitude"
+        },
+        "longitude": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Longitude"
+        }
+      },
+      "required": [
+        "volcano_code",
+        "volcano_name_ja",
+        "volcano_name_en",
+        "alert_level",
+        "warning_name_ja",
+        "condition",
+        "severity",
+        "issued_at",
+        "municipalities_ja",
+        "latitude",
+        "longitude"
+      ],
+      "title": "VolcanoWarningItem",
+      "type": "object"
+    },
+    "VolcanoWarningsDataset": {
+      "additionalProperties": false,
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/DatasetStatus"
+        },
+        "fetched_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "上流からの取得に最後に成功した時刻（UTC）。stale では前回成功時刻、error では null。前回成功から 15 分を過ぎた dataset は stale ではなく error になる",
+          "title": "Fetched At"
+        },
+        "items": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/VolcanoWarningItem"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "ok は今回の値（空配列 = 確認済みの 0 件）、stale は前回成功時の値、error は null",
+          "title": "Items"
+        }
+      },
+      "required": [
+        "status",
+        "fetched_at",
+        "items"
+      ],
+      "title": "VolcanoWarningsDataset",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "表示用データを 1 つにまとめたもの。気象警報（府県予報区 58 件）は含まない。",
+  "properties": {
+    "schema_version": {
+      "const": "1.0",
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "generated_at": {
+      "description": "この包みを作った時刻（UTC）。上流の発表時刻ではない",
+      "format": "date-time",
+      "title": "Generated At",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/SnapshotSource"
+    },
+    "datasets": {
+      "$ref": "#/$defs/SnapshotDatasets"
+    }
+  },
+  "required": [
+    "generated_at",
+    "source",
+    "datasets"
+  ],
+  "title": "JapanDisasterAlertSnapshot",
+  "type": "object"
+}
