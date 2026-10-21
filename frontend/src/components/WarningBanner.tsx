@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { getTranslation, getLocale } from '@/i18n/translations';
 import { formatRelativeTime } from '@/lib/relativeTime';
+import { PREFECTURES } from '@/lib/prefectures';
 import {
   normalizeSeverity,
   SEVERITY_STYLES,
@@ -28,63 +29,13 @@ interface Warning {
 }
 
 interface WarningBannerProps {
+  /** 表示する地域。後から変わったらその地域に切り替える（URL の ?pref= を反映するため） */
   areaCode?: string;
   language?: string;
   onWarningsUpdate?: (warnings: Warning[]) => void;
+  /** 利用者がセレクタで地域を変えたときに呼ぶ（URL の同期用） */
+  onAreaCodeChange?: (code: string) => void;
 }
-
-// 都道府県コードと名前のマッピング
-const PREFECTURES: { code: string; ja: string; en: string }[] = [
-  { code: '016000', ja: '北海道', en: 'Hokkaido' },
-  { code: '020000', ja: '青森県', en: 'Aomori' },
-  { code: '030000', ja: '岩手県', en: 'Iwate' },
-  { code: '040000', ja: '宮城県', en: 'Miyagi' },
-  { code: '050000', ja: '秋田県', en: 'Akita' },
-  { code: '060000', ja: '山形県', en: 'Yamagata' },
-  { code: '070000', ja: '福島県', en: 'Fukushima' },
-  { code: '080000', ja: '茨城県', en: 'Ibaraki' },
-  { code: '090000', ja: '栃木県', en: 'Tochigi' },
-  { code: '100000', ja: '群馬県', en: 'Gunma' },
-  { code: '110000', ja: '埼玉県', en: 'Saitama' },
-  { code: '120000', ja: '千葉県', en: 'Chiba' },
-  { code: '130000', ja: '東京都', en: 'Tokyo' },
-  { code: '140000', ja: '神奈川県', en: 'Kanagawa' },
-  { code: '150000', ja: '新潟県', en: 'Niigata' },
-  { code: '160000', ja: '富山県', en: 'Toyama' },
-  { code: '170000', ja: '石川県', en: 'Ishikawa' },
-  { code: '180000', ja: '福井県', en: 'Fukui' },
-  { code: '190000', ja: '山梨県', en: 'Yamanashi' },
-  { code: '200000', ja: '長野県', en: 'Nagano' },
-  { code: '210000', ja: '岐阜県', en: 'Gifu' },
-  { code: '220000', ja: '静岡県', en: 'Shizuoka' },
-  { code: '230000', ja: '愛知県', en: 'Aichi' },
-  { code: '240000', ja: '三重県', en: 'Mie' },
-  { code: '250000', ja: '滋賀県', en: 'Shiga' },
-  { code: '260000', ja: '京都府', en: 'Kyoto' },
-  { code: '270000', ja: '大阪府', en: 'Osaka' },
-  { code: '280000', ja: '兵庫県', en: 'Hyogo' },
-  { code: '290000', ja: '奈良県', en: 'Nara' },
-  { code: '300000', ja: '和歌山県', en: 'Wakayama' },
-  { code: '310000', ja: '鳥取県', en: 'Tottori' },
-  { code: '320000', ja: '島根県', en: 'Shimane' },
-  { code: '330000', ja: '岡山県', en: 'Okayama' },
-  { code: '340000', ja: '広島県', en: 'Hiroshima' },
-  { code: '350000', ja: '山口県', en: 'Yamaguchi' },
-  { code: '360000', ja: '徳島県', en: 'Tokushima' },
-  { code: '370000', ja: '香川県', en: 'Kagawa' },
-  { code: '380000', ja: '愛媛県', en: 'Ehime' },
-  { code: '390000', ja: '高知県', en: 'Kochi' },
-  { code: '400000', ja: '福岡県', en: 'Fukuoka' },
-  { code: '410000', ja: '佐賀県', en: 'Saga' },
-  { code: '420000', ja: '長崎県', en: 'Nagasaki' },
-  { code: '430000', ja: '熊本県', en: 'Kumamoto' },
-  { code: '440000', ja: '大分県', en: 'Oita' },
-  { code: '450000', ja: '宮崎県', en: 'Miyazaki' },
-  // 460000 は気象庁に存在しないコードで 404 になっていた（警報が常にゼロ件）。
-  // 鹿児島県は「奄美地方」と「それ以外」に分かれており、460100 が本土側。
-  { code: '460100', ja: '鹿児島県', en: 'Kagoshima' },
-  { code: '471000', ja: '沖縄県', en: 'Okinawa' },
-];
 
 // Translation keys mapped to centralized translations.ts
 const WARNING_KEYS = {
@@ -135,6 +86,7 @@ export default function WarningBanner({
   areaCode: initialAreaCode = '130000',
   language = 'ja',
   onWarningsUpdate,
+  onAreaCodeChange,
 }: WarningBannerProps) {
   const [warnings, setWarnings] = useState<Warning[]>([]);
   const [loading, setLoading] = useState(true);
@@ -144,6 +96,19 @@ export default function WarningBanner({
   // HIGH #10: onWarningsUpdate を ref で保持し deps から除外
   const onWarningsUpdateRef = useRef(onWarningsUpdate);
   onWarningsUpdateRef.current = onWarningsUpdate;
+  const onAreaCodeChangeRef = useRef(onAreaCodeChange);
+  onAreaCodeChangeRef.current = onAreaCodeChange;
+
+  // 親が渡す地域が変わったら追従する（依存は文字列なので参照の揺れでは再実行されない）。
+  // 親が同じ値を渡し続ける限りは何もしないので、利用者の選択は上書きされない
+  useEffect(() => {
+    setSelectedAreaCode(initialAreaCode);
+  }, [initialAreaCode]);
+
+  const handleAreaCodeChange = useCallback((code: string) => {
+    setSelectedAreaCode(code);
+    onAreaCodeChangeRef.current?.(code);
+  }, []);
 
   const t = useCallback(
     (key: keyof typeof WARNING_KEYS) =>
@@ -234,7 +199,7 @@ export default function WarningBanner({
       <div className="space-y-3">
         <PrefectureSelector
           selectedAreaCode={selectedAreaCode}
-          onAreaCodeChange={setSelectedAreaCode}
+          onAreaCodeChange={handleAreaCodeChange}
           language={language}
         />
         <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
@@ -254,7 +219,7 @@ export default function WarningBanner({
     <div className="space-y-3">
       <PrefectureSelector
         selectedAreaCode={selectedAreaCode}
-        onAreaCodeChange={setSelectedAreaCode}
+        onAreaCodeChange={handleAreaCodeChange}
         language={language}
       />
       <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{t('title')} - {prefectureName}</h3>
