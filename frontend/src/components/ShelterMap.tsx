@@ -5,6 +5,7 @@ import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-le
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { API_BASE_URL } from '@/config/api';
+import { getTranslation } from '@/i18n/translations';
 import { ShelterIcon, LocationIcon } from './icons/DisasterIcons';
 
 interface Shelter {
@@ -41,6 +42,8 @@ interface ApiShelter {
 
 interface ShelterMapProps {
   language: string;
+  /** 低電力モード: 利用者が「地図を表示」を押すまで地図タイルを読み込まない */
+  deferMap?: boolean;
 }
 
 // 避難所タイプのアイコン色
@@ -461,7 +464,11 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 }
 
-export default function ShelterMap({ language }: ShelterMapProps) {
+export default function ShelterMap({ language, deferMap = false }: ShelterMapProps) {
+  // 地図を出してよいか。低電力モードでは押されるまで出さない（タイルは数十枚の画像取得になる）。
+  // 一度出した地図は、あとから低電力モードにしても消さない（利用者の選択を優先）
+  const [mapRequested, setMapRequested] = useState(!deferMap);
+  const showMap = !deferMap || mapRequested;
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [isLocating, setIsLocating] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -640,6 +647,19 @@ export default function ShelterMap({ language }: ShelterMapProps) {
       )}
 
       {/* 地図 */}
+      {!showMap && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 text-center space-y-3">
+          <p className="text-sm text-gray-700 dark:text-gray-200">{getTranslation(language, 'lowPower.mapDeferred')}</p>
+          <button
+            type="button"
+            onClick={() => setMapRequested(true)}
+            className="px-4 py-2.5 min-h-[44px] rounded-lg border border-blue-600 text-blue-700 bg-white hover:bg-blue-50 font-medium"
+          >
+            {getTranslation(language, 'lowPower.showMap')}
+          </button>
+        </div>
+      )}
+      {showMap && (
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <MapContainer center={defaultCenter} zoom={13} className="leaflet-container" scrollWheelZoom={true}>
           {/* crossOrigin: CORS で取得する。既定（crossorigin 無し）だと Service Worker が
@@ -729,6 +749,7 @@ export default function ShelterMap({ language }: ShelterMapProps) {
           ))}
         </MapContainer>
       </div>
+      )}
 
       {/* 最寄りの避難所リスト */}
       <div className="bg-white rounded-lg shadow p-4">

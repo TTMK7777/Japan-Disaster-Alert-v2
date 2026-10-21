@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { getTranslation } from '@/i18n/translations';
+import { readStorage, writeStorage } from '@/lib/safeStorage';
 
 interface InstallBannerProps {
   language: string;
@@ -17,7 +18,7 @@ export default function InstallBanner({ language }: InstallBannerProps) {
 
   useEffect(() => {
     // Check if already dismissed within 30 days
-    const dismissed = localStorage.getItem(DISMISS_KEY);
+    const dismissed = readStorage(DISMISS_KEY);
     if (dismissed) {
       const dismissedAt = parseInt(dismissed, 10);
       if (Date.now() - dismissedAt < DISMISS_DURATION_MS) {
@@ -50,7 +51,7 @@ export default function InstallBanner({ language }: InstallBannerProps) {
   }, []);
 
   const handleDismiss = () => {
-    localStorage.setItem(DISMISS_KEY, Date.now().toString());
+    writeStorage(DISMISS_KEY, Date.now().toString());
     setShowBanner(false);
   };
 

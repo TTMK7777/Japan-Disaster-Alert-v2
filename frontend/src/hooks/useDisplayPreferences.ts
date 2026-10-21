@@ -15,6 +15,7 @@ import {
   replaceQueryParam,
 } from '@/lib/urlPreferences';
 import type { SupportedLanguage } from '@/i18n/types';
+import { readStorage, writeStorage } from '@/lib/safeStorage';
 
 export const LANGUAGE_STORAGE_KEY = 'disaster-app-lang';
 
@@ -51,7 +52,7 @@ export function useDisplayPreferences() {
     const urlLanguage = readLangParam(search);
     setLanguage(
       urlLanguage ??
-        resolveInitialLanguage(localStorage.getItem(LANGUAGE_STORAGE_KEY), getBrowserLanguages())
+        resolveInitialLanguage(readStorage(LANGUAGE_STORAGE_KEY), getBrowserLanguages())
     );
     setLanguageFromUrl(urlLanguage !== null);
     setPrefCode(readPrefParam(search));
@@ -64,7 +65,7 @@ export function useDisplayPreferences() {
     // 書き込むと、次回以降ブラウザ言語の推定が効かなくなる。
     // URL 由来の言語も保存しない（上のコメント参照）
     if (languageResolved && !languageFromUrl) {
-      localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+      writeStorage(LANGUAGE_STORAGE_KEY, language);
     }
   }, [language, languageResolved, languageFromUrl]);
 
