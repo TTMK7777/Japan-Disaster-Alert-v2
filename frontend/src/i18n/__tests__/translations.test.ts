@@ -53,6 +53,25 @@ const COMPONENT_KEYS = [
   'warning.advisory',
   'warning.selectArea',
   'tsunami.findShelter',
+  // 低電力モード・最後に取得できた時刻（components/LowPower.tsx, ShelterMap の地図遅延）
+  'lowPower.label',
+  'lowPower.on',
+  'lowPower.off',
+  'lowPower.description',
+  'lowPower.notifyNote',
+  'lowPower.delayNote',
+  'lowPower.showMap',
+  'lowPower.mapDeferred',
+  'lowPower.batterySuggest',
+  'lowPower.turnOn',
+  'lowPower.notNow',
+  'freshness.lastFetched',
+  'freshness.never',
+  'freshness.failed',
+  'freshness.failedNever',
+  'freshness.refresh',
+  'freshness.refreshing',
+  'freshness.nextUpdate',
 ];
 
 describe('translations', () => {

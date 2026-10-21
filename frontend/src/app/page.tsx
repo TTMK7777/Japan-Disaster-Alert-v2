@@ -9,15 +9,17 @@ import WarningBanner from '@/components/WarningBanner';
 import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
 import TransitLinks from '@/components/TransitLinks';
-import ConnectionStatus from '@/components/ConnectionStatus';
 import ThemeToggle from '@/components/ThemeToggle';
 import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
+import { LowPowerToggle, FreshnessStatus, BatterySuggestion } from '@/components/LowPower';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
-import { translations, errorMessages, boundaryErrorMessages, getLocale, LANGUAGES } from '@/i18n/translations';
+import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/translations';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import { useDisplayPreferences } from '@/hooks/useDisplayPreferences';
+import { useLowPowerMode } from '@/hooks/useLowPowerMode';
+import { useBatterySuggestion } from '@/hooks/useBatterySuggestion';
 
 // Error Boundary コンポーネント
 interface ErrorBoundaryState {
@@ -127,7 +129,10 @@ export default function Home() {
   // 利用者が画面で変えたら保存と URL の同期を行う（hooks/useDisplayPreferences）
   const { language, prefCode, selectLanguage, selectPref } = useDisplayPreferences();
   const [activeTab, setActiveTab] = useState<TabType>('earthquake');
-  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  // 低電力・低回線モード（端末に保存）。オンなら SSE をやめて 5 分ごとのポーリング、
+  // 地図タイルは押されるまで読まず、アニメーションを止める
+  const { lowPower, setLowPower, toggleLowPower } = useLowPowerMode();
+  const battery = useBatterySuggestion(lowPower);
   const [earthquakeView, setEarthquakeView] = useState<EarthquakeViewType>('list');
   const [mounted, setMounted] = useState(false);
   const { theme, setTheme } = useTheme();
@@ -145,6 +150,40 @@ export default function Home() {
     (key: keyof typeof errorMessages) => errorMessages[key][language] || errorMessages[key].en,
     [language]
   );
+
+  // SSEコールバック（HIGH #5: useCallbackをJSXプロパティ外に引き上げ）
+  const handleEarthquake = useCallback((data: { earthquakes: any[]; updated_at: string }) => {
+    setEarthquakes(data.earthquakes);
+    setEarthquakeLoading(false);
+    setEarthquakeError(null);
+  }, []);
+
+  // SSE で届いた津波情報を保持して EmergencyAlert に渡す。
+  // 以前はここでコメントに「EmergencyAlert が個別にハンドリング」と書いてありながら、
+  // 実際には EmergencyAlert 側に受け口が無く、**全画面の緊急警報は一度も出なかった**。
+  const [tsunamis, setTsunamis] = useState<any[]>([]);
+  // SSE から一度でも津波イベントを受け取ったか。
+  // 受け取る前に空配列を渡すと「津波なし」と断定してしまい、
+  // EmergencyAlert 側の初回取得を打ち消す
+  const [tsunamiReceived, setTsunamiReceived] = useState(false);
+
+  const handleTsunami = useCallback((data: { tsunamis: any[]; updated_at: string }) => {
+    setTsunamis(data.tsunamis ?? []);
+    setTsunamiReceived(true);
+  }, []);
+
+  // SSEイベントストリーム接続（ポーリングフォールバック内蔵）。
+  // 低電力モードでは SSE を開かず、地震と津波を 5 分ごとに取る（津波は取りこぼさない）。
+  // 「最後に取得できた時刻」と「今すぐ更新」もここが持つ
+  const eventStream = useEventStream({
+    lang: language,
+    enabled: mounted,
+    lowPower,
+    onEarthquake: handleEarthquake,
+    onTsunami: handleTsunami,
+  });
+  // 安定した関数（useCallback []）。eventStream オブジェクト自体は毎回作り直されるので依存に入れない
+  const { reportResult } = eventStream;
 
   // 地震データの取得（ポーリングフォールバック・手動リトライ用）。
   // **前回の取得を必ず中断してから始める。** 言語切替の直後などで
@@ -165,7 +204,10 @@ export default function Home() {
       );
       if (response.ok) {
         const data = await response.json();
-        if (!controller.signal.aborted) setEarthquakes(data);
+        if (!controller.signal.aborted) {
+          setEarthquakes(data);
+          reportResult(true);
+        }
       } else {
         throw new Error('Server error');
       }
@@ -173,6 +215,7 @@ export default function Home() {
       // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
       if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
       console.error('Failed to fetch earthquakes:', err);
+      reportResult(false);
       const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
       setEarthquakeError({
         message: isNetworkError ? getErrorMessage('networkError') : getErrorMessage('serverError'),
@@ -183,38 +226,7 @@ export default function Home() {
       // 後続の取得が始まっていたら loading 表示はそちらに任せる
       if (earthquakeFetchRef.current === controller) setEarthquakeLoading(false);
     }
-  }, [language, getErrorMessage]);
-
-  // SSEコールバック（HIGH #5: useCallbackをJSXプロパティ外に引き上げ）
-  const handleEarthquake = useCallback((data: { earthquakes: any[]; updated_at: string }) => {
-    setEarthquakes(data.earthquakes);
-    setEarthquakeLoading(false);
-    setEarthquakeError(null);
-    setLastUpdate(new Date(data.updated_at));
-  }, []);
-
-  // SSE で届いた津波情報を保持して EmergencyAlert に渡す。
-  // 以前はここでコメントに「EmergencyAlert が個別にハンドリング」と書いてありながら、
-  // 実際には EmergencyAlert 側に受け口が無く、**全画面の緊急警報は一度も出なかった**。
-  const [tsunamis, setTsunamis] = useState<any[]>([]);
-  // SSE から一度でも津波イベントを受け取ったか。
-  // 受け取る前に空配列を渡すと「津波なし」と断定してしまい、
-  // EmergencyAlert 側の初回取得を打ち消す
-  const [tsunamiReceived, setTsunamiReceived] = useState(false);
-
-  const handleTsunami = useCallback((data: { tsunamis: any[]; updated_at: string }) => {
-    setTsunamis(data.tsunamis ?? []);
-    setTsunamiReceived(true);
-    setLastUpdate(new Date(data.updated_at));
-  }, []);
-
-  // SSEイベントストリーム接続（ポーリングフォールバック内蔵）
-  const eventStream = useEventStream({
-    lang: language,
-    enabled: mounted,
-    onEarthquake: handleEarthquake,
-    onTsunami: handleTsunami,
-  });
+  }, [language, getErrorMessage, reportResult]);
 
   // 初回マウント時のデータ取得（SSE接続前のフォールバック）
   useEffect(() => {
@@ -250,14 +262,18 @@ export default function Home() {
   useEffect(() => {
     // クライアントサイドでのみ実行
     setMounted(true);
-    setLastUpdate(new Date());
+    // 「最終更新」を開いた時刻で埋めない。以前は何も取れていなくても
+    // 開いた瞬間の時刻が出ており、圏外でも新しい情報に見えた（取れるまでは「未取得」）
     // 既定はリスト表示のまま（useState の初期値）。以前はここで地図を強制していたが、
     // 地図タイルの取得と fitBounds が毎回走って通信と電池を食ううえ、
     // 「まず何が起きたか」を読むだけの用途では一覧の方が速い。地図は利用者が選べる
   }, []);
 
   return (
-    <main id="main-content" className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <main
+      id="main-content"
+      className={`min-h-screen bg-gray-50 dark:bg-gray-900${lowPower ? ' low-power' : ''}`}
+    >
       {/* 緊急警報オーバーレイ */}
       {/* tsunamis を渡していない間（SSE 未受信）は undefined。
           空配列を渡すと「津波なし」と断定して、EmergencyAlert 側の初回取得
@@ -286,6 +302,8 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-1.5 md:gap-3 shrink-0">
+            {/* 低電力モード。ヘッダーは全タブ共通の sticky なので、どの画面からも 1 タップで届く */}
+            <LowPowerToggle enabled={lowPower} onToggle={toggleLowPower} language={language} />
             <ThemeToggle
               theme={theme}
               onToggle={() => setTheme(theme === 'light' ? 'dark' : theme === 'dark' ? 'system' : 'light')}
@@ -325,16 +343,27 @@ export default function Home() {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto p-4">
-        {/* 接続状態 + 最終更新時刻。
+        {/* 接続状態 + 最後に取得できた時刻 + 今すぐ更新（全タブ共通）。
             以前は同じ判定のドットがヘッダー（ConnectionStatus）とここの2箇所にあり、
             画面に状態ランプが2つ並んでいた。ここ1箇所に統合している */}
-        <div className="text-sm text-gray-500 dark:text-gray-400 mb-4 flex items-center justify-end gap-2" suppressHydrationWarning>
-          <ConnectionStatus mode={eventStream.mode} connected={eventStream.connected} language={language} />
-          <span aria-hidden="true">·</span>
-          <span suppressHydrationWarning>
-            {t('lastUpdate')}: {mounted && lastUpdate ? lastUpdate.toLocaleTimeString(getLocale(language)) : '--:--:--'}
-          </span>
-        </div>
+        <FreshnessStatus
+          language={language}
+          lastSuccessAt={eventStream.lastSuccessAt}
+          lastFailed={eventStream.lastFailed}
+          refreshing={eventStream.refreshing}
+          onRefresh={eventStream.refresh}
+          lowPower={lowPower}
+          nextPollAt={eventStream.nextPollAt}
+          mode={eventStream.mode}
+          connected={eventStream.connected}
+        />
+        {battery.suggest && (
+          <BatterySuggestion
+            language={language}
+            onAccept={() => setLowPower(true)}
+            onDismiss={battery.dismiss}
+          />
+        )}
 
         {/* タブコンテンツ（アクセシビリティ強化） */}
         <ErrorBoundary language={language}>
@@ -447,7 +476,7 @@ export default function Home() {
 
           {activeTab === 'shelter' && (
             <div id="tabpanel-shelter" role="tabpanel" aria-labelledby="tab-shelter" tabIndex={0}>
-              <ShelterMap language={language} />
+              <ShelterMap language={language} deferMap={lowPower} />
             </div>
           )}
         </ErrorBoundary>
