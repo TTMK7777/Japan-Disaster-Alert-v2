@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getTranslation } from '@/i18n/translations';
 import { PREFECTURES, isPrefectureCode, prefectureDisplayName } from '@/lib/prefectures';
-import { estimatePrefectureCode } from '@/lib/geoPrefecture';
+import { estimatePrefecture } from '@/lib/prefGrid';
 
 /**
  * 「どこの情報を見ているか」を常に見せる帯と、地域の選択（B8）。
@@ -14,8 +14,9 @@ import { estimatePrefectureCode } from '@/lib/geoPrefecture';
  *
  * ## 現在地から選ぶ
  *
- * `navigator.geolocation` の座標から**端末内だけで**都道府県を推定する（lib/geoPrefecture.ts）。
- * 座標はどこにも送らない（逆ジオコーダ API を使わない・保存もしない）。推定は県境で外れうるので、
+ * `navigator.geolocation` の座標から**端末内だけで**都道府県を推定する（lib/prefGrid.ts。避難所データ由来の
+ * 格子表を同じオリジンの静的ファイルとして取り、取れなければ代表点の最近傍 lib/geoPrefecture.ts）。
+ * 座標はどこにも送らない（逆ジオコーダ API を使わない・表の取得 URL にも載せない・保存もしない）。推定は県境で外れうるので、
  * 「この地域で合っていますか」と候補を出して利用者が確定する。
  * 拒否・タイムアウト・非対応・国外は、理由を出して手動選択に戻す。
  */
@@ -83,13 +84,16 @@ export default function RegionBar({ language, prefCode, prefResolved, onSelect }
       geolocation.getCurrentPosition(
         (position) => {
           if (id !== requestRef.current) return;
-          const code = estimatePrefectureCode(position.coords.latitude, position.coords.longitude);
-          if (code) {
-            setCandidate(code);
-            setGeo('idle');
-          } else {
-            setGeo('unknown');
-          }
+          void estimatePrefecture(position.coords.latitude, position.coords.longitude).then((code) => {
+            // 表の取得を待つ間に一覧で選んだ・閉じた・アンマウントした場合は捨てる
+            if (id !== requestRef.current) return;
+            if (code) {
+              setCandidate(code);
+              setGeo('idle');
+            } else {
+              setGeo('unknown');
+            }
+          });
         },
         () => {
           if (id !== requestRef.current) return;

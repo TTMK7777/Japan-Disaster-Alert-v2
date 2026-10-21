@@ -295,14 +295,21 @@ describe('B8 の文言', () => {
     expect(translations.en['scope.jmaRelay']).not.toMatch(/not official/i);
   });
 
-  it('未訳のキー（ja/en のみ）は他言語で英語にフォールバックし、空やキー名を出さない', () => {
-    const untranslated = Object.keys(translations.en).filter(
-      (k) => k.startsWith('region.') && !translations.ko[k]
-    );
-    expect(untranslated.length).toBeGreaterThan(0);
-    for (const key of untranslated) {
-      expect(translations.ja[key], key).toBeTruthy();
-      expect(getTranslation('ko', key)).toBe(translations.en[key]);
+  it('地域の選択の 12 キーは全 16 言語が自分の訳を持つ（英語の流用ではない。easy_ja も英語にしない）', () => {
+    const keys = Object.keys(translations.ja).filter((k) => k.startsWith('region.'));
+    expect(keys.length).toBe(15); // 先行 3 キー（showing・change・officialSwitchHint）＋地域の選択 12 キー
+    for (const code of langCodes) {
+      for (const key of keys) {
+        expect(translations[code][key], `${code}.${key}`).toBeTruthy();
+        if (code !== 'en') expect(translations[code][key], `${code}.${key}`).not.toBe(translations.en[key]);
+      }
+    }
+  });
+
+  it('chooseHint の「警報・注意報」は各言語の既存の警報・注意報の訳語と揃える', () => {
+    for (const code of langCodes) {
+      const hint = translations[code]['region.chooseHint'].toLowerCase();
+      expect(hint, code).toContain(translations[code]['warning.advisory'].toLowerCase().slice(0, 4));
     }
   });
 });

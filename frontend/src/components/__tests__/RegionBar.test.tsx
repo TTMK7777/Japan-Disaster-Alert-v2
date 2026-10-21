@@ -3,6 +3,11 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import RegionBar, { GEOLOCATION_OPTIONS } from '../RegionBar';
 import SpecialWarningBand from '../SpecialWarningBand';
 import { getTranslation } from '@/i18n/translations';
+import { resetPrefGridCache, PREF_GRID_URL } from '@/lib/prefGrid';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+const GRID_JSON = JSON.parse(readFileSync(join(process.cwd(), 'public', 'data', 'pref-grid.json'), 'utf-8'));
 
 /**
  * 地域の明示（B8）。黙って東京を出さない・現在地は端末内だけで推定し利用者が確定する。
@@ -28,12 +33,16 @@ function installGeolocation() {
 
 beforeEach(() => {
   installGeolocation();
+  resetPrefGridCache();
   fetchSpy.mockReset();
+  vi.spyOn(console, 'warn').mockImplementation(() => {});
   vi.stubGlobal('fetch', fetchSpy);
 });
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  resetPrefGridCache();
   // jsdom の既定（geolocation なし）に戻す
   Object.defineProperty(navigator, 'geolocation', { configurable: true, value: undefined });
 });
@@ -83,14 +92,28 @@ describe('RegionBar — 現在地から選ぶ', () => {
     });
   });
 
-  it('座標を外へ送らない（位置取得から確定まで fetch を一度も呼ばない）', async () => {
+  it('座標を外へ送らない（取りに行くのは同じオリジンの格子表だけで、座標はどこにも載らない）', async () => {
+    fetchSpy.mockResolvedValue({ ok: true, json: async () => GRID_JSON });
     const onSelect = vi.fn();
     render(<RegionBar language="en" prefCode={null} prefResolved onSelect={onSelect} />);
     fireEvent.click(document.getElementById('region-locate') as HTMLElement);
-    geoCalls[0].success({ coords: { latitude: 35.681, longitude: 139.767 } });
-    fireEvent.click(await screen.findByText(tr('en', 'region.confirmYes')));
-    expect(onSelect).toHaveBeenCalledWith('130000');
-    expect(fetchSpy).not.toHaveBeenCalled();
+    // 愛知・豊橋の避難所（代表点の最近傍では静岡になっていた点）
+    geoCalls[0].success({ coords: { latitude: 34.74998, longitude: 137.396422 } });
+    expect(await screen.findByTestId('region-candidate')).toHaveTextContent('Aichi');
+    fireEvent.click(screen.getByText(tr('en', 'region.confirmYes')));
+    expect(onSelect).toHaveBeenCalledWith('230000');
+    expect(fetchSpy.mock.calls).toEqual([[PREF_GRID_URL]]);
+    const sent = JSON.stringify(fetchSpy.mock.calls);
+    expect(sent).not.toContain('34.7');
+    expect(sent).not.toContain('137.3');
+  });
+
+  it('格子表が取れなければ代表点で推定する（候補は出る）', async () => {
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<RegionBar language="en" prefCode={null} prefResolved onSelect={() => {}} />);
+    fireEvent.click(document.getElementById('region-locate') as HTMLElement);
+    geoCalls[0].success({ coords: { latitude: 24.34, longitude: 124.156 } });
+    expect(await screen.findByTestId('region-candidate')).toHaveTextContent('Okinawa');
   });
 
   it('「一覧から選ぶ」で候補を捨て、選ばない', async () => {
