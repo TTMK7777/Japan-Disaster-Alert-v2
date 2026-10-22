@@ -105,17 +105,17 @@ describe('SignageClient: language rotation', () => {
     expect(seen).toEqual(['en', 'zh', 'zh-TW', 'ko', 'ja', 'en']);
   });
 
-  it('shows the epicenter in the display language, falling back to English', async () => {
-    const i18n = { en: 'Off the east coast of Chiba', ko: '지바현 동방 앞바다' };
+  it('shows the epicenter in the display language, falling back to English (kanji languages: Japanese)', async () => {
+    const i18n = { en: 'Off the east coast of Chiba', 'zh-TW': '千葉縣東方近海' };
     queue(snapshotAt(T0_ISO, { earthquakes: dataset('ok', T0_ISO, [quake({ location_i18n: i18n })]) }));
-    setUrl('/signage?langs=ko,zh,ja');
+    setUrl('/signage?langs=ko,zh,zh-TW');
     await mount();
     const place = () => screen.getByTestId('signage-quake').textContent ?? '';
-    expect(place()).toContain('지바현 동방 앞바다');
-    await advance(ROTATE_INTERVAL_MS);
     expect(place()).toContain('Off the east coast of Chiba');
     await advance(ROTATE_INTERVAL_MS);
     expect(place()).toContain('千葉県東方沖');
+    await advance(ROTATE_INTERVAL_MS);
+    expect(place()).toContain('千葉縣東方近海');
   });
 
   it('uses ?langs= in the given order', async () => {

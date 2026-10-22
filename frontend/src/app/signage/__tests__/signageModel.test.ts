@@ -303,12 +303,24 @@ describe('epicenter names per language (location_i18n / epicenter_i18n)', () => 
   });
 
   it('falls back to English when the display language has no name', () => {
-    expect(quakeLocation(parseQuake({ location_i18n: I18N }), 'zh')).toBe('Off the east coast of Chiba');
+    expect(quakeLocation(parseQuake({ location_i18n: { en: 'Off the east coast of Chiba' } }), 'ko')).toBe(
+      'Off the east coast of Chiba'
+    );
   });
 
   it('falls back to the Japanese name when there is no English either', () => {
-    expect(quakeLocation(parseQuake({ location_i18n: { ko: '지바현' } }), 'zh')).toBe('千葉県東方沖');
+    expect(quakeLocation(parseQuake({ location_i18n: { 'zh-TW': '千葉縣東方近海' } }), 'ko')).toBe('千葉県東方沖');
     expect(quakeLocation(parseQuake({ location_i18n: {} }), 'en')).toBe('千葉県東方沖');
+  });
+
+  it('zh / zh-TW: own name, then the Japanese name (readable as kanji), then English', () => {
+    const item = parseQuake({ location_i18n: I18N });
+    expect(quakeLocation(item, 'zh-TW')).toBe('千葉縣東方近海');
+    expect(quakeLocation(item, 'zh')).toBe('千葉県東方沖');
+    expect(quakeLocation(item, 'ko')).toBe('지바현 동방 앞바다');
+    const noJa = parseTsunami({ epicenter_ja: null, epicenter_i18n: {} });
+    expect(tsunamiEpicenter(noJa, 'zh')).toBe('Off Sanriku');
+    expect(tsunamiEpicenter(noJa, 'zh-TW')).toBe('Off Sanriku');
   });
 
   it('shows the Japanese name in Japanese even when translations exist', () => {
@@ -335,10 +347,10 @@ describe('epicenter names per language (location_i18n / epicenter_i18n)', () => 
     expect(tsunamiEpicenter(item, 'ko')).toBe('산리쿠 앞바다');
     // 英語は気象庁が出す英語名を優先する
     expect(tsunamiEpicenter(item, 'en')).toBe('Off Sanriku');
-    expect(tsunamiEpicenter(item, 'zh')).toBe('Off Sanriku');
+    expect(tsunamiEpicenter(item, 'zh')).toBe('三陸沖'); // 漢字圏は英語より日本語名
     expect(tsunamiEpicenter(item, 'ja')).toBe('三陸沖');
     const noEn = parseTsunami({ epicenter_en: null, epicenter_i18n: { en: 'Off Sanriku (composed)' } });
-    expect(tsunamiEpicenter(noEn, 'zh')).toBe('Off Sanriku (composed)');
+    expect(tsunamiEpicenter(noEn, 'ko')).toBe('Off Sanriku (composed)');
     const nothing = parseTsunami({ epicenter_en: null });
     expect(tsunamiEpicenter(nothing, 'ko')).toBe('三陸沖');
   });

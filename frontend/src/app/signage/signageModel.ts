@@ -456,11 +456,13 @@ export function volcanoName(item: VolcanoItem, lang: SignageLanguage): string {
 
 /**
  * 震源地名を表示言語で選ぶ: 表示言語の訳 → 英語 → 日本語名。日本語表示では日本語名。
+ * 漢字圏（zh・zh-TW）は訳が無ければ英語より日本語名の方が読めるので、表示言語の訳 → 日本語名 → 英語。
  * `en` は英語名の候補（津波は気象庁の英語名を自前の訳より優先する）
  */
 function pickEpicenter(lang: SignageLanguage, ja: string | null, i18n: LocalizedNames, en: string | null): string | null {
   if (lang === 'ja') return ja ?? en;
   if (lang === 'en') return en ?? ja;
+  if (KANJI_LANGS.has(lang)) return i18n[lang] ?? ja ?? en;
   return i18n[lang] ?? en ?? ja;
 }
 
