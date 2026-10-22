@@ -424,15 +424,13 @@ describe('page.tsx — 会話タブ（B10b）', () => {
     expect(within(panel).getByTestId('conv-categories')).toHaveTextContent('긴급');
   });
 
-  it('タブ名は ja / en / easy_ja に訳があり、未訳の言語は日本語ではなく英語で出る', async () => {
-    expect(getTranslation('en', 'conversation')).not.toBe(getTranslation('ja', 'conversation'));
-    expect(getTranslation('easy_ja', 'conversation')).toBeTruthy();
+  it('タブ名は表示言語で出る（th）', async () => {
     localStorage.setItem('disaster-app-lang', 'th');
     await renderHome();
-    const label = (document.getElementById('tab-conversation') as HTMLElement).textContent ?? '';
-    const expected = getTranslation('th', 'conversation');
-    expect(label).toBe(expected);
-    expect(label).not.toBe(getTranslation('ja', 'conversation'));
+    const tab = document.getElementById('tab-conversation') as HTMLElement;
+    expect(tab.textContent).toBe(getTranslation('th', 'conversation'));
+    expect(tab.textContent).not.toBe(getTranslation('en', 'conversation'));
+    expect(tab.querySelector('[lang]')).toHaveAttribute('lang', 'th-TH');
   });
 
   it('矢印キーで 5 つのタブを巡回する（End で会話、→ で先頭に戻る）', async () => {

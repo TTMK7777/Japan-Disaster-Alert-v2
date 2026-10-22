@@ -20,7 +20,7 @@ import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
 import { LowPowerToggle, FreshnessStatus, BatterySuggestion } from '@/components/LowPower';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
-import { translations, errorMessages, boundaryErrorMessages, getTranslation, getLocale } from '@/i18n/translations';
+import { translations, errorMessages, boundaryErrorMessages, getLocale } from '@/i18n/translations';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import { useDisplayPreferences } from '@/hooks/useDisplayPreferences';
@@ -388,13 +388,12 @@ export default function Home() {
             >
               <TabIcon tab={tab} active={activeTab === tab} />
               {/* 5 タブを 320px に収めるため、長い語（Notunterkünfte 等）は語の途中でも折り返す
-                  （lang を付けてハイフネーション辞書を効かせる）。
-                  会話タブの名前は 13 言語が未訳なので、日本語ではなく英語に落とす（getTranslation） */}
+                  （lang を付けてハイフネーション辞書を効かせる） */}
               <span
                 className="text-xs md:text-sm max-w-full leading-tight [overflow-wrap:anywhere] hyphens-auto"
-                lang={translations[language]?.[tab] ? getLocale(language) : getLocale('en')}
+                lang={getLocale(language)}
               >
-                {tab === 'conversation' ? getTranslation(language, tab) : t(tab)}
+                {t(tab)}
               </span>
             </button>
           ))}

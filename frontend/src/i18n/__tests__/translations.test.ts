@@ -44,6 +44,8 @@ const REQUIRED_KEYS = [
   'emergency.embassy.name',
   'emergency.embassy.description',
   'emergency.onlineOnly',
+  // B10b: 会話タブの名前（13 言語は .team/inbox/CDX/i18n-b10b/tab-name.json）
+  'conversation',
 ];
 
 // Phase 1A: コンポーネント翻訳キー（全16言語で必須）
@@ -342,8 +344,8 @@ describe('会話タブ（B10b）', () => {
     expect(translations.ms['conversation.reviewNote']).toContain('Bahasa Inggeris');
   });
 
-  it('タブ名は ja / en / easy_ja にあり、ほかの言語は英語にフォールバックする', () => {
-    for (const code of ['ja', 'en', 'easy_ja']) expect(translations[code]?.conversation, code).toBeTruthy();
-    expect(getTranslation('th', 'conversation')).toBe(translations.en.conversation);
+  it('タブ名は 16 言語すべてにある（de は Sätze）', () => {
+    for (const { code } of LANGUAGES) expect(translations[code]?.conversation, code).toBeTruthy();
+    expect(translations.de.conversation).toBe('Sätze');
   });
 });
