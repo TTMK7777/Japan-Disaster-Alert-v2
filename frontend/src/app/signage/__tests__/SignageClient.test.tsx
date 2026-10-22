@@ -287,7 +287,7 @@ describe('SignageClient: fitting never hides an outage', () => {
     const blocks = screen.getAllByTestId('signage-unavailable');
     const text = blocks.map((b) => b.textContent ?? '').join('\n');
     expect(text).toContain(`${SIGNAGE_TEXT.en.tsunamiTitle}: ${SIGNAGE_TEXT.en.unavailable}`);
-    expect(text).toContain(`${SIGNAGE_TEXT.en.quakeTitle}: ${SIGNAGE_TEXT.en.unavailable}`);
+    expect(text).toContain(`${SIGNAGE_TEXT.en.quakeSection}: ${SIGNAGE_TEXT.en.unavailable}`);
     expect(text.split(SIGNAGE_TEXT.en.unavailableDetail).length - 1).toBe(1);
     sh.mockRestore();
     ch.mockRestore();

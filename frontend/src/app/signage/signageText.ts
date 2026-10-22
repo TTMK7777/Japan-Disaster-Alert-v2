@@ -53,6 +53,8 @@ export interface SignageStrings {
   volcanoNone: string;
   volcanoActionExtreme: string;
   quakeTitle: string;
+  /** 「取得できません」の欄の見出しに使う短い名前 */
+  quakeSection: string;
   quakeEpicenterPending: string;
   quakeMaxIntensity: string;
   quakeNone: string;
@@ -70,7 +72,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     neverReceived: 'Not received yet',
     loading: 'Loading…',
     unavailable: 'Information unavailable',
-    unavailableDetail: 'The latest information could not be received. This does not mean there is no warning.',
+    unavailableDetail: 'This does not mean there is no warning.',
     lastAvailableAt: 'Last received: {time}',
     staleNote: 'Update failed. Showing information from {time}',
     autoRotate: 'Language changes every 15 seconds',
@@ -91,6 +93,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     volcanoNone: 'No volcanic warnings in effect',
     volcanoActionExtreme: 'Follow evacuation instructions from the municipality.',
     quakeTitle: 'Latest earthquake',
+    quakeSection: 'Earthquake',
     quakeEpicenterPending: 'Epicenter under investigation',
     quakeMaxIntensity: 'Max. intensity',
     quakeNone: 'No recent earthquake data',
@@ -106,7 +109,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     neverReceived: '尚未接收',
     loading: '正在加载…',
     unavailable: '无法获取信息',
-    unavailableDetail: '无法接收最新信息。这并不表示没有警报。',
+    unavailableDetail: '这并不表示没有警报。',
     lastAvailableAt: '最后获取时间：{time}',
     staleNote: '更新失败。正在显示 {time} 的信息',
     autoRotate: '每 15 秒切换语言',
@@ -127,6 +130,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     volcanoNone: '目前没有发布火山警报',
     volcanoActionExtreme: '请遵从市町村的避难指示。',
     quakeTitle: '最新地震',
+    quakeSection: '地震',
     quakeEpicenterPending: '震源调查中',
     quakeMaxIntensity: '最大震度',
     quakeNone: '没有最近的地震数据',
@@ -142,7 +146,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     neverReceived: '尚未接收',
     loading: '載入中…',
     unavailable: '無法取得資訊',
-    unavailableDetail: '無法接收最新資訊。這並不表示沒有警報。',
+    unavailableDetail: '這並不表示沒有警報。',
     lastAvailableAt: '最後取得時間：{time}',
     staleNote: '更新失敗。正在顯示 {time} 的資訊',
     autoRotate: '每 15 秒切換語言',
@@ -163,6 +167,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     volcanoNone: '目前沒有發布火山警報',
     volcanoActionExtreme: '請遵從市町村的避難指示。',
     quakeTitle: '最新地震',
+    quakeSection: '地震',
     quakeEpicenterPending: '震源調查中',
     quakeMaxIntensity: '最大震度',
     quakeNone: '沒有最近的地震資料',
@@ -178,7 +183,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     neverReceived: '아직 수신하지 못함',
     loading: '불러오는 중…',
     unavailable: '정보를 가져올 수 없습니다',
-    unavailableDetail: '최신 정보를 받지 못했습니다. 경보가 없다는 뜻이 아닙니다.',
+    unavailableDetail: '경보가 없다는 뜻이 아닙니다.',
     lastAvailableAt: '마지막 수신 시각: {time}',
     staleNote: '업데이트 실패. {time}의 정보를 표시하고 있습니다',
     autoRotate: '15초마다 언어가 바뀝니다',
@@ -199,6 +204,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     volcanoNone: '현재 발표 중인 화산 경보는 없습니다',
     volcanoActionExtreme: '시정촌의 대피 지시에 따르세요.',
     quakeTitle: '최근 지진',
+    quakeSection: '지진',
     quakeEpicenterPending: '진원 조사 중',
     quakeMaxIntensity: '최대 진도',
     quakeNone: '최근 지진 데이터가 없습니다',
@@ -214,7 +220,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     neverReceived: 'まだ受信していません',
     loading: '読み込み中…',
     unavailable: '情報を取得できません',
-    unavailableDetail: '最新の情報を受信できていません。警報が出ていないという意味ではありません。',
+    unavailableDetail: '警報が出ていないという意味ではありません。',
     lastAvailableAt: '最後に取得できた時刻：{time}',
     staleNote: '更新に失敗しました。{time} 時点の情報を表示しています',
     autoRotate: '15 秒ごとに言語が切り替わります',
@@ -235,6 +241,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     volcanoNone: '発表中の噴火警報はありません',
     volcanoActionExtreme: '市町村の避難指示に従ってください。',
     quakeTitle: '直近の地震',
+    quakeSection: '地震',
     quakeEpicenterPending: '震源は調査中',
     quakeMaxIntensity: '最大震度',
     quakeNone: '直近の地震情報がありません',

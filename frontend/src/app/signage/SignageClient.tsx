@@ -366,7 +366,7 @@ function QuakePanel({
   if (view.kind === 'loading') return <p className="signage-status">{t.loading}</p>;
   if (view.kind === 'unavailable') {
     return (
-      <Unavailable title={t.quakeTitle} lastFetchedAt={view.lastFetchedAt} t={t} now={now} showDetail={showUnavailableDetail} />
+      <Unavailable title={t.quakeSection} lastFetchedAt={view.lastFetchedAt} t={t} now={now} showDetail={showUnavailableDetail} />
     );
   }
   const latest = view.items[0];
