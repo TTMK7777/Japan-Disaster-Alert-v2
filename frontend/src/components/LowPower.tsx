@@ -3,6 +3,7 @@
 import React from 'react';
 import { getTranslation, getLocale } from '@/i18n/translations';
 import ConnectionStatus from './ConnectionStatus';
+import { formatLastSuccess } from '@/lib/fetchFailure';
 
 /**
  * 低電力・低回線モードの操作部と「最後に取得できた時刻」の表示。
@@ -62,6 +63,8 @@ interface FreshnessStatusProps {
   language: string;
   lastSuccessAt: number | null;
   lastFailed: boolean;
+  /** SW のキャッシュ（保存済みのデータ）の保存時刻。今の成功ではない（B4b） */
+  savedAt?: number | null;
   refreshing: boolean;
   onRefresh: () => void;
   lowPower: boolean;
@@ -81,6 +84,7 @@ export function FreshnessStatus({
   language,
   lastSuccessAt,
   lastFailed,
+  savedAt = null,
   refreshing,
   onRefresh,
   lowPower,
@@ -121,6 +125,16 @@ export function FreshnessStatus({
         >
           <span aria-hidden="true">!</span>
           {lastSuccessAt === null ? t('freshness.failedNever') : t('freshness.failed')}
+        </p>
+      )}
+
+      {lastFailed && savedAt !== null && (
+        <p
+          data-testid="saved-data"
+          className="flex items-center justify-end gap-1 text-gray-800 dark:text-gray-100"
+          suppressHydrationWarning
+        >
+          {t('freshness.savedData').replace('{time}', formatLastSuccess(savedAt, language))}
         </p>
       )}
 

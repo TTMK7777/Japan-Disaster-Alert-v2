@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { API_BASE_URL } from '@/config/api';
+import { readSwCache, type SwCacheInfo } from '@/lib/fetchFailure';
 
 // HIGH #3/#4: lang パラメータのバリデーション
 const VALID_LANGS = new Set(['ja','en','zh','zh-TW','ko','vi','th','id','ms','tl','fr','de','it','es','ne','easy_ja']);
@@ -24,6 +25,13 @@ interface TsunamiEventData {
 interface HeartbeatEventData {
   time: string;
   clients: number;
+  /**
+   * backend の直近の取得の成否（B4b。未取得は null、古い backend では無い）。
+   * heartbeat は接続が生きていることしか示さないので、これが両方 true のときだけ
+   * 「最後に取得できた時刻」を進める
+   */
+  earthquake_ok?: boolean | null;
+  tsunami_ok?: boolean | null;
 }
 
 interface EventStreamOptions {
@@ -54,6 +62,11 @@ interface Freshness {
   lastSuccessAt: number | null;
   /** 直近の取得が失敗したか（成功時刻は書き換えない） */
   lastFailed: boolean;
+  /**
+   * 直近の取得で Service Worker がキャッシュから返した応答の保存時刻（ms）。
+   * 「保存済みのデータ（{time}）」の表示に使う。今の成功ではないので lastSuccessAt には入れない
+   */
+  savedAt: number | null;
 }
 
 export interface EventStreamResult extends EventStreamState, Freshness {
@@ -96,10 +109,16 @@ function canReachNetwork(): boolean {
   return true;
 }
 
-async function fetchJson(url: string, signal: AbortSignal): Promise<unknown> {
+interface FetchedJson {
+  data: unknown;
+  /** SW のキャッシュ由来か（通信できずに保存済みの応答が返った） */
+  cache: SwCacheInfo;
+}
+
+async function fetchJson(url: string, signal: AbortSignal): Promise<FetchedJson> {
   const response = await fetch(url, { signal });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  return response.json();
+  return { data: await response.json(), cache: readSwCache(response) };
 }
 
 /**
@@ -127,7 +146,11 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
     mode: 'disconnected',
     lastEvent: null,
   });
-  const [freshness, setFreshness] = useState<Freshness>({ lastSuccessAt: null, lastFailed: false });
+  const [freshness, setFreshness] = useState<Freshness>({
+    lastSuccessAt: null,
+    lastFailed: false,
+    savedAt: null,
+  });
   const [refreshing, setRefreshing] = useState(false);
   const [nextPollAt, setNextPollAt] = useState<number | null>(null);
 
@@ -180,6 +203,17 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
   // 届かないまま「最新・津波なし」に見える。取り直しが成功するまでは heartbeat を数えない
   const connectionVerifiedRef = useRef(false);
 
+  // 地震・津波それぞれの直近の取得の成否（B4b）。null は未確認。
+  // 取り直し（runSnapshot）の成功で両方 true、SSE の地震・津波イベントでそれぞれ true、
+  // heartbeat の earthquake_ok / tsunami_ok で上書きする。**両方 true のときだけ**
+  // SSE 経由で「最後に取得できた時刻」を進める（P2P だけ落ちていても heartbeat は届くため）
+  const sourceOkRef = useRef<{ earthquake: boolean | null; tsunami: boolean | null }>({
+    earthquake: null,
+    tsunami: null,
+  });
+  const bothSourcesOk = () =>
+    sourceOkRef.current.earthquake === true && sourceOkRef.current.tsunami === true;
+
   // 表示状態（mode）の最新値。refresh から参照する（依存に state を入れないため）
   const modeRef = useRef<EventStreamState['mode']>('disconnected');
 
@@ -187,13 +221,17 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
     const now = Date.now();
     lastFreshAtRef.current = now;
     lastAttemptFailedRef.current = false;
-    setFreshness({ lastSuccessAt: now, lastFailed: false });
+    setFreshness({ lastSuccessAt: now, lastFailed: false, savedAt: null });
   }, []);
 
-  const recordFailure = useCallback(() => {
+  /** 失敗を記録する。savedAt を渡すと「保存済みのデータ」の時刻も持つ（成功時刻は書き換えない） */
+  const recordFailure = useCallback((savedAt: number | null = null) => {
     lastAttemptFailedRef.current = true;
-    // 成功時刻は書き換えない
-    setFreshness((prev) => (prev.lastFailed ? prev : { ...prev, lastFailed: true }));
+    setFreshness((prev) =>
+      prev.lastFailed && (savedAt === null || prev.savedAt === savedAt)
+        ? prev
+        : { ...prev, lastFailed: true, savedAt: savedAt ?? prev.savedAt }
+    );
   }, []);
 
   const reportFailure = useCallback(() => {
@@ -236,35 +274,53 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
       if (generation !== generationRef.current) return false;
 
       const updatedAt = new Date().toISOString();
-      if (earthquakes.status === 'fulfilled') {
+      // SW がキャッシュから返した応答は「今の成功」ではない（B4b）。保存時刻だけ持ち、
+      // データは呼び出し側へ渡さない（古い [] で表示中の津波警報を消さない・古い地震一覧で上書きしない）
+      const savedTimes: number[] = [];
+      const freshData = (r: PromiseSettledResult<FetchedJson>): unknown | undefined => {
+        if (r.status !== 'fulfilled') return undefined;
+        if (!r.value.cache.fromCache) return r.value.data;
+        if (r.value.cache.cachedAt !== null) savedTimes.push(r.value.cache.cachedAt);
+        return undefined;
+      };
+
+      const earthquakeData = freshData(earthquakes);
+      const earthquakeOk = earthquakeData !== undefined;
+      if (earthquakeOk) {
         callbacksRef.current.onEarthquake?.({
-          earthquakes: earthquakes.value as any[],
+          earthquakes: earthquakeData as any[],
           updated_at: updatedAt,
         });
       } else {
-        console.error('[EventStream] 地震の取得エラー:', earthquakes.reason);
+        console.error(
+          '[EventStream] 地震の取得エラー:',
+          earthquakes.status === 'rejected' ? earthquakes.reason : 'served from cache'
+        );
       }
 
-      const tsunamiOk = tsunamis.status === 'fulfilled' && Array.isArray(tsunamis.value);
+      const tsunamiData = freshData(tsunamis);
+      const tsunamiOk = Array.isArray(tsunamiData);
       if (tsunamiOk) {
         callbacksRef.current.onTsunami?.({
-          tsunamis: tsunamis.value as any[],
+          tsunamis: tsunamiData as any[],
           updated_at: updatedAt,
         });
       } else {
         console.error(
           '[EventStream] 津波の取得エラー:',
-          tsunamis.status === 'rejected' ? tsunamis.reason : 'not an array'
+          tsunamis.status === 'rejected' ? tsunamis.reason : 'not an array or served from cache'
         );
       }
 
-      const ok = earthquakes.status === 'fulfilled' && tsunamiOk;
+      const ok = earthquakeOk && tsunamiOk;
       if (ok) {
         connectionVerifiedRef.current = true;
+        sourceOkRef.current = { earthquake: true, tsunami: true };
         recordSuccess();
         setState((prev) => ({ ...prev, lastEvent: updatedAt }));
       } else {
-        recordFailure();
+        // 保存済みが複数あれば古い方（そこまでしか確かでない）
+        recordFailure(savedTimes.length > 0 ? Math.min(...savedTimes) : null);
       }
       return ok;
     })().finally(() => {
@@ -357,6 +413,7 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
   const connect = useCallback(() => {
     // 新しい接続（またはポーリング）では、取り直しが成功するまで「最新」と扱わない
     connectionVerifiedRef.current = false;
+    sourceOkRef.current = { earthquake: null, tsunami: null };
 
     // 既存の接続をクリーンアップ
     if (eventSourceRef.current) {
@@ -416,7 +473,9 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
         try {
           const data: EarthquakeEventData = JSON.parse(event.data);
           callbacksRef.current.onEarthquake?.(data);
-          if (connectionVerifiedRef.current) recordSuccess();
+          // 地震イベント＝backend が P2P から取れた。津波も取れていれば時刻を進める
+          sourceOkRef.current.earthquake = true;
+          if (connectionVerifiedRef.current && bothSourcesOk()) recordSuccess();
           setState((prev) => ({
             ...prev,
             lastEvent: new Date().toISOString(),
@@ -431,7 +490,8 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
         try {
           const data: TsunamiEventData = JSON.parse(event.data);
           callbacksRef.current.onTsunami?.(data);
-          if (connectionVerifiedRef.current) recordSuccess();
+          sourceOkRef.current.tsunami = true;
+          if (connectionVerifiedRef.current && bothSourcesOk()) recordSuccess();
           setState((prev) => ({
             ...prev,
             lastEvent: new Date().toISOString(),
@@ -443,11 +503,19 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
 
       // ハートビートイベント。接続が生きていて、変化があれば届いている＝
       // 表示中の情報は今の時点で最新、とみなす
+      // **ただし backend が上流（P2P・気象庁）から取れていると言うときだけ**（B4b）。
+      // 取れていなければ失敗として出す
       eventSource.addEventListener('heartbeat', (event: MessageEvent) => {
         try {
           const data: HeartbeatEventData = JSON.parse(event.data);
           callbacksRef.current.onHeartbeat?.(data);
-          if (connectionVerifiedRef.current) recordSuccess();
+          if (typeof data.earthquake_ok === 'boolean') sourceOkRef.current.earthquake = data.earthquake_ok;
+          if (typeof data.tsunami_ok === 'boolean') sourceOkRef.current.tsunami = data.tsunami_ok;
+          if (data.earthquake_ok === false || data.tsunami_ok === false) {
+            recordFailure();
+          } else if (connectionVerifiedRef.current && bothSourcesOk()) {
+            recordSuccess();
+          }
           setState((prev) => ({
             ...prev,
             lastEvent: new Date().toISOString(),
@@ -504,7 +572,7 @@ export function useEventStream(options: EventStreamOptions): EventStreamResult {
       console.error('[EventStream] SSE接続の初期化に失敗:', err);
       startPolling();
     }
-  }, [lang, lowPower, lowPowerInterval, startPolling, stopPolling, recordSuccess, runSnapshot]);
+  }, [lang, lowPower, lowPowerInterval, startPolling, stopPolling, recordSuccess, recordFailure, runSnapshot]);
 
   // HIGH #1: connectRef を最新の connect に同期
   connectRef.current = connect;

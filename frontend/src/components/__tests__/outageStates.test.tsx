@@ -276,3 +276,45 @@ describe('ShelterMap — 取得失敗を「見つかりませんでした」に�
     expect(screen.getByTestId('shelter-fetch-failure').getAttribute('data-reason')).toBe('timeout');
   });
 });
+
+// ------------------------------------------------------------------ SW のキャッシュ応答（B4b）
+
+describe('Service Worker のキャッシュ応答を「今取れた」にしない（B4b）', () => {
+  const CACHED = { 'X-SW-Cache': '1', 'X-SW-Cached-At': '2026-10-21T00:00:00.000Z' };
+
+  it('警報: キャッシュの [] で緑の「警報なし」を出さず失敗の枠を出す', async () => {
+    route = () => ({ ok: true, body: [], headers: CACHED });
+    const { container } = render(<WarningBanner areaCode="130000" language="ja" />);
+    await screen.findByTestId('warning-fetch-failure');
+    expect(container.textContent).not.toContain(ja('warning.noWarnings'));
+  });
+
+  it('噴火警報: キャッシュの [] は失敗の枠を出す', async () => {
+    route = () => ({ ok: true, body: [], headers: CACHED });
+    render(<VolcanoWarnings language="en" />);
+    await screen.findByTestId('volcano-fetch-failure');
+  });
+});
+
+describe('FreshnessStatus — 保存済みのデータ（B4b）', () => {
+  it('SW のキャッシュしか取れなかったら「保存済みのデータ（時刻）」を出し、最後に取得は進めない', async () => {
+    const { FreshnessStatus } = await import('../LowPower');
+    const savedAt = Date.parse('2026-10-21T00:00:00.000Z');
+    render(
+      <FreshnessStatus
+        language="ja"
+        lastSuccessAt={null}
+        lastFailed
+        savedAt={savedAt}
+        refreshing={false}
+        onRefresh={() => {}}
+        lowPower={false}
+        nextPollAt={null}
+        mode="sse"
+        connected
+      />
+    );
+    expect(screen.getByTestId('saved-data').textContent).toContain(ja('freshness.savedData').split('（')[0]);
+    expect(screen.getByTestId('last-success').textContent).toContain(ja('freshness.never'));
+  });
+});

@@ -29,6 +29,12 @@ class EventManager:
         # 差分検出用の最終データ
         self._last_earthquake_ids: set[str] = set()
         self._last_tsunami_ids: set[str] = set()
+        # 直近の取得の成否（None = まだ取得していない）。heartbeat に載せる。
+        # **接続が生きていることと、上流の情報が新しいことは別。** P2P だけ落ちていても
+        # heartbeat は届くので、フロントが heartbeat だけで「最新」と表示すると古い地震一覧が
+        # 新しく見える（B4b）。フロントはこの成否が両方 True のときだけ最終取得時刻を進める
+        self._earthquake_ok: Optional[bool] = None
+        self._tsunami_ok: Optional[bool] = None
 
     async def connect(self) -> asyncio.Queue:
         """新しいSSEクライアントを登録
@@ -110,10 +116,7 @@ class EventManager:
                 if heartbeat_counter >= self.HEARTBEAT_INTERVAL:
                     heartbeat_counter = 0
                     if self._clients:
-                        await self.broadcast("heartbeat", {
-                            "time": datetime.now().isoformat(),
-                            "clients": len(self._clients),
-                        })
+                        await self.broadcast("heartbeat", self._heartbeat_payload())
 
                 await asyncio.sleep(self.POLL_INTERVAL)
             except asyncio.CancelledError:
@@ -121,6 +124,15 @@ class EventManager:
             except Exception as e:
                 logger.error(f"SSE監視ループエラー: {e}", exc_info=True)
                 await asyncio.sleep(self.POLL_INTERVAL)
+
+    def _heartbeat_payload(self) -> dict:
+        """heartbeat の中身。`earthquake_ok` / `tsunami_ok` は直近の取得の成否（未取得は None）"""
+        return {
+            "time": datetime.now().isoformat(),
+            "clients": len(self._clients),
+            "earthquake_ok": self._earthquake_ok,
+            "tsunami_ok": self._tsunami_ok,
+        }
 
     async def _check_earthquakes(self) -> None:
         """地震情報の更新をチェック
@@ -130,6 +142,7 @@ class EventManager:
         """
         try:
             earthquakes = await self._p2p_service.fetch_recent_earthquakes(limit=10)
+            self._earthquake_ok = True
             current_ids = {eq.id for eq in earthquakes}
 
             if current_ids != self._last_earthquake_ids:
@@ -142,6 +155,7 @@ class EventManager:
                 })
                 logger.debug(f"地震情報更新配信: {len(earthquakes)}件")
         except Exception as e:
+            self._earthquake_ok = False
             logger.error(f"地震情報チェックエラー: {e}")
 
     async def _check_tsunamis(self) -> None:
@@ -152,6 +166,7 @@ class EventManager:
         """
         try:
             active = await self._tsunami_service.fetch_active_warnings()
+            self._tsunami_ok = True
             current_ids = {t.id for t in active}
 
             if current_ids != self._last_tsunami_ids:
@@ -164,6 +179,7 @@ class EventManager:
                 })
                 logger.debug(f"津波情報更新配信: {len(active)}件")
         except Exception as e:
+            self._tsunami_ok = False
             logger.error(f"津波情報チェックエラー: {e}")
 
     async def generate_stream(self, queue: asyncio.Queue) -> AsyncGenerator[str, None]:
