@@ -18,20 +18,37 @@ const API_URL = 'http://localhost:8000/api/v1/earthquakes?lang=ja&limit=20';
 
 type Handler = (event: unknown) => void;
 
-function createCaches() {
+function createCaches(network: (req: Request | string) => Promise<Response> = async () => new Response('')) {
   const stores = new Map<string, Map<string, Response>>();
+  // 相対 URL（'/' 等）は SW のオリジンで絶対 URL にそろえる（本物の Cache Storage と同じ）
+  const keyOf = (req: Request | string) => new URL(typeof req === 'string' ? req : req.url, 'http://localhost:3000').href;
   const open = async (name: string) => {
     if (!stores.has(name)) stores.set(name, new Map());
     const store = stores.get(name)!;
     return {
       put: async (req: Request | string, res: Response) => {
-        store.set(typeof req === 'string' ? req : req.url, res);
+        store.set(keyOf(req), res);
       },
       match: async (req: Request | string) => {
-        const hit = store.get(typeof req === 'string' ? req : req.url);
+        const hit = store.get(keyOf(req));
         return hit ? hit.clone() : undefined;
       },
-      addAll: async () => {},
+      // 本物と同じく 1 件でも失敗（通信失敗・!ok）したら全体が reject する
+      add: async (req: Request | string) => {
+        const res = await network(req);
+        if (!res.ok) throw new TypeError(`add failed: ${keyOf(req)} ${res.status}`);
+        store.set(keyOf(req), res);
+      },
+      addAll: async (reqs: (Request | string)[]) => {
+        const results = await Promise.all(
+          reqs.map(async (req) => {
+            const res = await network(req);
+            if (!res.ok) throw new TypeError(`addAll failed: ${keyOf(req)} ${res.status}`);
+            return [keyOf(req), res] as const;
+          })
+        );
+        for (const [k, res] of results) store.set(k, res);
+      },
       keys: async () => [],
       delete: async () => true,
     };
@@ -51,7 +68,7 @@ function createCaches() {
   };
 }
 
-function loadSw(network: () => Promise<Response>) {
+function loadSw(network: (req: Request | string) => Promise<Response>) {
   const handlers = new Map<string, Handler>();
   const self = {
     addEventListener: (type: string, fn: Handler) => handlers.set(type, fn),
@@ -59,7 +76,7 @@ function loadSw(network: () => Promise<Response>) {
     registration: {},
     clients: { claim: () => {} },
   };
-  const caches = createCaches();
+  const caches = createCaches(network);
   const quiet = { log: () => {}, warn: () => {}, error: () => {} };
   // eslint-disable-next-line @typescript-eslint/no-implied-eval
   new Function('self', 'caches', 'fetch', 'clients', 'console', SW_SOURCE)(
@@ -83,7 +100,17 @@ function loadSw(network: () => Promise<Response>) {
     await new Promise((r) => setTimeout(r, 0));
     return res;
   };
-  return { dispatchFetch, caches };
+  /** install を発火し、waitUntil に渡された処理の完了（または失敗）を返す */
+  const dispatchInstall = async (): Promise<void> => {
+    let waited: Promise<unknown> | null = null;
+    handlers.get('install')!({
+      waitUntil: (p: Promise<unknown>) => {
+        waited = p;
+      },
+    });
+    await waited;
+  };
+  return { dispatchFetch, dispatchInstall, caches };
 }
 
 let online = true;
@@ -146,5 +173,88 @@ describe('sw.js — API のキャッシュ応答に印を付ける', () => {
     const match = SW_SOURCE.match(/const CACHE_NAME = 'disaster-alert-v(\d+)'/);
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe('sw.js — 会話タブをオフラインで開くためのプリキャッシュ（B10b）', () => {
+  const ORIGIN = 'http://localhost:3000';
+  // 本番の / の HTML の形（script タグと、RSC の flight データ内の "static/chunks/..." の両方）
+  const HOME_HTML = [
+    '<!DOCTYPE html><html><head>',
+    '<link rel="stylesheet" href="/_next/static/css/app-layout.css" data-precedence="next"/>',
+    '<script src="/_next/static/chunks/webpack-abc.js" async=""></script>',
+    '<script src="/_next/static/chunks/app/page-def.js" async=""></script>',
+    '<script src="https://cdn.example.com/_next/static/chunks/evil.js"></script>',
+    '</head><body>',
+    '<script>self.__next_f.push([1,"2:I[\\"123\\",[\\"static/chunks/123-ghi.js\\",\\"static/chunks/app/page-def.js\\"],\\"default\\"]"])</script>',
+    '</body></html>',
+  ].join('');
+
+  function siteNetwork(fail: Set<string> = new Set()) {
+    const requested: string[] = [];
+    const net = async (req: Request | string) => {
+      const raw = typeof req === 'string' ? req : req.url;
+      const url = new URL(raw, ORIGIN);
+      requested.push(url.href);
+      if (url.origin !== ORIGIN) throw new TypeError('cross-origin fetch in test');
+      if (fail.has(url.pathname)) return new Response('nf', { status: 404 });
+      if (url.pathname === '/') return new Response(HOME_HTML, { status: 200, headers: { 'Content-Type': 'text/html' } });
+      return new Response(`/* ${url.pathname} */`, { status: 200 });
+    };
+    return { net, requested };
+  }
+
+  const cachedPaths = (caches: ReturnType<typeof createCaches>, name: string) =>
+    [...(caches.stores.get(name)?.keys() ?? [])].map((k) => new URL(k, ORIGIN).pathname);
+
+  it('install で / が読み込む JS / CSS（会話カードの文とタブの部品を含む）をキャッシュする', async () => {
+    const { net } = siteNetwork();
+    const { dispatchInstall, caches } = loadSw(net);
+    await dispatchInstall();
+    const name = SW_SOURCE.match(/const CACHE_NAME = '([^']+)'/)![1];
+    const paths = cachedPaths(caches, name);
+    expect(paths).toEqual(expect.arrayContaining(['/', '/offline.html', '/manifest.json']));
+    expect(paths).toEqual(
+      expect.arrayContaining([
+        '/_next/static/css/app-layout.css',
+        '/_next/static/chunks/webpack-abc.js',
+        '/_next/static/chunks/app/page-def.js',
+        '/_next/static/chunks/123-ghi.js',
+      ])
+    );
+    // 別オリジンの URL は拾わない（同じパスを自オリジンに付け替えて取りにも行かない）
+    expect(paths).not.toContain('/_next/static/chunks/evil.js');
+  });
+
+  it('資源の 1 件が 404 でも install は失敗しない（残りはキャッシュする）', async () => {
+    const { net } = siteNetwork(new Set(['/_next/static/chunks/123-ghi.js']));
+    const { dispatchInstall, caches } = loadSw(net);
+    await expect(dispatchInstall()).resolves.toBeUndefined();
+    const name = SW_SOURCE.match(/const CACHE_NAME = '([^']+)'/)![1];
+    const paths = cachedPaths(caches, name);
+    expect(paths).toContain('/_next/static/chunks/app/page-def.js');
+    expect(paths).not.toContain('/_next/static/chunks/123-ghi.js');
+  });
+
+  it('キャッシュ名を v8 以上に上げてある（既存の利用者にも install を走らせる）', () => {
+    const match = SW_SOURCE.match(/const CACHE_NAME = 'disaster-alert-v(\d+)'/);
+    expect(Number(match![1])).toBeGreaterThanOrEqual(8);
+  });
+
+  it('オフラインで / を開くと、プリキャッシュ済みの HTML と JS がネットワーク無しで返る', async () => {
+    let offline = false;
+    const { net } = siteNetwork();
+    const gated = async (req: Request | string) => {
+      if (offline) throw new TypeError('Failed to fetch');
+      return net(req);
+    };
+    const { dispatchInstall, dispatchFetch } = loadSw(gated);
+    await dispatchInstall();
+    offline = true;
+    const html = await dispatchFetch(`${ORIGIN}/`);
+    expect(html.status).toBe(200);
+    expect(await html.text()).toContain('page-def.js');
+    const js = await dispatchFetch(`${ORIGIN}/_next/static/chunks/app/page-def.js`);
+    expect(js.status).toBe(200);
   });
 });

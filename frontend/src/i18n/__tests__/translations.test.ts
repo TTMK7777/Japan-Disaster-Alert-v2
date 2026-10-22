@@ -332,3 +332,18 @@ describe('B8 の文言', () => {
     }
   });
 });
+
+describe('会話タブ（B10b）', () => {
+  it('「翻訳は確認中」の注記が全 16 言語にあり、id / ms は「Bahasa Inggris / Inggeris」', () => {
+    for (const { code } of LANGUAGES) {
+      expect(translations[code]?.['conversation.reviewNote'], code).toBeTruthy();
+    }
+    expect(translations.id['conversation.reviewNote']).toContain('Bahasa Inggris');
+    expect(translations.ms['conversation.reviewNote']).toContain('Bahasa Inggeris');
+  });
+
+  it('タブ名は ja / en / easy_ja にあり、ほかの言語は英語にフォールバックする', () => {
+    for (const code of ['ja', 'en', 'easy_ja']) expect(translations[code]?.conversation, code).toBeTruthy();
+    expect(getTranslation('th', 'conversation')).toBe(translations.en.conversation);
+  });
+});

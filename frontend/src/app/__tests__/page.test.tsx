@@ -243,7 +243,7 @@ describe('page.tsx — 低電力モード', () => {
     vi.useFakeTimers();
     await renderHome();
     await flush();
-    for (const tab of ['earthquake', 'warning', 'emergency', 'shelter']) {
+    for (const tab of ['earthquake', 'warning', 'emergency', 'shelter', 'conversation']) {
       fireEvent.click(document.getElementById(`tab-${tab}`) as HTMLElement);
       await flush();
       expect(document.getElementById('low-power-toggle')).not.toBeNull();
@@ -259,7 +259,7 @@ describe('page.tsx — 「このアプリが扱う範囲」の帯', () => {
   it('どのタブでも、タブの中身より前（フッターではない位置）に出る', async () => {
     localStorage.setItem('disaster-app-lang', 'ja');
     await renderHome();
-    for (const tab of ['earthquake', 'warning', 'emergency', 'shelter']) {
+    for (const tab of ['earthquake', 'warning', 'emergency', 'shelter', 'conversation']) {
       fireEvent.click(document.getElementById(`tab-${tab}`) as HTMLElement);
       const band = await screen.findByTestId('scope-notice');
       expect(band).toHaveTextContent(getTranslation('ja', 'scope.notCovered'));
@@ -383,5 +383,86 @@ describe('page.tsx — 特別警報の帯（B8）', () => {
     await act(async () => {});
     expect(screen.queryByTestId('special-warning-band')).toBeNull();
     expect(countOf('/api/v1/alerts')).toBe(0);
+  });
+});
+
+describe('page.tsx — 会話タブ（B10b）', () => {
+  const ALL_TABS = ['earthquake', 'warning', 'emergency', 'shelter', 'conversation'];
+
+  it('5 つ目のタブ「会話」があり、開くと会話カードと「翻訳は確認中」の注記が出る', async () => {
+    localStorage.setItem('disaster-app-lang', 'ja');
+    await renderHome();
+    const tabs = screen.getAllByRole('tab');
+    expect(tabs.map((t) => t.id)).toEqual(ALL_TABS.map((t) => `tab-${t}`));
+    const tab = document.getElementById('tab-conversation') as HTMLElement;
+    expect(tab).toHaveTextContent(getTranslation('ja', 'conversation'));
+    fireEvent.click(tab);
+    expect(tab).toHaveAttribute('aria-selected', 'true');
+    const panel = document.getElementById('tabpanel-conversation') as HTMLElement;
+    expect(panel).not.toBeNull();
+    expect(panel).toHaveAttribute('aria-labelledby', 'tab-conversation');
+    expect(within(panel).getByTestId('conv-mode-visitor')).toBeInTheDocument();
+    const note = within(panel).getByTestId('conv-review-note');
+    expect(note).toHaveTextContent(getTranslation('ja', 'conversation.reviewNote'));
+    // 注記はカードの操作より前（タブの上部）
+    expect(
+      note.compareDocumentPosition(within(panel).getByTestId('conv-mode-visitor')) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('表示言語の切り替えに会話カードが追従する（ko）', async () => {
+    localStorage.setItem('disaster-app-lang', 'ja');
+    await renderHome();
+    fireEvent.click(document.getElementById('tab-conversation') as HTMLElement);
+    fireEvent.change(screen.getAllByRole('combobox')[0], { target: { value: 'ko' } });
+    const panel = document.getElementById('tabpanel-conversation') as HTMLElement;
+    await waitFor(() =>
+      expect(within(panel).getByTestId('conv-review-note')).toHaveTextContent(
+        getTranslation('ko', 'conversation.reviewNote')
+      )
+    );
+    expect(within(panel).getByTestId('conv-categories')).toHaveTextContent('긴급');
+  });
+
+  it('タブ名は ja / en / easy_ja に訳があり、未訳の言語は日本語ではなく英語で出る', async () => {
+    expect(getTranslation('en', 'conversation')).not.toBe(getTranslation('ja', 'conversation'));
+    expect(getTranslation('easy_ja', 'conversation')).toBeTruthy();
+    localStorage.setItem('disaster-app-lang', 'th');
+    await renderHome();
+    const label = (document.getElementById('tab-conversation') as HTMLElement).textContent ?? '';
+    const expected = getTranslation('th', 'conversation');
+    expect(label).toBe(expected);
+    expect(label).not.toBe(getTranslation('ja', 'conversation'));
+  });
+
+  it('矢印キーで 5 つのタブを巡回する（End で会話、→ で先頭に戻る）', async () => {
+    await renderHome();
+    const first = document.getElementById('tab-earthquake') as HTMLElement;
+    fireEvent.keyDown(first, { key: 'End' });
+    expect(document.getElementById('tab-conversation')).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(document.getElementById('tab-conversation') as HTMLElement, { key: 'ArrowRight' });
+    expect(first).toHaveAttribute('aria-selected', 'true');
+    fireEvent.keyDown(first, { key: 'ArrowLeft' });
+    expect(document.getElementById('tab-conversation')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  it('低電力モードで会話タブを開いても読み上げは始まらない（押したときだけ）', async () => {
+    localStorage.setItem(LOW_POWER_STORAGE_KEY, '1');
+    const speak = vi.fn();
+    Object.defineProperty(window, 'speechSynthesis', {
+      value: { getVoices: () => [], speak, cancel: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() },
+      configurable: true,
+      writable: true,
+    });
+    try {
+      await renderHome();
+      fireEvent.click(document.getElementById('tab-conversation') as HTMLElement);
+      await act(async () => {});
+      expect(document.querySelector('main')).toHaveClass('low-power');
+      expect(document.getElementById('tabpanel-conversation')).not.toBeNull();
+      expect(speak).not.toHaveBeenCalled();
+    } finally {
+      delete (window as unknown as Record<string, unknown>).speechSynthesis;
+    }
   });
 });
