@@ -213,6 +213,24 @@ export function applyFetchResult(memory: SnapshotMemory, result: FetchResult, no
   return { snapshot: incoming, receivedAt: now, lastAttemptOk: true, lastKnownFetchedAt };
 }
 
+/**
+ * snapshot を 1 回取る。失敗（通信・HTTP ステータス・JSON・形の不一致）はすべて { ok: false }。
+ *
+ * `cache: 'no-cache'` でブラウザに ETag の再検証（If-None-Match）をさせる。自前で
+ * If-None-Match を付けると CORS のプリフライトが要るヘッダーになり、バックエンドの
+ * allow_headers に無いので失敗する。
+ */
+export async function fetchSnapshot(url: string, signal: AbortSignal): Promise<FetchResult> {
+  try {
+    const response = await fetch(url, { cache: 'no-cache', signal });
+    if (!response.ok) return { ok: false };
+    const snapshot = parseSnapshot(await response.json());
+    return snapshot ? { ok: true, snapshot } : { ok: false };
+  } catch {
+    return { ok: false };
+  }
+}
+
 export type DatasetView<T> =
   | { kind: 'loading' }
   | { kind: 'unavailable'; lastFetchedAt: number | null }
