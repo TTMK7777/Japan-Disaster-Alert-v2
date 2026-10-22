@@ -231,6 +231,18 @@ export async function fetchSnapshot(url: string, signal: AbortSignal): Promise<F
   }
 }
 
+/**
+ * 画面に出す「最終受信」。dataset のいずれかを最後に取得できた時刻（包みの generated_at ではない。
+ * 中身が全部 error でも包みは毎分届くので、generated_at を出すと新しく見えてしまう）
+ */
+export function lastReceivedAt(memory: SnapshotMemory): number | null {
+  const times = DATASET_NAMES.flatMap((name) => {
+    const t = memory.lastKnownFetchedAt[name];
+    return t === null ? [] : [t];
+  });
+  return times.length > 0 ? Math.max(...times) : null;
+}
+
 export type DatasetView<T> =
   | { kind: 'loading' }
   | { kind: 'unavailable'; lastFetchedAt: number | null }

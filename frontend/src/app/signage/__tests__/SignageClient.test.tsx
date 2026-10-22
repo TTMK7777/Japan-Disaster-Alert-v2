@@ -148,6 +148,8 @@ describe('SignageClient: outages never read as "no warning"', () => {
     expect(screen.getAllByTestId('signage-unavailable').length).toBeGreaterThanOrEqual(2);
     expect(text).toContain(SIGNAGE_TEXT.en.unavailable);
     for (const none of allNoneTexts) expect(text).not.toContain(none);
+    // 包み（generated_at）は届いていても、中身を 1 つも取得できていないので「最終受信」に時刻を出さない
+    expect(screen.getByTestId('signage-last-received').textContent).toContain(SIGNAGE_TEXT.en.neverReceived);
   });
 
   it('shows "unavailable" when the very first fetch fails', async () => {

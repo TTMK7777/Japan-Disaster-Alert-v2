@@ -19,6 +19,7 @@ import {
   fetchSnapshot,
   formatIntensity,
   formatJst,
+  lastReceivedAt,
   limitBands,
   otherVolcanoes,
   parseLangsParam,
@@ -126,7 +127,7 @@ export default function SignageClient() {
   const staleTimes = [quakes, tsunamiView, volcanoView].flatMap((v) => (v.kind === 'stale' ? [v.fetchedAt] : []));
   const staleSince = staleTimes.length > 0 ? Math.min(...staleTimes) : null;
   const region = regionName(setup.pref, lang);
-  const lastReceived = memory.snapshot?.generatedAt ?? null;
+  const lastReceived = lastReceivedAt(memory);
   const shift = burnInOffset(rotation);
 
   return (
