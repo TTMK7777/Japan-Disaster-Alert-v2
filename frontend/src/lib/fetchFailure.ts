@@ -86,3 +86,26 @@ export function parseFailedAreas(response: HeaderSource): string[] {
     })
     .filter(Boolean);
 }
+
+/**
+ * Service Worker が通信失敗時にキャッシュから返した応答に付ける印（public/sw.js と同じ名前）。
+ * この応答は「今取れた」ものではない。`X-SW-Cached-At` はキャッシュに保存した時刻（ISO 8601）
+ */
+export const SW_CACHE_HEADER = 'X-SW-Cache';
+export const SW_CACHED_AT_HEADER = 'X-SW-Cached-At';
+
+export interface SwCacheInfo {
+  /** SW がキャッシュから返した応答か */
+  fromCache: boolean;
+  /** 保存した時刻（ms）。印が無い・読めなければ null */
+  cachedAt: number | null;
+}
+
+/** 応答が SW のキャッシュ由来かを読む。ヘッダが読めない応答（テストの簡易モック等）は通常の応答とみなす */
+export function readSwCache(response: HeaderSource): SwCacheInfo {
+  const headers = response.headers;
+  if (!headers || typeof headers.get !== 'function') return { fromCache: false, cachedAt: null };
+  if (headers.get(SW_CACHE_HEADER) !== '1') return { fromCache: false, cachedAt: null };
+  const parsed = Date.parse(headers.get(SW_CACHED_AT_HEADER) ?? '');
+  return { fromCache: true, cachedAt: Number.isNaN(parsed) ? null : parsed };
+}
