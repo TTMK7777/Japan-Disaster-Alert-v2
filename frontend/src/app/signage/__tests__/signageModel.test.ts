@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest';
 import {
   DEFAULT_SIGNAGE_LANGS,
   INITIAL_MEMORY,
+  MAX_DENSITY,
   STALE_LIMIT_MS,
   applyFetchResult,
   buildAlertBands,
   datasetView,
+  densityFlags,
   formatIntensity,
   formatJst,
+  limitBands,
   otherVolcanoes,
   parseLangsParam,
   parseSnapshot,
@@ -237,5 +240,44 @@ describe('quake items', () => {
   it('parses earthquake fields', () => {
     const snap = parseSnapshot(snapshotAt(T0_ISO, { earthquakes: dataset('ok', T0_ISO, [quake({ magnitude: null })]) }))!;
     expect(snap.datasets.earthquakes.items![0]).toMatchObject({ magnitude: null, maxIntensity: '5弱', locationJa: '千葉県東方沖' });
+  });
+});
+
+describe('densityFlags (fitting without shrinking text)', () => {
+  it('shows everything at level 0 with few bands', () => {
+    expect(densityFlags(0, 2)).toEqual({
+      hideSecondary: false,
+      hideDetail: false,
+      maxBands: 3,
+      actionOnlyFirst: false,
+      hideQuake: false,
+      hideHeading: false,
+    });
+  });
+
+  it('drops the second language from the start when 3 or more bands are shown', () => {
+    expect(densityFlags(0, 3).hideSecondary).toBe(true);
+  });
+
+  it('removes less critical parts one level at a time, ending with the heading', () => {
+    const at = (level: number) => densityFlags(level, 1);
+    expect(at(1).hideSecondary).toBe(true);
+    expect(at(1).hideDetail).toBe(false);
+    expect(at(2).hideDetail).toBe(true);
+    expect(at(3).maxBands).toBe(0);
+    expect(at(4).actionOnlyFirst).toBe(true);
+    expect(at(4).hideQuake).toBe(false);
+    expect(at(5).hideQuake).toBe(true);
+    expect(at(5).hideHeading).toBe(false);
+    expect(at(MAX_DENSITY).hideHeading).toBe(true);
+  });
+
+  it('never hides pinned bands even when no other bands are allowed', () => {
+    const snap = parseSnapshot(
+      snapshotAt(T0_ISO, { tsunami: dataset('ok', T0_ISO, [tsunami('advisory'), tsunami('major_warning'), tsunami('warning')]) })
+    )!;
+    const { shown, hiddenCount } = limitBands(buildAlertBands(snap.datasets.tsunami.items!, []), 0);
+    expect(shown.map((b) => b.tone)).toEqual(['special', 'warning']);
+    expect(hiddenCount).toBe(1);
   });
 });

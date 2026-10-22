@@ -331,12 +331,53 @@ export function otherVolcanoes(volcanoItems: readonly VolcanoItem[]): VolcanoIte
   return volcanoItems.filter((item) => item.severity !== 'extreme');
 }
 
-/** 固定の帯は全部、それ以外は MAX_ALERT_BANDS まで。残りは件数だけ返す */
-export function limitBands(bands: readonly AlertBand[]): { shown: AlertBand[]; hiddenCount: number } {
+/** 固定の帯は全部、それ以外は合計 maxBands 本まで。残りは件数だけ返す */
+export function limitBands(
+  bands: readonly AlertBand[],
+  maxBands: number = MAX_ALERT_BANDS
+): { shown: AlertBand[]; hiddenCount: number } {
   const pinned = bands.filter((b) => b.pinned);
   const rest = bands.filter((b) => !b.pinned);
-  const room = Math.max(0, MAX_ALERT_BANDS - pinned.length);
+  const room = Math.max(0, maxBands - pinned.length);
   return { shown: [...pinned, ...rest.slice(0, room)], hiddenCount: Math.max(0, rest.length - room) };
+}
+
+// ---------------------------------------------------------------------------
+// 画面に収まらないときの詰め方
+// ---------------------------------------------------------------------------
+
+/** この本数以上の帯が出るときは、はじめから 2 段目の言語を省く */
+export const DENSE_BAND_COUNT = 3;
+/** 詰め方の段階の上限（段階ごとの中身は densityFlags） */
+export const MAX_DENSITY = 6;
+
+export interface DensityFlags {
+  /** 帯の 2 段目の言語を出さない */
+  hideSecondary: boolean;
+  /** 警報の帯の補足（区域数・震源・時刻）を出さない。「取得できません」の時刻は消さない */
+  hideDetail: boolean;
+  /** limitBands に渡す本数（固定の帯はこれを超えても全部出る） */
+  maxBands: number;
+  /** 行動の呼びかけを最初の帯だけに出す（津波の帯どうしは同じ文） */
+  actionOnlyFirst: boolean;
+  hideQuake: boolean;
+  hideHeading: boolean;
+}
+
+/**
+ * 文字を小さくせずに収めるための段階。画面ではみ出しを測り、収まるまで 1 段ずつ上げる。
+ * 省く順は「なくても判断を誤らないもの」から。警報の帯の見出し・取得できない旨・
+ * 気象警報を扱わない旨・出典は最後まで消さない。
+ */
+export function densityFlags(level: number, bandCount: number): DensityFlags {
+  return {
+    hideSecondary: level >= 1 || bandCount >= DENSE_BAND_COUNT,
+    hideDetail: level >= 2,
+    maxBands: level >= 3 ? 0 : MAX_ALERT_BANDS,
+    actionOnlyFirst: level >= 4,
+    hideQuake: level >= 5,
+    hideHeading: level >= 6,
+  };
 }
 
 // ---------------------------------------------------------------------------

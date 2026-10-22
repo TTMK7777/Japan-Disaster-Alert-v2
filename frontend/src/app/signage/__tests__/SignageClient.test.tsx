@@ -3,7 +3,7 @@ import { render, screen, cleanup, act } from '@testing-library/react';
 import SignageClient from '../SignageClient';
 import { metadata } from '../page';
 import { SIGNAGE_TEXT } from '../signageText';
-import { POLL_INTERVAL_MS, ROTATE_INTERVAL_MS, STALE_LIMIT_MS } from '../signageModel';
+import { MAX_DENSITY, POLL_INTERVAL_MS, ROTATE_INTERVAL_MS, STALE_LIMIT_MS } from '../signageModel';
 import { QR_QUIET_ZONE } from '../../poster/QrCodeSvg';
 import { decodeQrMatrix } from '../../poster/__tests__/qrDecode';
 import { svgToMatrix } from '../../poster/__tests__/qrSvg';
@@ -214,5 +214,63 @@ describe('SignageClient: QR and page metadata', () => {
 
   it('is not indexed by search engines', () => {
     expect(metadata.robots).toMatchObject({ index: false, follow: false });
+  });
+});
+
+describe('SignageClient: fitting on small screens', () => {
+  function fakeOverflow(overflowing: () => boolean) {
+    const sh = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('signage-bands') && overflowing() ? 1000 : 0;
+    });
+    const ch = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => 500);
+    return () => {
+      sh.mockRestore();
+      ch.mockRestore();
+    };
+  }
+
+  const specialSnapshot = () =>
+    snapshotAt(T0_ISO, {
+      tsunami: dataset('ok', T0_ISO, [tsunami('advisory'), tsunami('major_warning')]),
+    });
+
+  it('keeps everything when it fits', async () => {
+    const restore = fakeOverflow(() => false);
+    queue(specialSnapshot());
+    await mount();
+    expect(root().dataset.density).toBe('0');
+    expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument();
+    expect(screen.getByTestId('signage-quake')).toBeInTheDocument();
+    expect(bands()).toHaveLength(2);
+    restore();
+  });
+
+  it('removes parts step by step while it overflows, but keeps pinned bands and the scope notices', async () => {
+    const restore = fakeOverflow(() => true);
+    queue(specialSnapshot());
+    await mount();
+    expect(root().dataset.density).toBe(String(MAX_DENSITY));
+    expect(screen.queryByRole('heading', { level: 1 })).toBeNull();
+    expect(screen.queryByTestId('signage-quake')).toBeNull();
+    // 固定の帯（大津波警報）は残り、注意報は「ほか 1 件」に回る
+    expect(bands().map((b) => b.dataset.tone)).toEqual(['special']);
+    expect(screen.getByTestId('signage-more')).toBeInTheDocument();
+    const text = document.body.textContent ?? '';
+    expect(text).toContain(SIGNAGE_TEXT.en.weatherNotShown);
+    expect(text).toContain('evacuation orders');
+    restore();
+  });
+
+  it('measures again from the start when the language changes', async () => {
+    let overflowing = true;
+    const restore = fakeOverflow(() => overflowing);
+    queue(specialSnapshot());
+    await mount();
+    expect(root().dataset.density).toBe(String(MAX_DENSITY));
+    overflowing = false;
+    await advance(ROTATE_INTERVAL_MS);
+    expect(root().getAttribute('lang')).toBe('zh');
+    expect(root().dataset.density).toBe('0');
+    restore();
   });
 });

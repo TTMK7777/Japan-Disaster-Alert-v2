@@ -74,8 +74,7 @@ export const SIGNAGE_TEXT: Record<SignageLanguage, SignageStrings> = {
     lastAvailableAt: 'Last received: {time}',
     staleNote: 'Update failed. Showing information from {time}',
     autoRotate: 'Language changes every 15 seconds',
-    weatherNotShown:
-      'Weather warnings and advisories are not shown on this screen. Check the official Japan Meteorological Agency (JMA) website.',
+    weatherNotShown: 'Weather warnings and advisories are not shown here. Check the official JMA website.',
     tsunamiTitle: 'Tsunami',
     tsunamiMajorWarning: 'Major Tsunami Warning',
     tsunamiWarning: 'Tsunami Warning',

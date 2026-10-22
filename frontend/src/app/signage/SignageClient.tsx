@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { getTranslation } from '@/i18n/translations';
 import { readPrefParam } from '@/lib/urlPreferences';
@@ -13,7 +13,9 @@ import {
   ROTATE_INTERVAL_MS,
   SNAPSHOT_PATH,
   applyFetchResult,
+  MAX_DENSITY,
   buildAlertBands,
+  densityFlags,
   burnInOffset,
   datasetView,
   fetchSnapshot,
@@ -30,6 +32,7 @@ import {
   type AlertBand,
   type DatasetView,
   type QuakeItem,
+  type DensityFlags,
   type SnapshotMemory,
   type TsunamiItem,
   type TsunamiLevel,
@@ -38,9 +41,6 @@ import {
 import { SIGNAGE_TEXT, fillTemplate, type SignageLanguage, type SignageStrings } from './signageText';
 
 /** 帯の 2 段目に出す言語（表示中が日本語なら英語、それ以外は日本語） */
-/** この数以上の帯が出るときは詰めて表示する */
-const DENSE_BAND_COUNT = 3;
-
 const secondLanguage = (lang: SignageLanguage): SignageLanguage => (lang === 'ja' ? 'en' : 'ja');
 
 const TSUNAMI_LABEL: Record<TsunamiLevel, keyof SignageStrings> = {
@@ -116,14 +116,51 @@ export default function SignageClient() {
   if (setup === null) {
     return <main id="main-content" className="signage-root" data-testid="signage-root" />;
   }
+  return <SignageScreen setup={setup} memory={memory} now={now} rotation={rotation} />;
+}
 
+interface ScreenProps {
+  setup: Setup;
+  memory: SnapshotMemory;
+  now: number;
+  rotation: number;
+}
+
+function SignageScreen({ setup, memory, now, rotation }: ScreenProps) {
   const lang = setup.langs[rotation % setup.langs.length];
   const t = SIGNAGE_TEXT[lang];
   const quakes = datasetView(memory, 'earthquakes', now);
   const tsunamiView = datasetView(memory, 'tsunami', now);
   const volcanoView = datasetView(memory, 'volcano_warnings', now);
   const itemsOf = <T,>(v: DatasetView<T>): T[] => (v.kind === 'ok' || v.kind === 'stale' ? v.items : []);
-  const { shown, hiddenCount } = limitBands(buildAlertBands(itemsOf(tsunamiView), itemsOf(volcanoView)));
+  const allBands = buildAlertBands(itemsOf(tsunamiView), itemsOf(volcanoView));
+
+  // 画面に収まらなければ 1 段ずつ詰める（文字は小さくしない）。表示する中身が変わったら 0 から測り直す。
+  // 依存は中身を表す文字列だけにする（導出オブジェクトを依存に入れない）
+  const [density, setDensity] = useState(0);
+  const mainRef = useRef<HTMLDivElement>(null);
+  const bandsRef = useRef<HTMLElement>(null);
+  const contentKey = [
+    lang,
+    quakes.kind,
+    tsunamiView.kind,
+    volcanoView.kind,
+    allBands.map((b) => b.key).join(','),
+    memory.snapshot?.generatedAt ?? 0,
+  ].join('|');
+  useLayoutEffect(() => {
+    setDensity(0);
+  }, [contentKey]);
+  useLayoutEffect(() => {
+    const overflows = (el: HTMLElement | null) =>
+      el !== null && (el.scrollHeight > el.clientHeight + 1 || el.scrollWidth > el.clientWidth + 1);
+    if (density < MAX_DENSITY && (overflows(bandsRef.current) || overflows(mainRef.current))) {
+      setDensity((d) => Math.min(MAX_DENSITY, d + 1));
+    }
+  });
+
+  const { shown, hiddenCount } = limitBands(allBands, densityFlags(density, allBands.length).maxBands);
+  const flags = densityFlags(density, shown.length);
   const staleTimes = [quakes, tsunamiView, volcanoView].flatMap((v) => (v.kind === 'stale' ? [v.fetchedAt] : []));
   const staleSince = staleTimes.length > 0 ? Math.min(...staleTimes) : null;
   const region = regionName(setup.pref, lang);
@@ -135,11 +172,14 @@ export default function SignageClient() {
       id="main-content"
       className="signage-root"
       data-testid="signage-root"
+      data-density={density}
       lang={lang}
       style={{ transform: `translate(${shift}px, ${shift}px)` }}
     >
-      <div className="signage-main">
-        <h1 className="signage-heading">{lang === 'ja' ? `${region}${t.heading}` : `${region} · ${t.heading}`}</h1>
+      <div className="signage-main" ref={mainRef}>
+        {!flags.hideHeading && (
+          <h1 className="signage-heading">{lang === 'ja' ? `${region}${t.heading}` : `${region} · ${t.heading}`}</h1>
+        )}
 
         {staleSince !== null && (
           <p className="signage-stale-note" data-testid="signage-stale-note" role="status">
@@ -147,10 +187,9 @@ export default function SignageClient() {
           </p>
         )}
 
-        {/* 帯が多いときは 2 段目の言語を省いて詰める（地震の欄を画面外に押し出さない） */}
-        <section className={shown.length >= DENSE_BAND_COUNT ? 'signage-bands signage-bands-dense' : 'signage-bands'} aria-live="polite">
-          {shown.map((band) => (
-            <AlertBandView key={band.key} band={band} lang={lang} now={now} />
+        <section className="signage-bands" aria-live="polite" ref={bandsRef}>
+          {shown.map((band, i) => (
+            <AlertBandView key={band.key} band={band} lang={lang} now={now} flags={flags} first={i === 0} />
           ))}
           {hiddenCount > 0 && (
             <p className="signage-more" data-testid="signage-more">
@@ -158,7 +197,7 @@ export default function SignageClient() {
             </p>
           )}
           <TsunamiStatus view={tsunamiView} t={t} now={now} />
-          <QuakePanel view={quakes} lang={lang} now={now} />
+          {!flags.hideQuake && <QuakePanel view={quakes} lang={lang} now={now} />}
         </section>
 
         <section className="signage-lines">
@@ -214,7 +253,19 @@ function Unavailable({ title, lastFetchedAt, t, now }: { title: string; lastFetc
   );
 }
 
-function AlertBandView({ band, lang, now }: { band: AlertBand; lang: SignageLanguage; now: number }) {
+function AlertBandView({
+  band,
+  lang,
+  now,
+  flags,
+  first,
+}: {
+  band: AlertBand;
+  lang: SignageLanguage;
+  now: number;
+  flags: DensityFlags;
+  first: boolean;
+}) {
   const t = SIGNAGE_TEXT[lang];
   const t2 = SIGNAGE_TEXT[secondLanguage(lang)];
   let title: string;
@@ -254,12 +305,14 @@ function AlertBandView({ band, lang, now }: { band: AlertBand; lang: SignageLang
     >
       <div className="signage-band-main">
         <p className="signage-band-title">{title}</p>
-        <p className="signage-band-secondary" lang={secondLanguage(lang)}>
-          {secondary}
-        </p>
-        {detail && <p className="signage-band-detail">{detail}</p>}
+        {!flags.hideSecondary && (
+          <p className="signage-band-secondary" lang={secondLanguage(lang)}>
+            {secondary}
+          </p>
+        )}
+        {detail && !flags.hideDetail && <p className="signage-band-detail">{detail}</p>}
       </div>
-      <p className="signage-band-action">{action}</p>
+      {(first || !flags.actionOnlyFirst) && <p className="signage-band-action">{action}</p>}
     </div>
   );
 }
