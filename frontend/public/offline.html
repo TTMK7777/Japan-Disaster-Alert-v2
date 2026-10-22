@@ -146,8 +146,63 @@
       line-height: 1.9;
     }
 
-    .emergency-list strong {
+    .emergency-list .tel {
+      font-weight: 700;
       font-variant-numeric: tabular-nums;
+      color: #fca5a5;
+    }
+
+    .emergency-list .desc,
+    .link-list .desc,
+    .link-list .url,
+    .link-list .name {
+      display: block;
+    }
+
+    .emergency-list .desc {
+      font-size: 13px;
+      line-height: 1.5;
+      opacity: 0.85;
+      margin: 0 0 6px 26px;
+    }
+
+    .emergency-list .note,
+    .link-list .note {
+      color: #fde68a;
+    }
+
+    .online-only {
+      margin: 14px 0 8px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fde68a;
+    }
+
+    .link-list {
+      list-style: none;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .link-list li {
+      margin-bottom: 12px;
+    }
+
+    .link-list .name {
+      display: inline;
+      font-weight: 700;
+    }
+
+    .link-list .desc,
+    .link-list .url {
+      font-size: 13px;
+      margin-left: 26px;
+    }
+
+    .link-list .url {
+      opacity: 0.6;
+      font-family: ui-monospace, Consolas, monospace;
+      font-size: 12px;
     }
 
     /* このアプリが扱う範囲。行動指示より目立たせないが、読み飛ばされない枠にする */
@@ -226,13 +281,39 @@
       <p id="scope-not-covered">This app does not provide evacuation orders or information on whether evacuation shelters are open.</p>
     </section>
 
+    <!--
+      番号・URL は src/lib/emergencyContacts.ts が正本。名前・説明は translations.ts の emergency.* と同じ文
+      （emergency-contacts-sync.test.ts が本体との一致を固定する。片方だけ直すと落ちる）。
+      電話は回線があればオフラインでもかかるので tel: リンクにする。
+      公式ページは通信が無いと開けないため、リンクにせず URL を文字で載せる（外部参照を持たない方針）。
+    -->
     <section class="guide" aria-labelledby="emergency-title">
       <h2 id="emergency-title">Emergency numbers</h2>
       <ul class="emergency-list">
-        <li>🚔 <span id="label-police">Police</span>: <strong>110</strong></li>
-        <li>🚒 <span id="label-fire">Fire &amp; Ambulance</span>: <strong>119</strong></li>
-        <li>🌊 <span id="label-coast">Coast Guard</span>: <strong>118</strong></li>
-        <li>📱 <span id="label-hotline">Japan Visitor Hotline (24h)</span>: <strong>050-3816-2787</strong></li>
+        <li>🚔 <span id="label-police">Police</span>: <a class="tel" href="tel:110">110</a></li>
+        <li>🚒 <span id="label-fire">Fire service / Ambulance</span>: <a class="tel" href="tel:119">119</a>
+          <span class="desc" id="desc-fire">Emergency calls for fires, sudden illness or injuries.</span></li>
+        <li>🌊 <span id="label-coast">Coast Guard</span>: <a class="tel" href="tel:118">118</a></li>
+        <li>📱 <span id="label-hotline">Japan Visitor Hotline (24h)</span>: <a class="tel" href="tel:050-3816-2787">050-3816-2787</a>
+          <span class="desc" id="desc-hotline">Help in emergencies such as illness or disasters. Available 24/7 in English, Chinese, Korean and Japanese.</span></li>
+        <li>📞 <span id="label-message171">Disaster Message Dial</span>: <a class="tel" href="tel:171">171</a>
+          <span class="desc note" id="note-message171">The 171 telephone service is available when NTT activates it. Check the official guidance for availability and conditions.</span></li>
+      </ul>
+      <p class="online-only" id="links-online-only">These pages open only when you are online (not available offline).</p>
+      <ul class="link-list">
+        <li>🌐 <span class="name" id="label-web171">Disaster message board (web171)</span>
+          <span class="desc" id="desc-web171">You can post and check messages about people's safety online.</span>
+          <span class="url">https://www.ntt-east.co.jp/saigai/web171/</span></li>
+        <li>🏥 <span class="name" id="label-medicalSearch">JNTO medical institution search</span>
+          <span class="desc" id="desc-medicalSearch">Search by language or specialty, and check availability with the medical institution before visiting.</span>
+          <span class="url">https://www.jnto.go.jp/emergency/jpn/mi_guide.html</span></li>
+        <li>🚑 <span class="name" id="label-consultation7119">#7119: regional emergency medical advice services</span>
+          <span class="desc" id="desc-consultation7119">Find where to ask for advice if you are unsure whether to call an ambulance or seek medical care.</span>
+          <span class="desc note" id="note-consultation7119">Hours and eligible users vary by area. Check the list to see where the service is available.</span>
+          <span class="url">https://www.fdma.go.jp/mission/enrichment/appropriate/appropriate007.html</span></li>
+        <li>🏛️ <span class="name" id="label-embassy">Your embassy or consulate in Japan</span>
+          <span class="desc" id="desc-embassy">Find your country's contact in the Ministry of Foreign Affairs' list of foreign missions in Japan.</span>
+          <span class="url">https://www.mofa.go.jp/about/emb_cons/protocol/index.html</span></li>
       </ul>
     </section>
 
