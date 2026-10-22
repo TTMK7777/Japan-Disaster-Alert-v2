@@ -291,6 +291,46 @@
   margin: 10mm;
 }
 
+/* ポスター上の地域名と、QR の下に印字する URL */
+.poster-area {
+  margin: 0;
+  text-align: center;
+  font-weight: 700;
+}
+.poster-area .poster-en {
+  font-size: 16pt;
+}
+.poster-url {
+  margin: 0;
+  text-align: center;
+  font-size: 10pt;
+}
+.poster-url-label {
+  color: #4b5563;
+}
+.poster-url-text {
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12pt;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+/* 他の端末から開けない URL の警告（操作部の中＝印刷されない） */
+.poster-local-warning {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 2px solid #b91c1c;
+  border-radius: 8px;
+  background: #fef2f2;
+  color: #7f1d1d;
+}
+.poster-local-warning p {
+  margin: 0;
+}
+.poster-local-warning-title {
+  font-weight: 700;
+}
+
 @media print {
   /* layout の body は min-h-dvh と transition-colors を持つ。印刷では高さを 1 枚に収め、色の遷移も止める */
   html,

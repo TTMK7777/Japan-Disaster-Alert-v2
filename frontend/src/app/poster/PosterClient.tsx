@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState, type ChangeEvent } from 'react';
-import { PREFECTURES } from '@/lib/prefectures';
+import { PREFECTURES, prefectureDisplayName } from '@/lib/prefectures';
 import { PREF_PARAM, readPrefParam } from '@/lib/urlPreferences';
 import QrCodeSvg from './QrCodeSvg';
-import { buildPosterTargetUrl } from './posterUrl';
+import { buildPosterTargetUrl, isLocalOnlyOrigin, resolvePosterOrigin } from './posterUrl';
 import { POSTER_CONTROLS_TEXT as C, POSTER_TEXT as T, type BilingualText } from './posterText';
 
 /** 英語（上）＋やさしい日本語（下）の 2 段 */
@@ -34,11 +34,19 @@ export default function PosterClient() {
   const [pref, setPref] = useState<string | null>(null);
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    // 公開 URL（ビルド時の NEXT_PUBLIC_SITE_URL）があればそれを優先。無ければ今開いている origin
+    setOrigin(resolvePosterOrigin(process.env.NEXT_PUBLIC_SITE_URL, window.location.origin));
     setPref(readPrefParam(window.location.search));
   }, []);
 
   const targetUrl = origin === null ? null : buildPosterTargetUrl(origin, pref);
+  const localOnly = origin !== null && isLocalOnlyOrigin(origin);
+  const areaEn = prefectureDisplayName(pref, 'en');
+  const areaJa = prefectureDisplayName(pref, 'easy_ja');
+  const areaText: BilingualText =
+    areaEn && areaJa
+      ? { en: T.area.en.replace('{pref}', areaEn), easyJa: T.area.easyJa.replace('{pref}', areaJa) }
+      : T.areaChoose;
 
   const onAreaChange = (e: ChangeEvent<HTMLSelectElement>) => {
     const code = readPrefParam(`?${PREF_PARAM}=${encodeURIComponent(e.target.value)}`);
@@ -71,6 +79,13 @@ export default function PosterClient() {
           <span>{inline(C.url)}: </span>
           <code data-testid="poster-qr-url">{targetUrl ?? ''}</code>
         </p>
+        {/* 画面だけの警告（.poster-controls ごと印刷されない） */}
+        {localOnly && (
+          <div role="alert" data-testid="poster-local-warning" className="poster-local-warning">
+            <p className="poster-local-warning-title">{inline(C.localOnly)}</p>
+            <p>{inline(C.localOnlyHint)}</p>
+          </div>
+        )}
       </section>
 
       <article className="poster-sheet">
@@ -80,6 +95,9 @@ export default function PosterClient() {
         <h2 className="poster-headline">
           <Bilingual text={T.headline} />
         </h2>
+        <p className="poster-area" data-testid="poster-area">
+          <Bilingual text={areaText} />
+        </p>
 
         <div className="poster-qr-frame">
           {targetUrl === null ? (
@@ -88,6 +106,14 @@ export default function PosterClient() {
             <QrCodeSvg text={targetUrl} label={inline(T.qrLabel)} className="poster-qr" />
           )}
         </div>
+        {/* QR が読めない端末でも打てるよう、同じ URL を文字でも印字する */}
+        {targetUrl !== null && (
+          <p className="poster-url">
+            <span lang="en" className="poster-url-label">{T.urlLabel.en} / </span>
+            <span lang="ja" className="poster-url-label">{T.urlLabel.easyJa}</span>
+            <span data-testid="poster-sheet-url" className="poster-url-text">{targetUrl}</span>
+          </p>
+        )}
 
         <p className="poster-scan">
           <Bilingual text={T.scan} />

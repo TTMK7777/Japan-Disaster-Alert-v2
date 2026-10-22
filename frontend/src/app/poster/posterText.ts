@@ -33,6 +33,11 @@ export const POSTER_TEXT = {
     easyJa: 'この アプリでは、「にげて ください」という まちの しじや、ひなんじょに いま はいれるかは わかりません。',
   },
   qrLabel: { en: 'QR code to open local disaster alerts', easyJa: 'さいがい じょうほうを ひらく QR' },
+  // QR の下に印字する。QR が読めない端末でも URL を打てるように
+  urlLabel: { en: 'Or open', easyJa: 'または この URL を ひらく' },
+  // 地域。{pref} にはセレクタと同じ表記（英語はローマ字・やさしい日本語は漢字）を入れる
+  area: { en: 'Area: {pref}', easyJa: 'ちいき: {pref}' },
+  areaChoose: { en: 'Area: choose on your phone', easyJa: 'ちいき: スマホで えらんで ください' },
 } satisfies Record<string, BilingualText | BilingualText[]>;
 
 /** 画面上部の操作部（印刷されない）。スタッフ向け */
@@ -44,4 +49,10 @@ export const POSTER_CONTROLS_TEXT = {
   url: { en: 'QR link', easyJa: 'QR の なかみ' },
   print: { en: 'Print', easyJa: 'いんさつ する' },
   preparing: { en: 'Preparing QR…', easyJa: 'じゅんび ちゅう' },
+  // origin が localhost・私設 IP のとき（画面だけ。印刷されない）
+  localOnly: { en: 'This URL cannot be opened from other devices.', easyJa: 'この URL は ほかの たんまつ から ひらけません。' },
+  localOnlyHint: {
+    en: 'Open this page from the public URL (or build with NEXT_PUBLIC_SITE_URL) before printing.',
+    easyJa: 'こうかい されている URL で この ページを ひらいてから いんさつ して ください。',
+  },
 } satisfies Record<string, BilingualText>;

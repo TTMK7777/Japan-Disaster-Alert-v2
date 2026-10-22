@@ -159,16 +159,20 @@ describe('page.tsx — 低電力モード', () => {
   ])('低電力%sでも、警報タブの 5 分ごとの取得（特別警報を含む）は止まらない', async (_label, lowPower) => {
     vi.useFakeTimers();
     if (lowPower) localStorage.setItem(LOW_POWER_STORAGE_KEY, '1');
+    // 地域が決まっていないと警報は取りに行かない（B8）ので地域を指定して開く
+    setUrl('/?pref=130000');
     await renderHome();
     await flush();
     openWarningTab();
     await flush();
-    expect(countOf('/api/v1/alerts')).toBe(1);
+    const atOpen = countOf('/api/v1/alerts');
+    expect(atOpen).toBeGreaterThan(0);
 
+    // 警報タブを開いている間は WarningBanner だけが取る（ページの帯用の取得は止まる＝二重取得しない）
     await act(async () => {
       await vi.advanceTimersByTimeAsync(FIVE_MIN * 2);
     });
-    expect(countOf('/api/v1/alerts')).toBe(3);
+    expect(countOf('/api/v1/alerts')).toBe(atOpen + 2);
   });
 
   it('保存済みのオンで開くと SSE を開かず、津波を 5 分ごとに取りに行く', async () => {
@@ -295,5 +299,89 @@ describe('page.tsx — 「このアプリが扱う範囲」の帯', () => {
     fireEvent.change(await findAreaSelect(), { target: { value: '260000' } });
     const kyoto = PREFECTURE_DISASTER_LINKS.find((l) => l.pref === '26')!;
     await waitFor(() => expect(bandLink()).toHaveAttribute('href', kyoto.disasterUrl));
+  });
+});
+
+describe('page.tsx — 地域の明示（B8）', () => {
+  it('地域が無ければ、どのタブでも警報を取りに行かず、上部と警報タブで「地域を選んでください」を出す', async () => {
+    localStorage.setItem('disaster-app-lang', 'ja');
+    await renderHome();
+    const picker = await screen.findByTestId('region-picker');
+    expect(picker).toHaveTextContent(getTranslation('ja', 'region.choose'));
+    expect(screen.queryByTestId('region-bar')).toBeNull();
+    openWarningTab();
+    expect(await screen.findByTestId('warning-choose-region')).toBeInTheDocument();
+    await act(async () => {});
+    expect(countOf('/api/v1/alerts')).toBe(0);
+    // 地震は全国なので影響なし
+    expect(countOf('/api/v1/earthquakes')).toBeGreaterThan(0);
+  });
+
+  it('上部で選ぶと「{pref}の情報を表示中」になり、警報タブもその地域で取り、次に開いたときも残る', async () => {
+    localStorage.setItem('disaster-app-lang', 'en');
+    const first = await renderHome();
+    fireEvent.change(await screen.findByRole('combobox', { name: getTranslation('en', 'warning.selectArea') }), {
+      target: { value: '270000' },
+    });
+    expect(await screen.findByTestId('region-bar')).toHaveTextContent('Showing information for Osaka');
+    expect(new URLSearchParams(window.location.search).get('pref')).toBe('270000');
+    openWarningTab();
+    await waitFor(() => expect(urls().some((u) => u.includes('area_code=270000'))).toBe(true));
+    expect(urls().filter((u) => u.includes('/api/v1/alerts')).every((u) => u.includes('area_code=270000'))).toBe(true);
+
+    first.unmount();
+    setUrl('/');
+    await renderHome();
+    expect(await screen.findByTestId('region-bar')).toHaveTextContent('Showing information for Osaka');
+  });
+});
+
+describe('page.tsx — 特別警報の帯（B8）', () => {
+  const SPECIAL = [
+    { id: 'x', type: 'special_warning', title: '大雨特別警報', description: '', area: '東京地方',
+      issued_at: '2026-10-22T05:00:00+09:00', severity: 'extreme', is_continuing: true },
+  ];
+
+  function installAlerts(body: unknown) {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      return { ok: true, status: 200, json: async () => (url.includes('/api/v1/alerts') ? body : []) };
+    }) as unknown as typeof fetch;
+  }
+
+  it('選択中の地域で特別警報（継続中）が出ていれば、どのタブでも上部に帯が出て「警報を見る」で警報タブへ移る', async () => {
+    installAlerts(SPECIAL);
+    setUrl('/?pref=130000&lang=ja');
+    await renderHome();
+    const band = await screen.findByTestId('special-warning-band');
+    expect(band).toHaveTextContent('東京都に特別警報が出ています');
+    for (const tab of ['emergency', 'shelter', 'earthquake']) {
+      fireEvent.click(document.getElementById(`tab-${tab}`) as HTMLElement);
+      expect(screen.getByTestId('special-warning-band')).toBeInTheDocument();
+    }
+    fireEvent.click(document.getElementById('special-warning-view') as HTMLElement);
+    expect(document.getElementById('tab-warning')).toHaveAttribute('aria-selected', 'true');
+    expect(document.activeElement).toBe(document.getElementById('tab-warning'));
+    // 帯はタブのナビより前（sticky の塊の先頭）
+    const nav = document.querySelector('nav') as HTMLElement;
+    expect(screen.getByTestId('special-warning-band').compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('警報・注意報だけなら帯は出ない', async () => {
+    installAlerts([{ ...SPECIAL[0], id: 'y', severity: 'high', type: 'warning' }]);
+    setUrl('/?pref=130000&lang=ja');
+    await renderHome();
+    await waitFor(() => expect(countOf('/api/v1/alerts')).toBeGreaterThan(0));
+    await act(async () => {});
+    expect(screen.queryByTestId('special-warning-band')).toBeNull();
+  });
+
+  it('地域が未選択なら帯は出ない（取りに行かない）', async () => {
+    installAlerts(SPECIAL);
+    await renderHome();
+    await screen.findByTestId('region-picker');
+    await act(async () => {});
+    expect(screen.queryByTestId('special-warning-band')).toBeNull();
+    expect(countOf('/api/v1/alerts')).toBe(0);
   });
 });

@@ -90,7 +90,7 @@ Windows では同梱の `start.bat` / `start_with_browser.bat`（WSL 経由）�
 | `DATABASE_URL` | DB URL（既定: `data/app.db` の SQLite） | 任意 |
 | `HOST` / `PORT` | バインドアドレス・ポート | 任意 |
 | `NEXT_PUBLIC_API_URL` | フロントエンドが参照するバックエンド URL | 任意 |
-| `NEXT_PUBLIC_SITE_URL` | フロント自身の公開 URL（SNS 共有の og:image を絶対 URL にする。ビルド時に焼き込むので `cloudbuild.yaml` の `_SITE_URL` で渡す。未設定なら画像なしで共有） | 任意 |
+| `NEXT_PUBLIC_SITE_URL` | フロント自身の公開 URL（SNS 共有の og:image を絶対 URL にする／宿の QR ポスター `/poster` の QR と印字 URL に使う）。ビルド時に焼き込むので `cloudbuild.yaml` の `_SITE_URL` で渡す（`gcloud builds submit ... --substitutions=_API_URL=...,_SITE_URL=https://...`。手順は §6 ③'）。未設定なら画像なしで共有し、ポスターは開いているページの origin で QR を作る | 任意 |
 
 > シークレット（API キー・VAPID 秘密鍵）は `.env` に保存し、リポジトリへコミットしないでください。`.env` は `.gitignore` 済みです。
 
@@ -189,6 +189,26 @@ gcloud run deploy disaster-web \
 
 > **API の URL を変えたときは②からやり直すこと。** 焼き込み済みのバンドルは
 > 再デプロイだけでは更新されません。
+
+#### ③' フロント自身の公開 URL（`_SITE_URL`）を焼き込む
+
+`NEXT_PUBLIC_SITE_URL` は SNS 共有の og:image と、宿の QR ポスター（`/poster`）の QR・印字 URL に使います。
+**初回は③が終わるまで frontend の URL が決まらない**ので、③の後に②を `_SITE_URL` 付きでやり直し、③を再実行します
+（独自ドメインを付けた場合はその URL を渡す）。
+
+```bash
+WEB_URL=$(gcloud run services describe disaster-web \
+  --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
+
+gcloud builds submit frontend \
+  --config frontend/cloudbuild.yaml \
+  --project japan-disaster-alert \
+  --substitutions=_API_URL=${API_URL},_SITE_URL=${WEB_URL}
+```
+
+- 複数の置換は `,` 区切りで **1 つの `--substitutions`** に書く
+- 未設定のままだと、スタッフがポスターを `localhost`・社内 LAN の IP で開いたとき、**客のスマホから開けない URL** が
+  QR に入る。ポスター画面はその場合「この URL は他の端末から開けません」と警告する（印刷には出ない）
 
 #### ④ backend の CORS に frontend の URL を通す
 

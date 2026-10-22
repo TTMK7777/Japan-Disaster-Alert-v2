@@ -10,6 +10,8 @@ import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
 import TransitLinks from '@/components/TransitLinks';
 import ScopeNotice from '@/components/ScopeNotice';
+import RegionBar from '@/components/RegionBar';
+import SpecialWarningBand from '@/components/SpecialWarningBand';
 import ThemeToggle from '@/components/ThemeToggle';
 import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
@@ -19,6 +21,7 @@ import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/trans
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import { useDisplayPreferences } from '@/hooks/useDisplayPreferences';
+import { useSpecialWarning } from '@/hooks/useSpecialWarning';
 import { useLowPowerMode } from '@/hooks/useLowPowerMode';
 import { useBatterySuggestion } from '@/hooks/useBatterySuggestion';
 
@@ -128,8 +131,28 @@ interface ApiError {
 export default function Home() {
   // 表示言語と警報タブの地域。URL（?lang= / ?pref=）・保存値・ブラウザ言語から決め、
   // 利用者が画面で変えたら保存と URL の同期を行う（hooks/useDisplayPreferences）
-  const { language, prefCode, selectLanguage, selectPref } = useDisplayPreferences();
+  const { language, prefCode, prefResolved, selectLanguage, selectPref } = useDisplayPreferences();
   const [activeTab, setActiveTab] = useState<TabType>('earthquake');
+  // 選択中の地域の特別警報（全タブ共通の帯）。警報タブを開いている間は WarningBanner の取得結果を使う
+  const { active: specialWarningActive, report: reportRegionWarnings } = useSpecialWarning({
+    prefCode,
+    language,
+    paused: activeTab === 'warning',
+  });
+  const handleWarningsUpdate = useCallback(
+    (warnings: unknown[], areaCode: string) => reportRegionWarnings(areaCode, warnings),
+    [reportRegionWarnings]
+  );
+  // 帯の「警報を見る」: アプリ内の警報タブへ移り、タブにフォーカスを置いて先頭から読めるようにする
+  const showWarningTab = useCallback(() => {
+    setActiveTab('warning');
+    document.getElementById('tab-warning')?.focus();
+    try {
+      window.scrollTo({ top: 0 });
+    } catch {
+      // scrollTo が無い環境（テストの jsdom 等）では何もしない
+    }
+  }, []);
   // 低電力・低回線モード（端末に保存）。オンなら SSE をやめて 5 分ごとのポーリング、
   // 地図タイルは押されるまで読まず、アニメーションを止める
   const { lowPower, setLowPower, toggleLowPower } = useLowPowerMode();
@@ -288,6 +311,10 @@ export default function Home() {
           折り返すため、スクロールするとナビがヘッダーの下に潜り込んで隠れていた。
           入れ子の sticky にすれば高さを知る必要がない */}
       <div className="sticky top-0 z-40 shadow-lg dark:shadow-gray-900/30">
+      {/* 選択中の地域の特別警報。sticky の塊の先頭に置き、どのタブ・どのスクロール位置でも見える */}
+      {specialWarningActive && prefCode !== null && (
+        <SpecialWarningBand language={language} prefCode={prefCode} onView={showWarningTab} />
+      )}
       <header className="bg-disaster-blue dark:bg-gray-800 text-white">
         <div className="max-w-4xl mx-auto flex justify-between items-center gap-2 px-3 py-2 md:px-4 md:py-3">
           {/* min-w-0 が無いと flex 子要素は縮まず、タイトルが折り返す代わりに
@@ -342,6 +369,9 @@ export default function Home() {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto p-4">
+        {/* どこの情報を見ているか（未選択なら選択を促す）。全タブ共通・最上部（B8） */}
+        <RegionBar language={language} prefCode={prefCode} prefResolved={prefResolved} onSelect={selectPref} />
+
         {/* 接続状態 + 最後に取得できた時刻 + 今すぐ更新（全タブ共通）。
             以前は同じ判定のドットがヘッダー（ConnectionStatus）とここの2箇所にあり、
             画面に状態ランプが2つ並んでいた。ここ1箇所に統合している */}
@@ -456,11 +486,13 @@ export default function Home() {
 
           {activeTab === 'warning' && (
             <div id="tabpanel-warning" role="tabpanel" aria-labelledby="tab-warning" tabIndex={0} className="space-y-6">
-              {/* 地域は URL の ?pref= か利用者の選択。未指定（null）なら WarningBanner の既定 */}
+              {/* 地域は URL の ?pref= か利用者の選択。未選択（null）なら「地域を選んでください」を出す
+                  （東京などの既定値で埋めない） */}
               <WarningBanner
                 language={language}
-                areaCode={prefCode ?? undefined}
+                areaCode={prefCode}
                 onAreaCodeChange={selectPref}
+                onWarningsUpdate={handleWarningsUpdate}
               />
               {/* 噴火警報。気象庁の階級では警報の一種なので同じタブに置く。
                   タブを 5 つに増やすとモバイル幅でナビが破綻する */}

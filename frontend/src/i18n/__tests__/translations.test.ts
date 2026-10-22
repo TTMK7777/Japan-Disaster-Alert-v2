@@ -58,6 +58,12 @@ const COMPONENT_KEYS = [
   'scope.notCovered',
   'scope.prefectureLink',
   'scope.travelerLink',
+  // 地域の明示・特別警報の帯（B8。components/RegionBar.tsx・SpecialWarningBand.tsx）
+  'region.showing',
+  'region.change',
+  'region.officialSwitchHint',
+  'warning.specialBanner',
+  'warning.view',
   // 低電力モード・最後に取得できた時刻（components/LowPower.tsx, ShelterMap の地図遅延）
   'lowPower.label',
   'lowPower.on',
@@ -266,5 +272,44 @@ describe('boundaryErrorMessages', () => {
       expect(boundaryErrorMessages[code].message).toBeTruthy();
       expect(boundaryErrorMessages[code].retry).toBeTruthy();
     });
+  });
+});
+
+describe('B8 の文言', () => {
+  const langCodes = LANGUAGES.map((l) => l.code);
+
+  it('地域名を差し込む 2 キーは全 16 言語で {pref} をちょうど 1 つ持つ（訳で崩れていない）', () => {
+    for (const code of langCodes) {
+      for (const key of ['region.showing', 'warning.specialBanner']) {
+        const text = translations[code][key];
+        expect(text.split('{pref}').length - 1, `${code}.${key}`).toBe(1);
+      }
+    }
+  });
+
+  it('scope.jmaRelay は肯定形（「公式発表ではない」で警報そのものを疑わせない）', () => {
+    expect(translations.ja['scope.jmaRelay']).toBe(
+      'このアプリは、気象庁が発表した警報・情報をお伝えします。避難については、市町村の指示に従ってください。'
+    );
+    expect(translations.ja['scope.jmaRelay']).not.toContain('公式発表ではありません');
+    expect(translations.en['scope.jmaRelay']).not.toMatch(/not official/i);
+  });
+
+  it('地域の選択の 12 キーは全 16 言語が自分の訳を持つ（英語の流用ではない。easy_ja も英語にしない）', () => {
+    const keys = Object.keys(translations.ja).filter((k) => k.startsWith('region.'));
+    expect(keys.length).toBe(15); // 先行 3 キー（showing・change・officialSwitchHint）＋地域の選択 12 キー
+    for (const code of langCodes) {
+      for (const key of keys) {
+        expect(translations[code][key], `${code}.${key}`).toBeTruthy();
+        if (code !== 'en') expect(translations[code][key], `${code}.${key}`).not.toBe(translations.en[key]);
+      }
+    }
+  });
+
+  it('chooseHint の「警報・注意報」は各言語の既存の警報・注意報の訳語と揃える', () => {
+    for (const code of langCodes) {
+      const hint = translations[code]['region.chooseHint'].toLowerCase();
+      expect(hint, code).toContain(translations[code]['warning.advisory'].toLowerCase().slice(0, 4));
+    }
   });
 });

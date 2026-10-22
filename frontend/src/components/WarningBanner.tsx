@@ -30,10 +30,15 @@ interface Warning {
 }
 
 interface WarningBannerProps {
-  /** 表示する地域。後から変わったらその地域に切り替える（URL の ?pref= を反映するため） */
-  areaCode?: string;
+  /**
+   * 表示する地域。後から変わったらその地域に切り替える（URL の ?pref= を反映するため）。
+   * 未指定（null / undefined）なら**取りに行かず「地域を選んでください」を出す**。
+   * 以前は東京（130000）を既定にしており、どこの情報か分からないまま東京の警報が出ていた（B8）
+   */
+  areaCode?: string | null;
   language?: string;
-  onWarningsUpdate?: (warnings: Warning[]) => void;
+  /** 取得できた警報と、その取得に使った地域コード（ページ全体の特別警報の帯が使う） */
+  onWarningsUpdate?: (warnings: Warning[], areaCode: string) => void;
   /** 利用者がセレクタで地域を変えたときに呼ぶ（URL の同期用） */
   onAreaCodeChange?: (code: string) => void;
 }
@@ -56,6 +61,7 @@ const WARNING_KEYS = {
 
 // HIGH #11: PrefectureSelector をレンダー外に定義
 interface PrefectureSelectorProps {
+  /** 未選択は空文字（先頭の「都道府県を選ぶ」を出す） */
   selectedAreaCode: string;
   onAreaCodeChange: (code: string) => void;
   language: string;
@@ -73,6 +79,11 @@ function PrefectureSelector({ selectedAreaCode, onAreaCodeChange, language }: Pr
         onChange={(e) => onAreaCodeChange(e.target.value)}
         className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
       >
+        {selectedAreaCode === '' && (
+          <option value="" disabled>
+            {getTranslation(language, 'region.placeholder')}
+          </option>
+        )}
         {PREFECTURES.map((pref) => (
           <option key={pref.code} value={pref.code}>
             {language === 'ja' || language === 'easy_ja' ? pref.ja : `${pref.en} (${pref.ja})`}
@@ -84,15 +95,15 @@ function PrefectureSelector({ selectedAreaCode, onAreaCodeChange, language }: Pr
 }
 
 export default function WarningBanner({
-  areaCode: initialAreaCode = '130000',
+  areaCode: initialAreaCode = null,
   language = 'ja',
   onWarningsUpdate,
   onAreaCodeChange,
 }: WarningBannerProps) {
   const [warnings, setWarnings] = useState<Warning[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(initialAreaCode !== null);
   const [error, setError] = useState<string | null>(null);
-  const [selectedAreaCode, setSelectedAreaCode] = useState(initialAreaCode);
+  const [selectedAreaCode, setSelectedAreaCode] = useState<string | null>(initialAreaCode);
 
   // HIGH #10: onWarningsUpdate を ref で保持し deps から除外
   const onWarningsUpdateRef = useRef(onWarningsUpdate);
@@ -131,6 +142,14 @@ export default function WarningBanner({
   const fetchRef = useRef<AbortController | null>(null);
   const fetchWarnings = useCallback(async () => {
     fetchRef.current?.abort();
+    // 地域が未選択なら取りに行かない（東京などで埋めない）
+    if (selectedAreaCode === null) {
+      fetchRef.current = null;
+      setLoading(false);
+      setError(null);
+      setWarnings([]);
+      return;
+    }
     const controller = new AbortController();
     fetchRef.current = controller;
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -150,7 +169,7 @@ export default function WarningBanner({
       const data = await response.json();
       if (controller.signal.aborted) return;
       setWarnings(data);
-      onWarningsUpdateRef.current?.(data);
+      onWarningsUpdateRef.current?.(data, selectedAreaCode);
     } catch (err) {
       // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
       if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
@@ -164,13 +183,26 @@ export default function WarningBanner({
 
   useEffect(() => {
     fetchWarnings();
+    if (selectedAreaCode === null) return;
     // 5分ごとに更新
     const interval = setInterval(fetchWarnings, 5 * 60 * 1000);
     return () => {
       clearInterval(interval);
       fetchRef.current?.abort();
     };
-  }, [fetchWarnings]);
+  }, [fetchWarnings, selectedAreaCode]);
+
+  if (selectedAreaCode === null) {
+    return (
+      <div className="space-y-3" data-testid="warning-choose-region">
+        <div className="p-4 bg-amber-50 dark:bg-gray-800 border-2 border-amber-400 dark:border-amber-600 rounded-lg text-gray-900 dark:text-gray-100">
+          <h3 className="font-bold">{getTranslation(language, 'region.choose')}</h3>
+          <p className="mt-1 text-sm">{getTranslation(language, 'region.chooseHint')}</p>
+        </div>
+        <PrefectureSelector selectedAreaCode="" onAreaCodeChange={handleAreaCodeChange} language={language} />
+      </div>
+    );
+  }
 
   if (loading) {
     return (
