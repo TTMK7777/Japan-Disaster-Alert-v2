@@ -37,6 +37,9 @@ import {
 import { SIGNAGE_TEXT, fillTemplate, type SignageLanguage, type SignageStrings } from './signageText';
 
 /** 帯の 2 段目に出す言語（表示中が日本語なら英語、それ以外は日本語） */
+/** この数以上の帯が出るときは詰めて表示する */
+const DENSE_BAND_COUNT = 3;
+
 const secondLanguage = (lang: SignageLanguage): SignageLanguage => (lang === 'ja' ? 'en' : 'ja');
 
 const TSUNAMI_LABEL: Record<TsunamiLevel, keyof SignageStrings> = {
@@ -143,7 +146,8 @@ export default function SignageClient() {
           </p>
         )}
 
-        <section className="signage-bands" aria-live="polite">
+        {/* 帯が多いときは 2 段目の言語を省いて詰める（地震の欄を画面外に押し出さない） */}
+        <section className={shown.length >= DENSE_BAND_COUNT ? 'signage-bands signage-bands-dense' : 'signage-bands'} aria-live="polite">
           {shown.map((band) => (
             <AlertBandView key={band.key} band={band} lang={lang} now={now} />
           ))}
@@ -234,9 +238,9 @@ function AlertBandView({ band, lang, now }: { band: AlertBand; lang: SignageLang
   } else {
     const item: VolcanoItem = band.item;
     const level = item.alertLevel !== null ? ` ${fillTemplate(t.volcanoLevel, { level: item.alertLevel })}` : '';
-    title = `${volcanoName(item, lang)} ${t.volcanoExtreme}`;
-    secondary = `${volcanoName(item, secondLanguage(lang))} ${t2.volcanoExtreme}`;
-    detail = `${t.volcanoTitle}${level}`;
+    title = `${t.volcanoExtreme}: ${volcanoName(item, lang)}`;
+    secondary = `${t2.volcanoExtreme}: ${volcanoName(item, secondLanguage(lang))}`;
+    detail = `${getTranslation(lang, 'warning.specialWarning')} · ${t.volcanoTitle}${level}`;
     action = t.volcanoActionExtreme;
   }
   return (
