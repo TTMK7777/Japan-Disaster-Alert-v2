@@ -14,8 +14,10 @@ import {
   otherVolcanoes,
   parseLangsParam,
   parseSnapshot,
+  quakeLocation,
   regionName,
   resolveSignageOrigin,
+  tsunamiEpicenter,
   type SnapshotMemory,
 } from '../signageModel';
 import { dataset, quake, snapshotAt, tsunami, volcano } from './snapshotFixtures';
@@ -283,5 +285,73 @@ describe('densityFlags (fitting without shrinking text)', () => {
     const { shown, hiddenCount } = limitBands(buildAlertBands(snap.datasets.tsunami.items!, []), 0);
     expect(shown.map((b) => b.tone)).toEqual(['special', 'warning']);
     expect(hiddenCount).toBe(1);
+  });
+});
+
+describe('epicenter names per language (location_i18n / epicenter_i18n)', () => {
+  const I18N = { en: 'Off the east coast of Chiba', 'zh-TW': '千葉縣東方近海', ko: '지바현 동방 앞바다' };
+  const parseQuake = (overrides: Record<string, unknown>) =>
+    parseSnapshot(snapshotAt(T0_ISO, { earthquakes: dataset('ok', T0_ISO, [quake(overrides)]) }))!.datasets.earthquakes.items![0];
+  const parseTsunami = (overrides: Record<string, unknown>) =>
+    parseSnapshot(snapshotAt(T0_ISO, { tsunami: dataset('ok', T0_ISO, [tsunami('warning', overrides)]) }))!.datasets.tsunami.items![0];
+
+  it('uses the display language name when it exists', () => {
+    const item = parseQuake({ location_i18n: I18N });
+    expect(quakeLocation(item, 'ko')).toBe('지바현 동방 앞바다');
+    expect(quakeLocation(item, 'zh-TW')).toBe('千葉縣東方近海');
+    expect(quakeLocation(item, 'en')).toBe('Off the east coast of Chiba');
+  });
+
+  it('falls back to English when the display language has no name', () => {
+    expect(quakeLocation(parseQuake({ location_i18n: { en: 'Off the east coast of Chiba' } }), 'ko')).toBe(
+      'Off the east coast of Chiba'
+    );
+  });
+
+  it('falls back to the Japanese name when there is no English either', () => {
+    expect(quakeLocation(parseQuake({ location_i18n: { 'zh-TW': '千葉縣東方近海' } }), 'ko')).toBe('千葉県東方沖');
+    expect(quakeLocation(parseQuake({ location_i18n: {} }), 'en')).toBe('千葉県東方沖');
+  });
+
+  it('zh / zh-TW: own name, then the Japanese name (readable as kanji), then English', () => {
+    const item = parseQuake({ location_i18n: I18N });
+    expect(quakeLocation(item, 'zh-TW')).toBe('千葉縣東方近海');
+    expect(quakeLocation(item, 'zh')).toBe('千葉県東方沖');
+    expect(quakeLocation(item, 'ko')).toBe('지바현 동방 앞바다');
+    const noJa = parseTsunami({ epicenter_ja: null, epicenter_i18n: {} });
+    expect(tsunamiEpicenter(noJa, 'zh')).toBe('Off Sanriku');
+    expect(tsunamiEpicenter(noJa, 'zh-TW')).toBe('Off Sanriku');
+  });
+
+  it('shows the Japanese name in Japanese even when translations exist', () => {
+    expect(quakeLocation(parseQuake({ location_i18n: I18N }), 'ja')).toBe('千葉県東方沖');
+  });
+
+  it('reads an older snapshot without location_i18n (falls back to Japanese)', () => {
+    const raw = quake();
+    expect('location_i18n' in raw).toBe(false);
+    expect(quakeLocation(parseQuake({}), 'en')).toBe('千葉県東方沖');
+  });
+
+  it('ignores a malformed location_i18n (non-object, non-string or empty values)', () => {
+    expect(quakeLocation(parseQuake({ location_i18n: ['x'] }), 'en')).toBe('千葉県東方沖');
+    expect(quakeLocation(parseQuake({ location_i18n: { ko: 3, en: '' } }), 'ko')).toBe('千葉県東方沖');
+  });
+
+  it('is null while the epicenter is pending', () => {
+    expect(quakeLocation(parseQuake({ location_ja: null, location_i18n: {} }), 'en')).toBeNull();
+  });
+
+  it('tsunami: display language, then the upstream English name, then Japanese', () => {
+    const item = parseTsunami({ epicenter_i18n: { ko: '산리쿠 앞바다', en: 'Sanriku-oki (composed)' } });
+    expect(tsunamiEpicenter(item, 'ko')).toBe('산리쿠 앞바다');
+    // 英語は気象庁が出す英語名を優先する
+    expect(tsunamiEpicenter(item, 'en')).toBe('Off Sanriku');
+    expect(tsunamiEpicenter(item, 'zh')).toBe('三陸沖'); // 漢字圏は英語より日本語名
+    expect(tsunamiEpicenter(item, 'ja')).toBe('三陸沖');
+    const noEn = parseTsunami({ epicenter_en: null, epicenter_i18n: { en: 'Off Sanriku (composed)' } });
+    expect(tsunamiEpicenter(noEn, 'ko')).toBe('Off Sanriku (composed)');
+    const nothing = parseTsunami({ epicenter_en: null });
+    expect(tsunamiEpicenter(nothing, 'ko')).toBe('三陸沖');
   });
 });

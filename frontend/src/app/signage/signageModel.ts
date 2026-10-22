@@ -40,10 +40,14 @@ export type DatasetName = 'earthquakes' | 'tsunami' | 'volcano_warnings';
 export type DatasetStatus = 'ok' | 'stale' | 'error';
 export type TsunamiLevel = 'major_warning' | 'warning' | 'advisory' | 'unknown';
 
+/** 震源地名の言語別の訳（snapshot の location_i18n / epicenter_i18n）。訳の無い言語はキーが無い */
+export type LocalizedNames = Readonly<Record<string, string>>;
+
 export interface QuakeItem {
   id: string;
   occurredAt: number | null;
   locationJa: string | null;
+  locationI18n: LocalizedNames;
   magnitude: number | null;
   maxIntensity: string | null;
 }
@@ -54,6 +58,7 @@ export interface TsunamiItem {
   areaCount: number;
   epicenterJa: string | null;
   epicenterEn: string | null;
+  epicenterI18n: LocalizedNames;
   reportedAt: string | null;
 }
 
@@ -93,6 +98,17 @@ function time(v: unknown): number | null {
   return Number.isNaN(t) ? null : t;
 }
 
+/** 文字列の値だけを拾う。schema 1.0（キーが無い）や壊れた値は空として扱う */
+function localizedNames(v: unknown): LocalizedNames {
+  if (!isObj(v)) return {};
+  const out: Record<string, string> = {};
+  for (const [lang, name] of Object.entries(v)) {
+    const s = str(name);
+    if (s !== null) out[lang] = s;
+  }
+  return out;
+}
+
 const TSUNAMI_LEVELS: ReadonlySet<string> = new Set(['major_warning', 'warning', 'advisory', 'unknown']);
 
 function parseQuake(raw: unknown): QuakeItem | null {
@@ -101,6 +117,7 @@ function parseQuake(raw: unknown): QuakeItem | null {
     id: str(raw.id) ?? '',
     occurredAt: time(raw.occurred_at),
     locationJa: str(raw.location_ja),
+    locationI18n: localizedNames(raw.location_i18n),
     magnitude: num(raw.magnitude),
     maxIntensity: str(raw.max_intensity),
   };
@@ -117,6 +134,7 @@ function parseTsunami(raw: unknown): TsunamiItem | null {
     areaCount: Array.isArray(raw.areas) ? raw.areas.length : 0,
     epicenterJa: str(raw.epicenter_ja),
     epicenterEn: str(raw.epicenter_en),
+    epicenterI18n: localizedNames(raw.epicenter_i18n),
     reportedAt: str(raw.report_datetime),
   };
 }
@@ -436,8 +454,24 @@ export function volcanoName(item: VolcanoItem, lang: SignageLanguage): string {
   return KANJI_LANGS.has(lang) || !item.nameEn ? item.nameJa : item.nameEn;
 }
 
+/**
+ * 震源地名を表示言語で選ぶ: 表示言語の訳 → 英語 → 日本語名。日本語表示では日本語名。
+ * 漢字圏（zh・zh-TW）は訳が無ければ英語より日本語名の方が読めるので、表示言語の訳 → 日本語名 → 英語。
+ * `en` は英語名の候補（津波は気象庁の英語名を自前の訳より優先する）
+ */
+function pickEpicenter(lang: SignageLanguage, ja: string | null, i18n: LocalizedNames, en: string | null): string | null {
+  if (lang === 'ja') return ja ?? en;
+  if (lang === 'en') return en ?? ja;
+  if (KANJI_LANGS.has(lang)) return i18n[lang] ?? ja ?? en;
+  return i18n[lang] ?? en ?? ja;
+}
+
+export function quakeLocation(item: QuakeItem, lang: SignageLanguage): string | null {
+  return pickEpicenter(lang, item.locationJa, item.locationI18n, item.locationI18n.en ?? null);
+}
+
 export function tsunamiEpicenter(item: TsunamiItem, lang: SignageLanguage): string | null {
-  return KANJI_LANGS.has(lang) ? item.epicenterJa ?? item.epicenterEn : item.epicenterEn ?? item.epicenterJa;
+  return pickEpicenter(lang, item.epicenterJa, item.epicenterI18n, item.epicenterEn ?? item.epicenterI18n.en ?? null);
 }
 
 /** QR の origin。NEXT_PUBLIC_SITE_URL（http/https のみ）を優先し、無ければ開いているページの origin */
