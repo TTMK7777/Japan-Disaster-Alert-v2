@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { SupportedLanguage } from '@/i18n/types';
-import { getLocale } from '@/i18n/translations';
+import { getLocale, getTranslation } from '@/i18n/translations';
 import type { ConversationCategory, ConversationPhrase } from '@/data/conversationPhrases';
 import { conversationUiText, type ConversationUiKey } from '@/data/conversationUiText';
 import {
@@ -25,6 +25,9 @@ import SpeakControls from './conversation/SpeakControls';
  *   日本語（大）→ 訪日客の言語 → 英語 の 3 段で出る
  * - 「スタッフの返事」: スタッフがスタッフ→訪日客の文を選ぶと、訪日客の言語＋英語で大きく出る。
  *   そのあと訪日客は はい／いいえ／わかりません で返せる
+ *
+ * 訳は確認中（母語話者の確認前に組み込む。2026-10-22 ユーザー決定）。そのため文には必ず英語を添え、
+ * 上部に「翻訳は確認中」の注記を出す。
  *
  * データは同梱（外部通信なし）。読み上げは端末に音声があるときだけの補助。
  * 文言の役割: 訪日客向けの文言は「利用者の言語（大）＋日本語」、スタッフ向けは「日本語（大）＋利用者の言語」。
@@ -56,6 +59,7 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
   const ui = (key: ConversationUiKey) => conversationUiText(language, key);
   const userLocale = getLocale(language);
   const jaLocale = getLocale('ja');
+  const enLocale = getLocale('en');
 
   /** 訪日客向け: 利用者の言語が主、日本語を添える */
   const forVisitor = (key: ConversationUiKey): DualTextProps => ({
@@ -106,6 +110,16 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
 
   return (
     <div className="bg-gray-50 text-gray-900">
+      {/* 訳は母語話者の確認前。利用者の言語＋日本語（スタッフにも分かるように） */}
+      <p data-testid="conv-review-note" className="mb-3 text-xs text-gray-700">
+        <DualText
+          primary={getTranslation(language, 'conversation.reviewNote')}
+          primaryLang={userLocale}
+          secondary={getTranslation('ja', 'conversation.reviewNote')}
+          secondaryLang={jaLocale}
+          secondaryClassName="block"
+        />
+      </p>
       <div className="mb-4 grid grid-cols-2 gap-2" role="group">
         <ModeButton testId="conv-mode-visitor" active={mode === 'visitor'} onClick={goVisitor}>
           <DualText {...forVisitor('modeVisitor')} primaryClassName="block text-base font-bold" secondaryClassName="block text-xs" />
@@ -158,8 +172,11 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
                       primaryLang={userLocale}
                       secondary={p.text.ja}
                       secondaryLang={jaLocale}
+                      tertiary={p.text.en}
+                      tertiaryLang={enLocale}
                       primaryClassName="block text-xl font-bold text-gray-900"
                       secondaryClassName="block text-base text-gray-700"
+                      tertiaryClassName="block text-base text-gray-700"
                     />
                   </button>
                 </li>
@@ -184,9 +201,14 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
               <p lang={jaLocale} className="text-2xl font-bold text-gray-900">
                 {lastVisitorPhrase.text.ja}
               </p>
-              {language !== 'ja' && (
+              {lastVisitorPhrase.text[language] !== lastVisitorPhrase.text.ja && (
                 <p lang={userLocale} className="text-base text-gray-700">
                   {lastVisitorPhrase.text[language]}
+                </p>
+              )}
+              {language !== 'en' && lastVisitorPhrase.text.en !== lastVisitorPhrase.text.ja && (
+                <p lang={enLocale} className="text-base text-gray-700">
+                  {lastVisitorPhrase.text.en}
                 </p>
               )}
             </div>
@@ -204,10 +226,13 @@ export default function ConversationCards({ language }: ConversationCardsProps) 
                   <DualText
                     primary={p.text.ja}
                     primaryLang={jaLocale}
-                    secondary={language === 'ja' ? p.text.en : p.text[language]}
-                    secondaryLang={language === 'ja' ? getLocale('en') : userLocale}
+                    secondary={p.text[language]}
+                    secondaryLang={userLocale}
+                    tertiary={p.text.en}
+                    tertiaryLang={enLocale}
                     primaryClassName="block text-xl font-bold text-gray-900"
                     secondaryClassName="block text-base text-gray-700"
+                    tertiaryClassName="block text-base text-gray-700"
                   />
                   <span aria-hidden="true" className="ml-auto text-2xl font-bold">›</span>
                 </button>
@@ -450,6 +475,8 @@ function StaffReply({
                 primaryLang={getLocale(language)}
                 secondary={p.text.ja}
                 secondaryLang={getLocale('ja')}
+                tertiary={p.text.en}
+                tertiaryLang={getLocale('en')}
                 primaryClassName="block text-lg font-bold"
               />
             </button>

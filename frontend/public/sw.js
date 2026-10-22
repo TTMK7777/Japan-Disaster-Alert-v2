@@ -7,7 +7,8 @@
 // v3: オフライン画面に「このアプリが扱う範囲（避難指示・避難所は扱わない）」を追加
 // v6: API のキャッシュに保存時刻（X-SW-Cached-At）を付けた。保存時刻の無い旧キャッシュを捨てる
 // v7: オフライン画面の緊急連絡に 171・#7119・医療機関検索・駐日公館・web171 と説明を追加（B11）。医療機関検索の URL は表示言語別
-const CACHE_NAME = 'disaster-alert-v7';
+// v8: install 時に / が読み込む JS / CSS もキャッシュする（会話タブを電波なしで開くため。B10b）
+const CACHE_NAME = 'disaster-alert-v8';
 
 // 通信失敗時に API のキャッシュを返すときの印（frontend/src/lib/fetchFailure.ts と同じ名前）。
 // 印が無いと、画面はキャッシュの古い JSON を「今取れた」と受け取り、
@@ -60,13 +61,51 @@ const CACHE_STRATEGIES = {
   ],
 };
 
+// install 時に、この HTML が読み込む Next.js の資源（/_next/static の JS / CSS）もキャッシュするページ。
+// 資源の名前はビルドごとにハッシュが変わるので sw.js には書けない。キャッシュした HTML から拾う。
+// 以前は初回訪問の資源（SW が制御を取る前に読み込んだもの）が一つもキャッシュされず、
+// 電波を切って開き直すと HTML だけが出てタブが動かなかった（会話カードの文も JS の中にある）
+const PRECACHE_PAGES = ['/'];
+
+// HTML の script / link と、RSC の flight データ（"static/chunks/..."）の両方を拾う。
+// 直前が引用符のものだけ（https://別オリジン/_next/... は拾わない）
+const NEXT_STATIC_ASSET_PATTERN = /["'](?:\/_next\/)?(static\/(?:chunks|css|media)\/[^"'\s\\?#]+?\.(?:js|css|woff2?))/g;
+
+/** HTML の本文から /_next/static の資源のパスを重複なしで取り出す */
+function extractNextStaticAssets(html) {
+  const found = new Set();
+  for (const match of html.matchAll(NEXT_STATIC_ASSET_PATTERN)) {
+    found.add('/_next/' + match[1]);
+  }
+  return [...found];
+}
+
+/**
+ * PRECACHE_PAGES の HTML が読み込む資源をキャッシュする。
+ * **1 件ずつ・失敗は無視する。** addAll にすると 1 件の 404 で install ごと失敗し、
+ * オフライン画面（offline.html）まで入らなくなる
+ */
+async function precachePageAssets(cache) {
+  for (const page of PRECACHE_PAGES) {
+    const response = await cache.match(page);
+    if (!response) continue;
+    const assets = extractNextStaticAssets(await response.clone().text());
+    await Promise.all(
+      assets.map((asset) =>
+        cache.add(asset).catch((error) => console.log('[SW] Precache skipped:', asset, error))
+      )
+    );
+  }
+}
+
 // Service Worker インストール
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing Service Worker...');
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[SW] Caching static assets');
-      return cache.addAll(STATIC_ASSETS);
+      await cache.addAll(STATIC_ASSETS);
+      await precachePageAssets(cache);
     })
   );
   // 即座にアクティベート
