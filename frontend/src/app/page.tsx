@@ -93,7 +93,7 @@ const ShelterMap = dynamic(() => import('@/components/ShelterMap'), {
 
 import type { Earthquake } from '@/types/earthquake';
 import { API_BASE_URL } from '@/config/api';
-import { createTimedAbort, classifyFetchError, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
+import { createTimedAbort, classifyFetchError, readSwCache, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
 
 type TabType = 'earthquake' | 'warning' | 'emergency' | 'shelter';
 type EarthquakeViewType = 'list' | 'map';
@@ -238,6 +238,8 @@ export default function Home() {
         { signal: request.signal }
       );
       if (!response.ok) throw new Error(`Server error ${response.status}`);
+      // SW がキャッシュから返した応答は「今取れた」ものではない（B4b）。失敗として扱い、前の表示を保つ
+      if (readSwCache(response).fromCache) throw new Error('served from service worker cache');
       const data = await response.json();
       if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
       if (!Array.isArray(data)) throw new Error('Unexpected earthquakes payload');
@@ -391,6 +393,7 @@ export default function Home() {
         <FreshnessStatus
           language={language}
           lastSuccessAt={eventStream.lastSuccessAt}
+          savedAt={eventStream.savedAt}
           lastFailed={eventStream.lastFailed}
           refreshing={eventStream.refreshing}
           onRefresh={eventStream.refresh}

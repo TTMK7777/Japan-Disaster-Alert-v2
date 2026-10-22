@@ -3,8 +3,14 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { EarthquakeIcon, TsunamiIcon, AlertIcon } from './icons/DisasterIcons';
-import { getLocale } from '@/i18n/translations';
+import { getLocale, getTranslation } from '@/i18n/translations';
 import { API_BASE_URL } from '@/config/api';
+import {
+  createTimedAbort,
+  classifyFetchError,
+  readSwCache,
+  type FailureReason,
+} from '@/lib/fetchFailure';
 import {
   selectAlert,
   shouldDisplay,
@@ -30,6 +36,18 @@ interface AlertData {
   action: Record<string, string>;
   timestamp: Date;
   expires?: Date;
+}
+
+/** 津波の初回取得の期限。超えたら「確認できない」の帯を出す（以前は期限が無く、返ってこない間は無表示だった） */
+export const TSUNAMI_FETCH_TIMEOUT_MS = 10000;
+
+/**
+ * 気象庁の津波警報・注意報の地図（公式）。やさしい日本語・日本語以外は英語表示にする。
+ * 圏外ではリンク自体が開かないので、帯の本文（高い所へ）だけで行動できるようにしてある
+ */
+export function jmaTsunamiUrl(language: string): string {
+  const base = 'https://www.jma.go.jp/bosai/map.html#contents=tsunami';
+  return language === 'ja' || language === 'easy_ja' ? base : `${base}&lang=en`;
 }
 
 // （旧）デモ用の空配列はここにあった。fetch も SSE も無く、この配列が空のため
@@ -323,24 +341,70 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
   // 初回に自分で取りに行った分。SSE は**変化があったときしか配信しない**ため、
   // 既に津波警報が出ている最中に開いた人には何も届かない。そこを埋める
   const [fetchedTsunamis, setFetchedTsunamis] = useState<TsunamiLike[]>([]);
+  // 初回取得が失敗・期限超過したか（B4b）。SSE・ポーリングで津波の状態が届くまで帯を出す。
+  // 取れないことを「津波なし」と同じ無表示にしない
+  const [initialFailure, setInitialFailure] = useState<FailureReason | null>(null);
   // 閉じた警報。SSE が10秒ごとに来るので、抑制しないと閉じた直後に再表示されて
   // 画面を操作できなくなる。鍵にレベルを含めてあるので**引き上げは貫通する**
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set());
 
   useEffect(() => {
     let cancelled = false;
+    const request = createTimedAbort(TSUNAMI_FETCH_TIMEOUT_MS);
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/tsunami/active`);
-        if (!res.ok) return;
+        const res = await fetch(`${API_BASE_URL}/api/v1/tsunami/active`, { signal: request.signal });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        // SW がキャッシュから返した応答は「今の確認」ではない（古い [] で津波なしと断定しない）
+        if (readSwCache(res).fromCache) throw new Error('served from service worker cache');
         const data = await res.json();
-        if (!cancelled && Array.isArray(data)) setFetchedTsunamis(data);
-      } catch {
-        // 取れなくても画面は壊さない。以降は SSE 側の更新に委ねる
+        if (!Array.isArray(data)) throw new Error('Unexpected tsunami payload');
+        if (!cancelled) setFetchedTsunamis(data);
+      } catch (err) {
+        // アンマウントによる中断は表示しない。期限超過・非 200・通信エラー・壊れた本文は帯を出す。
+        // 表示中の警報（fetchedTsunamis）は消さない
+        const reason = classifyFetchError(request, err);
+        if (cancelled || reason === null) return;
+        console.error('Failed to fetch active tsunamis:', err);
+        setInitialFailure(reason);
+      } finally {
+        request.clear();
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      request.abort();
+      request.clear();
+    };
   }, []);
+
+  // SSE・ポーリングで津波の状態が届いていれば（props が配列）確認できている
+  const showUnconfirmed = initialFailure !== null && tsunamis === undefined;
+  const unconfirmedBand = showUnconfirmed ? (
+    <div
+      role="alert"
+      data-testid="tsunami-unconfirmed"
+      data-reason={initialFailure}
+      className="border-b-2 border-amber-500 bg-amber-50 dark:bg-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-gray-100"
+    >
+      <div className="container mx-auto flex flex-wrap items-start gap-x-3 gap-y-1">
+        <p className="font-semibold min-w-0 flex-1 [overflow-wrap:anywhere]">
+          <span aria-hidden="true">&#x26A0;&#xFE0F; </span>
+          {initialFailure === 'timeout' && <>{getTranslation(language, 'status.timedOut')} </>}
+          {getTranslation(language, 'tsunami.unconfirmed')}
+        </p>
+        <a
+          href={jmaTsunamiUrl(language)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-semibold text-blue-800 dark:text-blue-300 underline min-h-[44px] inline-flex items-center"
+        >
+          {getTranslation(language, 'tsunami.officialLink')}
+          <span aria-hidden="true">&nbsp;&#x2197;</span>
+        </a>
+      </div>
+    </div>
+  ) : null;
 
   // props（SSE）が来ていればそれを、無ければ初回取得分を使う
   const effectiveTsunamis = tsunamis ?? fetchedTsunamis;
@@ -452,6 +516,8 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
   if (!activeAlert || !isVisible) {
     // テスト用ボタン（開発時のみ表示）
     return process.env.NODE_ENV === 'development' ? (
+      <>
+      {unconfirmedBand}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
         <button
           onClick={() => triggerTestAlert('earthquake', 'emergency')}
@@ -466,7 +532,8 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
           Test: Tsunami Warning
         </button>
       </div>
-    ) : null;
+      </>
+    ) : unconfirmedBand;
   }
 
   const style = alertStyles[activeAlert.level];
@@ -474,6 +541,8 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
     translations[key][language as keyof typeof translations[typeof key]] || translations[key].en;
 
   return (
+    <>
+    {unconfirmedBand}
     <div
       ref={dialogRef}
       tabIndex={-1}
@@ -555,5 +624,6 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
         </div>
       </div>
     </div>
+    </>
   );
 }
