@@ -2,7 +2,7 @@
 
 import { getTranslation } from '@/i18n/translations';
 import {
-  EMERGENCY_LINKS,
+  emergencyLinkUrl,
   EMERGENCY_PHONE_NUMBERS,
   LINK_ORDER,
   LINK_TEXT_KEYS,
@@ -482,7 +482,8 @@ function GlobeIcon({ className = '' }: { className?: string }) {
 export default function EmergencyContacts({ language }: EmergencyContactsProps) {
   // 言語データを取得（未対応言語はenにフォールバック）
   const data = contactsData[language] || contactsData.en;
-  const t = (key: string) => getTranslation(contactsData[language] ? language : 'en', key);
+  const effectiveLanguage = contactsData[language] ? language : 'en';
+  const t = (key: string) => getTranslation(effectiveLanguage, key);
   /** 名前・説明・注記: contactsData に無いものは translations.ts（PHONE_TEXT_KEYS）から */
   const phoneText = (contact: PhoneContactText) => {
     const keys = PHONE_TEXT_KEYS[contact.id] ?? {};
@@ -566,7 +567,7 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
                   </span>
                   <div className="flex-1 min-w-0">
                     <a
-                      href={EMERGENCY_LINKS[id]}
+                      href={emergencyLinkUrl(id, effectiveLanguage)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center min-h-[44px] font-bold text-blue-700 dark:text-blue-300 underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"

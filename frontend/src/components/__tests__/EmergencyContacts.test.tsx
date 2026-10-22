@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import EmergencyContacts from '../EmergencyContacts';
 import { getTranslation } from '@/i18n/translations';
-import { EMERGENCY_LINKS } from '@/lib/emergencyContacts';
+import { emergencyLinkUrl } from '@/lib/emergencyContacts';
 
 describe('EmergencyContacts', () => {
   // 日本語での緊急連絡先表示テスト
@@ -149,10 +149,10 @@ describe('EmergencyContacts', () => {
   it('JNTO 医療機関検索・駐日公館一覧・#7119 地域一覧・web171 が名前と用途つきのリンクで出る', () => {
     render(<EmergencyContacts language="ja" />);
     const cases: [string, string, string][] = [
-      ['emergency.medicalSearch.name', 'emergency.medicalSearch.description', EMERGENCY_LINKS.medicalSearch],
-      ['emergency.embassy.name', 'emergency.embassy.description', EMERGENCY_LINKS.embassy],
-      ['emergency.consultation7119.name', 'emergency.consultation7119.description', EMERGENCY_LINKS.consultation7119],
-      ['emergency.web171.name', 'emergency.web171.description', EMERGENCY_LINKS.web171],
+      ['emergency.medicalSearch.name', 'emergency.medicalSearch.description', emergencyLinkUrl('medicalSearch', 'ja')],
+      ['emergency.embassy.name', 'emergency.embassy.description', emergencyLinkUrl('embassy', 'ja')],
+      ['emergency.consultation7119.name', 'emergency.consultation7119.description', emergencyLinkUrl('consultation7119', 'ja')],
+      ['emergency.web171.name', 'emergency.web171.description', emergencyLinkUrl('web171', 'ja')],
     ];
     for (const [nameKey, descKey, url] of cases) {
       const link = screen.getByRole('link', { name: new RegExp(getTranslation('ja', nameKey)) });

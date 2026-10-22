@@ -11,7 +11,7 @@ import { createElement } from 'react';
 import { render, cleanup } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import EmergencyContacts, { contactsData } from '@/components/EmergencyContacts';
-import { EMERGENCY_LINKS, EMERGENCY_PHONE_NUMBERS } from '@/lib/emergencyContacts';
+import { EMERGENCY_PHONE_NUMBERS, LINK_ORDER, emergencyLinkUrl } from '@/lib/emergencyContacts';
 import { LANGUAGES, translations } from '@/i18n/translations';
 
 const OFFLINE_HTML = readFileSync(join(process.cwd(), 'public', 'offline.html'), 'utf-8');
@@ -19,7 +19,9 @@ const OFFLINE_JS = readFileSync(join(process.cwd(), 'public', 'offline.js'), 'ut
 const SW_JS = readFileSync(join(process.cwd(), 'public', 'sw.js'), 'utf-8');
 
 const SOURCE_NUMBERS = Object.values(EMERGENCY_PHONE_NUMBERS).slice().sort();
-const SOURCE_URLS = Object.values(EMERGENCY_LINKS).slice().sort();
+/** 表示言語ごとの公式 URL の集合（医療機関検索だけ言語別） */
+const sourceUrls = (code: string) => LINK_ORDER.map((id) => emergencyLinkUrl(id, code)).sort();
+const JNTO = 'https://www.jnto.go.jp/emergency';
 
 /** offline.js の T のフィールド名 → translations.ts のキー */
 const OFFLINE_FIELD_KEYS: Record<string, string> = {
@@ -123,7 +125,7 @@ describe('公式 URL: 本体 = 正本 = offline.html', () => {
   it.each(LANGUAGES.map((l) => [l.code]))('%s: 本体の外部リンクの集合が正本と一致し、新しいタブ＋noopener noreferrer', (code) => {
     const { container } = render(createElement(EmergencyContacts, { language: code }));
     const anchors = [...container.querySelectorAll('a[href^="http"]')];
-    expect(anchors.map((a) => a.getAttribute('href')).sort()).toEqual(SOURCE_URLS);
+    expect(anchors.map((a) => a.getAttribute('href')).sort()).toEqual(sourceUrls(code));
     for (const a of anchors) {
       expect(a.getAttribute('target')).toBe('_blank');
       const rel = (a.getAttribute('rel') ?? '').split(/\s+/);
@@ -131,9 +133,28 @@ describe('公式 URL: 本体 = 正本 = offline.html', () => {
     }
   });
 
-  it('offline.html は URL を文字で載せる（リンクにしない）。集合が正本と一致する', () => {
-    const urls = [...OFFLINE_HTML.matchAll(/<span class="url">([^<]+)<\/span>/g)].map((m) => m[1].trim());
-    expect(urls.sort()).toEqual(SOURCE_URLS);
+  it('offline.html は URL を文字で載せる（リンクにしない）。JS 無しの静的文は英語版の集合と一致する', () => {
+    const urls = [...OFFLINE_HTML.matchAll(/<span class="url"[^>]*>([^<]+)<\/span>/g)].map((m) => m[1].trim());
+    expect(urls.sort()).toEqual(sourceUrls('en'));
+  });
+
+  it.each([
+    ['ja', `${JNTO}/jpn/mi_guide.html`],
+    ['easy_ja', `${JNTO}/jpn/mi_guide.html`],
+    ['zh', `${JNTO}/chs/mi_guide.html`],
+    ['zh-TW', `${JNTO}/chc/mi_guide.html`],
+    ['ko', `${JNTO}/kor/mi_guide.html`],
+    ['en', `${JNTO}/eng/mi_guide.html`],
+    ['th', `${JNTO}/eng/mi_guide.html`],
+    ['es', `${JNTO}/eng/mi_guide.html`],
+    ['xx', `${JNTO}/eng/mi_guide.html`],
+  ])('JNTO 医療機関検索は表示言語の版へ: %s', (code, url) => {
+    expect(emergencyLinkUrl('medicalSearch', code)).toBe(url);
+  });
+
+  it.each(LANGUAGES.map((l) => [l.code]))('%s: offline.js の医療機関検索 URL が本体と同じ', (code) => {
+    const chunk = offlineChunks()[code];
+    expect(chunk).toContain(`medicalSearchUrl: ${JSON.stringify(emergencyLinkUrl('medicalSearch', code))}`);
   });
 });
 
@@ -165,12 +186,13 @@ describe('名前・説明: 本体 = offline.js（16 言語）', () => {
     }
   });
 
-  it.each([['th'], ['easy_ja'], ['ja']])('%s: offline.js を実行すると全要素が差し替わる', (code) => {
+  it.each([['th'], ['easy_ja'], ['ja'], ['zh-TW']])('%s: offline.js を実行すると全要素が差し替わる', (code) => {
     bootOfflinePage(code);
     const expected = expectedOfflineFields(code);
     for (const [id, field] of Object.entries(OFFLINE_ELEMENT_FIELDS)) {
       expect(document.getElementById(id)?.textContent, id).toBe(expected[field]);
     }
+    expect(document.getElementById('url-medicalSearch')?.textContent).toBe(emergencyLinkUrl('medicalSearch', code));
   });
 });
 
