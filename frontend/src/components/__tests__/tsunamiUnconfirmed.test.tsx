@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import EmergencyAlert, { TSUNAMI_FETCH_TIMEOUT_MS, jmaTsunamiUrl } from '../EmergencyAlert';
-import { getTranslation } from '@/i18n/translations';
+import { LANGUAGES, getTranslation } from '@/i18n/translations';
 import { SW_CACHE_HEADER, SW_CACHED_AT_HEADER } from '@/lib/fetchFailure';
 
 /**
@@ -70,7 +70,8 @@ describe('津波の初回取得が失敗したら「津波なし」と同じ無�
     expect(el).toHaveTextContent(getTranslation('ja', 'tsunami.unconfirmed'));
     const link = screen.getByRole('link', { name: new RegExp(getTranslation('ja', 'tsunami.officialLink')) });
     expect(link).toHaveAttribute('href', jmaTsunamiUrl('ja'));
-    expect(link.getAttribute('href')).toContain('jma.go.jp/bosai/map.html#contents=tsunami');
+    // 気象庁 contents.json の id=tsunami の url（表示種別 elem=warn まで明示）
+    expect(link.getAttribute('href')).toBe('https://www.jma.go.jp/bosai/map.html#contents=tsunami&elem=warn');
     // 全画面の警報（alertdialog）は出さない（警報があると断定もしない）
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
@@ -159,5 +160,15 @@ describe('取れたときは帯を出さない', () => {
     await flush();
     expect(screen.getByRole('alertdialog')).toBeInTheDocument();
     expect(band()).toBeNull();
+  });
+});
+
+describe('気象庁の津波リンクは公式メニュー定義どおり（B4b）', () => {
+  // 根拠: https://www.jma.go.jp/bosai/common/const/contents.json の id=tsunami
+  //   url = map.html#contents=tsunami&elem=warn / enUrl = その末尾に &lang=en
+  const BASE = 'https://www.jma.go.jp/bosai/map.html#contents=tsunami&elem=warn';
+  it.each(LANGUAGES.map((l) => [l.code]))('%s', (code) => {
+    const expected = code === 'ja' || code === 'easy_ja' ? BASE : `${BASE}&lang=en`;
+    expect(jmaTsunamiUrl(code)).toBe(expected);
   });
 });
