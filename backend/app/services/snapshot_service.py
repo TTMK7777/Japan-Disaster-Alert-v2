@@ -34,8 +34,10 @@ from ..snapshot_models import (
     VolcanoWarningItem,
     VolcanoWarningsDataset,
 )
+from ..models import ALLOWED_LANGUAGES
 from ..utils.logger import get_logger
 from .p2p_service import P2PQuakeService
+from .translator import translate_location_static
 from .tsunami_service import ActiveTsunamiReport, select_active_tsunami_reports
 
 logger = get_logger(__name__)
@@ -197,13 +199,35 @@ def _known_number(value, *, minimum: float):
     return value
 
 
+#: 震源地名の訳を持つ言語（ja は location_ja / epicenter_ja があるので持たない）
+_I18N_LANGS: tuple[str, ...] = tuple(sorted(ALLOWED_LANGUAGES - {"ja"}))
+
+
+def location_i18n(location_ja: Optional[str]) -> dict[str, str]:
+    """震源地名の言語別の訳。地震一覧 API の location_translated と同じ静的な訳を使う。
+
+    AI 翻訳・キャッシュは使わない（毎分作るスナップショットに費用と遅延を載せない）。
+    訳せない言語と、日本語のまま返った言語はキーを省く。
+    """
+    if not location_ja:
+        return {}
+    result: dict[str, str] = {}
+    for lang in _I18N_LANGS:
+        translated = translate_location_static(location_ja, lang)
+        if translated and translated != location_ja:
+            result[lang] = translated
+    return result
+
+
 def earthquake_item(eq) -> EarthquakeItem:
     pending = eq.location == P2PQuakeService.UNDETERMINED_LOCATION
     intensity = None if eq.max_intensity == "不明" else eq.max_intensity
+    location_ja = None if pending or not eq.location else eq.location
     return EarthquakeItem(
         id=eq.id,
         occurred_at=_p2p_time(eq.time),
-        location_ja=None if pending or not eq.location else eq.location,
+        location_ja=location_ja,
+        location_i18n=location_i18n(location_ja),
         magnitude=_known_number(eq.magnitude, minimum=0),
         depth_km=_known_number(eq.depth, minimum=0),
         max_intensity=intensity,
@@ -220,6 +244,7 @@ def _optional_str(value) -> Optional[str]:
 
 def tsunami_item(active: ActiveTsunamiReport) -> TsunamiItem:
     report = active.report
+    epicenter_ja = _optional_str(report.get("anm"))
     return TsunamiItem(
         event_id=str(report.get("eid") or ""),
         report_id=str(report.get("ctt") or ""),
@@ -227,8 +252,9 @@ def tsunami_item(active: ActiveTsunamiReport) -> TsunamiItem:
         info_type=_optional_str(report.get("ift")),
         warning_level=active.level,
         earthquake_time=_optional_str(report.get("at")),
-        epicenter_ja=_optional_str(report.get("anm")),
+        epicenter_ja=epicenter_ja,
         epicenter_en=_optional_str(report.get("en_anm")),
+        epicenter_i18n=location_i18n(epicenter_ja),
         magnitude=_optional_str(report.get("mag")),
         areas=[TsunamiArea(code=a.code, kind_ja=a.kind_ja, level=a.level) for a in active.areas],
     )

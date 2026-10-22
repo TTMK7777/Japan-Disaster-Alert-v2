@@ -86,7 +86,7 @@ class TestStatus:
             assert ds.items is not None
         assert len(snap.datasets.earthquakes.items) == 1
         assert snap.generated_at == T0
-        assert snap.schema_version == "1.0"
+        assert snap.schema_version == "1.1"
 
     @pytest.mark.asyncio
     async def test_1つ失敗しても他は成功のまま(self):

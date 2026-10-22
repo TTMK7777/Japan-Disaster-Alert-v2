@@ -38,6 +38,27 @@ UNDETERMINED = -1
 logger = get_logger(__name__)
 
 
+def translate_location_static(location: str, target_lang: str) -> Optional[str]:
+    """震源地名を外部呼び出しなしで訳す。訳せなければ None。
+
+    `TranslatorService.translate_location` の 1〜1.5 段目そのもの（AI・キャッシュの前段）。
+    表示用スナップショット（毎分作る）もこれを使い、地震一覧 API と同じ訳を出す。
+    """
+    # 1. 静的マッピング（手で訳した 82 件。常にこれが最優先）
+    static_translation = get_location_translation(location, target_lang)
+    if static_translation:
+        return static_translation
+
+    # 1.5 形態から組み立てる。
+    # 静的辞書は完全名の丸暗記なので、気象庁の震源地名 400 種余りに対して
+    # ユニークベースで 44.8% が未収録だった（実データ 317 レポートで実測）。
+    # 決定的で費用もかからないので、キャッシュや AI より先に試す。
+    composed = compose_location(location, target_lang)
+    if composed:
+        return composed
+    return None
+
+
 class TranslatorService:
     """ハイブリッド翻訳サービス（ファサード）"""
 
@@ -87,18 +108,10 @@ class TranslatorService:
         if target_lang == "ja":
             return location
 
-        # 1. 静的マッピングを試行（手で訳した 82 件。常にこれが最優先）
-        static_translation = get_location_translation(location, target_lang)
+        # 1〜1.5. 静的な訳（手訳 82 件 → 形態からの組み立て）
+        static_translation = translate_location_static(location, target_lang)
         if static_translation:
             return static_translation
-
-        # 1.5 形態から組み立てる。
-        # 静的辞書は完全名の丸暗記なので、気象庁の震源地名 400 種余りに対して
-        # ユニークベースで 44.8% が未収録だった（実データ 317 レポートで実測）。
-        # 決定的で費用もかからないので、キャッシュや AI より先に試す。
-        composed = compose_location(location, target_lang)
-        if composed:
-            return composed
 
         # 2. キャッシュを確認
         cache_key = self._cache.make_key(location, target_lang)

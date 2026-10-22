@@ -43,6 +43,14 @@
           "description": "震源地名（気象庁の日本語名）。調査中は null",
           "title": "Location Ja"
         },
+        "location_i18n": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "震源地名の訳（キーは言語コード: en / zh / zh-TW / ko / vi / th / id / ms / tl / fr / de / it / es / ne / easy_ja）。地震一覧 API の location_translated と同じ静的な訳。訳の無い言語はキーを省く。ja は持たない。location_ja が null なら空",
+          "title": "Location I18N",
+          "type": "object"
+        },
         "magnitude": {
           "anyOf": [
             {
@@ -434,7 +442,16 @@
               "type": "null"
             }
           ],
+          "description": "上流（気象庁）の英語の震源名",
           "title": "Epicenter En"
+        },
+        "epicenter_i18n": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "震源地名の訳（キーは言語コード: en / zh / zh-TW / ko / vi / th / id / ms / tl / fr / de / it / es / ne / easy_ja）。地震一覧 API の location_translated と同じ静的な訳。訳の無い言語はキーを省く。ja は持たない。epicenter_ja から作る。epicenter_ja が null なら空",
+          "title": "Epicenter I18N",
+          "type": "object"
         },
         "magnitude": {
           "anyOf": [
@@ -626,8 +643,11 @@
   "description": "表示用データを 1 つにまとめたもの。気象警報（府県予報区 58 件）は含まない。",
   "properties": {
     "schema_version": {
-      "const": "1.0",
-      "default": "1.0",
+      "default": "1.1",
+      "enum": [
+        "1.0",
+        "1.1"
+      ],
       "title": "Schema Version",
       "type": "string"
     },
