@@ -125,6 +125,9 @@ export const translations: Record<string, Record<string, string>> = {
     'warning.selectArea': '地域を選択',
     // tsunami keys
     'tsunami.findShelter': '避難所を探す',
+    // 津波の初回取得ができないときの帯（B4b。components/EmergencyAlert.tsx）。13 言語は未訳（en に落ちる）
+    'tsunami.unconfirmed': '津波情報を確認できません。海の近くにいて強い揺れを感じたら、すぐ高い所へ逃げてください。',
+    'tsunami.officialLink': '気象庁の津波警報・注意報を見る',
     'install.title': 'アプリをインストール',
     'install.iosGuide': '共有ボタン→「ホーム画面に追加」をタップ',
     'install.install': 'インストール',
@@ -154,6 +157,7 @@ export const translations: Record<string, Record<string, string>> = {
     'freshness.refresh': '今すぐ更新',
     'freshness.refreshing': '更新中…',
     'freshness.nextUpdate': '次の自動更新',
+    'freshness.savedData': '保存済みのデータ（{time}）',
   },
   en: {
     title: 'Disaster AI',
@@ -239,6 +243,8 @@ export const translations: Record<string, Record<string, string>> = {
     'warning.advisory': 'Advisory',
     'warning.selectArea': 'Select Area',
     'tsunami.findShelter': 'Find Shelter',
+    'tsunami.unconfirmed': 'Tsunami information cannot be confirmed. If you are near the sea and feel strong shaking, move to high ground immediately.',
+    'tsunami.officialLink': 'Check tsunami warnings from JMA (official)',
     'install.title': 'Install App',
     'install.iosGuide': 'Tap Share → Add to Home Screen',
     'install.install': 'Install',
@@ -268,6 +274,7 @@ export const translations: Record<string, Record<string, string>> = {
     'freshness.refresh': 'Update now',
     'freshness.refreshing': 'Updating…',
     'freshness.nextUpdate': 'Next auto update',
+    'freshness.savedData': 'Saved data ({time})',
   },
   zh: {
     title: '灾害应对AI',
@@ -1835,6 +1842,8 @@ export const translations: Record<string, Record<string, string>> = {
     'warning.advisory': 'ちゅういほう',
     'warning.selectArea': 'ちいきを えらぶ',
     'tsunami.findShelter': 'ひなんじょを さがす',
+    'tsunami.unconfirmed': 'つなみの じょうほうが わかりません。うみの ちかくで つよく ゆれたら、すぐ たかい ところへ にげて ください。',
+    'tsunami.officialLink': 'きしょうちょうの つなみの じょうほうを みる',
     'install.title': 'アプリを いれる',
     'install.iosGuide': 'きょうゆうボタン→「ホーム画面に追加」をおす',
     'install.install': 'いれる',
@@ -1864,6 +1873,7 @@ export const translations: Record<string, Record<string, string>> = {
     'freshness.refresh': 'いま あたらしく する',
     'freshness.refreshing': 'あたらしく して います…',
     'freshness.nextUpdate': 'つぎに あたらしく する じかん',
+    'freshness.savedData': 'まえに ほぞんした じょうほう（{time}）',
   },
 };
 

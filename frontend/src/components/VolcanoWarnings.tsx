@@ -13,7 +13,7 @@ import {
   continuingBadgeClassName,
 } from '@/lib/warningSeverity';
 import FetchFailureNotice from '@/components/FetchFailureNotice';
-import { createTimedAbort, classifyFetchError, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
+import { createTimedAbort, classifyFetchError, readSwCache, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
 
 /**
  * 発表中の噴火警報。
@@ -84,6 +84,8 @@ export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
         { signal: request.signal }
       );
       if (!response.ok) throw new Error(String(response.status));
+      // SW がキャッシュから返した応答は「今取れた」ものではない（B4b）。失敗として扱い、前の表示を保つ
+      if (readSwCache(response).fromCache) throw new Error('served from service worker cache');
       const data = await response.json();
       if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
       // 配列でない本文を「噴火警報なし」にしない

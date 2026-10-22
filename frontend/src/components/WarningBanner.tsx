@@ -11,6 +11,7 @@ import {
   createTimedAbort,
   classifyFetchError,
   parseFailedAreas,
+  readSwCache,
   type FailureReason,
   type TimedAbort,
 } from '@/lib/fetchFailure';
@@ -192,6 +193,8 @@ export default function WarningBanner({
       if (!response.ok) {
         throw new Error(`Failed to fetch warnings: ${response.status}`);
       }
+      // SW がキャッシュから返した応答は「今取れた」ものではない（B4b）。失敗として扱い、前の表示を保つ
+      if (readSwCache(response).fromCache) throw new Error('served from service worker cache');
 
       const data = await response.json();
       if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');

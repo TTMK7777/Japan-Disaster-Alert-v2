@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { hasActiveSpecialWarning } from '@/lib/specialWarning';
-import { parseFailedAreas } from '@/lib/fetchFailure';
+import { parseFailedAreas, readSwCache } from '@/lib/fetchFailure';
 
 /** 警報タブ（WarningBanner）と同じ 5 分間隔 */
 export const SPECIAL_WARNING_POLL_MS = 5 * 60 * 1000;
@@ -64,6 +64,8 @@ export function useSpecialWarning({ prefCode, language, paused }: Options) {
           { signal: current.signal }
         );
         if (!response.ok) throw new Error(`alerts ${response.status}`);
+        // SW のキャッシュ応答で帯の判定を変えない（失敗と同じく前回の判定を保つ。B4b）
+        if (readSwCache(response).fromCache) throw new Error('served from service worker cache');
         const data = await response.json();
         if (cancelled || current.signal.aborted) return;
         report(prefCode, data, { partial: parseFailedAreas(response).length > 0 });
