@@ -190,7 +190,9 @@ class WarningService:
         try:
             response = await self._get_client().get(url, timeout=self.timeout)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            self._check_payload_shape(payload)
+            return payload
         except (httpx.HTTPError, ValueError) as e:
             # ValueError は response.json() のデコード失敗（json.JSONDecodeError は
             # ValueError のサブクラス）。200 で壊れた本文が返る事故（切断・プロキシ
@@ -199,6 +201,45 @@ class WarningService:
             # docstring に書いた設計意図と正面から矛盾する挙動になっていた
             logger.error(f"警報情報取得エラー ({area_code}): {e}", exc_info=True)
             return None
+
+    @staticmethod
+    def _check_payload_shape(payload: object) -> None:
+        """200 でも読めない本文を「警報なし」にしない（B4b）。読めなければ ValueError。
+
+        - 本文が dict でない／`areaTypes` が無い・null・配列でない → 読めない
+        - 地域レコードが 1 件以上あるのに、**1 件も**読めない（dict で `warnings` が配列、
+          その各要素が文字列の `status` を持つ）→ 読めない。気象庁が形を変えたときに
+          全件を捨てて 0 件＝緑の「警報なし」になるのを防ぐ
+        - 一部のレコードだけ壊れているのは従来どおり `_parse_warnings` がそのレコードだけ捨てる
+        - `areaTypes: []`（地域レコード 0 件）は読めたものとして 0 件のまま扱う
+
+        実レスポンスの「発表警報・注意報はなし」は各地域の warnings に
+        `{"status": "発表警報・注意報はなし"}` が入る形で、ここを通る。
+        """
+        if not isinstance(payload, dict):
+            raise ValueError(f"警報 JSON が dict でない: {type(payload).__name__}")
+        area_types = payload.get("areaTypes")
+        if not isinstance(area_types, list):
+            raise ValueError(f"警報 JSON の areaTypes が配列でない: {type(area_types).__name__}")
+
+        def readable(area: object) -> bool:
+            if not isinstance(area, dict):
+                return False
+            warnings = area.get("warnings")
+            return isinstance(warnings, list) and all(
+                isinstance(w, dict) and isinstance(w.get("status"), str) for w in warnings
+            )
+
+        records: list[object] = []
+        for area_type in area_types:
+            areas = area_type.get("areas") if isinstance(area_type, dict) else None
+            if isinstance(areas, list):
+                records.extend(areas)
+            else:
+                # 階層そのものが読めない（dict でない・areas が配列でない）も読めないレコード 1 件
+                records.append(None)
+        if records and not any(readable(area) for area in records):
+            raise ValueError(f"警報 JSON の地域レコード {len(records)} 件がすべて読めない")
 
     @staticmethod
     def _combine_payloads(payloads: list[dict]) -> Optional[dict]:
@@ -374,44 +415,65 @@ class WarningService:
             return "watch"
 
     async def get_all_prefectures_warnings(self) -> list[DisasterAlert]:
+        """全国の警報・注意報を取得（旧契約: 取れなかった予報区は黙って抜ける）。
+
+        画面・API の経路は `fetch_all_prefectures_warnings` を使い、欠落を示す。
         """
-        全国の警報・注意報を取得
+        return (await self.fetch_all_prefectures_warnings()).alerts
+
+    async def fetch_all_prefectures_warnings(self) -> WarningFetchResult:
+        """
+        全国の警報・注意報を、**取得できなかった府県予報区と一緒に**返す。
 
         **府県予報区 58 件すべてを回る。** 以前は都道府県表（47件）を回っていたため、
         北海道の7予報区・奄美・大東島・宮古島・八重山が対象外で、
         そこで特別警報が出ても `get_special_warnings` が検出できなかった
         （＝Push通知も飛ばなかった）。
 
-        Returns:
-            list[DisasterAlert]: 全国の警報・注意報リスト
+        取れなかった予報区は `failed_offices` に入る（B4b。以前は成功分だけで集計し、
+        欠けた予報区があっても全国を確認済みに見えた）。全区失敗は UpstreamUnavailableError。
         """
-        all_alerts = []
         semaphore = asyncio.Semaphore(10)  # 同時接続制限
+        offices = list(all_forecast_offices())
 
-        async def fetch_office(area_code: str) -> list[DisasterAlert]:
+        async def fetch_office(area_code: str) -> Optional[list[DisasterAlert]]:
             async with semaphore:
                 data = await self._fetch_warning_payload(area_code)
                 if data is None:
-                    return []
+                    return None
                 return self._parse_warnings(data, area_code)
 
-        results = await asyncio.gather(
-            *(fetch_office(code) for code in all_forecast_offices())
-        )
+        results = await asyncio.gather(*(fetch_office(code) for code in offices))
+        failed = [code for code, alerts in zip(offices, results) if alerts is None]
+        if offices and len(failed) == len(offices):
+            raise UpstreamUnavailableError(
+                f"警報を取得できた予報区がない（全国 {len(offices)} 区すべて失敗）"
+            )
+        all_alerts: list[DisasterAlert] = []
         for alerts in results:
-            all_alerts.extend(alerts)
-
-        return all_alerts
+            if alerts:
+                all_alerts.extend(alerts)
+        return WarningFetchResult(alerts=all_alerts, failed_offices=failed)
 
     async def get_special_warnings(self) -> list[DisasterAlert]:
         """
-        全国の特別警報のみを取得
+        全国の特別警報のみを取得（旧契約: 失敗は黙って抜ける）
 
         Returns:
             list[DisasterAlert]: 特別警報リスト
         """
-        all_alerts = await self.get_all_prefectures_warnings()
-        return [alert for alert in all_alerts if alert.severity == "extreme"]
+        try:
+            return (await self.fetch_special_warnings()).alerts
+        except UpstreamUnavailableError:
+            return []
+
+    async def fetch_special_warnings(self) -> WarningFetchResult:
+        """全国の特別警報と、取得できなかった府県予報区。全区失敗は UpstreamUnavailableError"""
+        result = await self.fetch_all_prefectures_warnings()
+        return WarningFetchResult(
+            alerts=[alert for alert in result.alerts if alert.severity == "extreme"],
+            failed_offices=result.failed_offices,
+        )
 
     def get_area_code(self, prefecture_name: str) -> Optional[str]:
         """都道府県名から地域コードを取得"""

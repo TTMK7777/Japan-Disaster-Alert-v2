@@ -437,28 +437,45 @@ async def get_alerts(request: Request, response: Response, area_code: str = Quer
     except UpstreamUnavailableError as e:
         logger.error(f"警報の取得に失敗（503 を返す）: {e}")
         raise HTTPException(status_code=503, detail="警報情報を取得できませんでした")
-    if result.failed_offices:
-        # 一部の予報区だけ取れなかった。応答は配列のまま（既存の利用者・SW キャッシュとの互換）、
-        # 欠けた予報区をヘッダで示す。名前は表示言語の地名を UTF-8 のパーセントエンコードで
-        # （ヘッダは latin-1 しか載らない）。カンマは quote(safe="") でエンコードされるので区切りに使える
-        response.headers[FAILED_AREAS_HEADER] = ",".join(result.failed_offices)
-        response.headers[FAILED_AREA_NAMES_HEADER] = ",".join(
-            quote(resolve_area_name(code, lang, code), safe="") for code in result.failed_offices
-        )
+    _set_failed_area_headers(response, result.failed_offices, lang)
     return result.alerts
+
+
+def _set_failed_area_headers(response: Response, failed_offices: list[str], lang: str) -> None:
+    """一部の予報区だけ取れなかったことをヘッダで示す（欠けが無ければ何もしない）。
+
+    応答は配列のまま（既存の利用者・SW キャッシュとの互換）。名前は表示言語の地名を
+    UTF-8 のパーセントエンコードで（ヘッダは latin-1 しか載らない）。カンマは
+    quote(safe="") でエンコードされるので区切りに使える
+    """
+    if not failed_offices:
+        return
+    response.headers[FAILED_AREAS_HEADER] = ",".join(failed_offices)
+    response.headers[FAILED_AREA_NAMES_HEADER] = ",".join(
+        quote(resolve_area_name(code, lang, code), safe="") for code in failed_offices
+    )
 
 
 @app.get("/api/v1/warnings/special", response_model=list[DisasterAlert])
 @handle_errors
 @limiter.limit(settings.rate_limit_general)
-async def get_special_warnings(request: Request, lang: str = "ja"):
+async def get_special_warnings(request: Request, response: Response, lang: str = "ja"):
     """
     全国の特別警報を取得
 
     - **lang**: 言語コード
+
+    全予報区が取れなければ 503。一部だけ取れなければ配列はそのまま、欠けた予報区を
+    `X-Failed-Areas` / `X-Failed-Area-Names` で示す（/api/v1/alerts と同じ契約）
     """
     lang = _validate_lang(lang)
-    alerts = await warning_service.get_special_warnings()
+    try:
+        result = await warning_service.fetch_special_warnings()
+    except UpstreamUnavailableError as e:
+        logger.error(f"特別警報の取得に失敗（503 を返す）: {e}")
+        raise HTTPException(status_code=503, detail="特別警報を取得できませんでした")
+    _set_failed_area_headers(response, result.failed_offices, lang)
+    alerts = result.alerts
 
     if lang != "ja":
         for alert in alerts:
@@ -1101,7 +1118,7 @@ async def events_stream(request: Request):
     イベント種別:
     - earthquake: 地震情報の更新
     - tsunami: 津波警報の更新
-    - heartbeat: 接続維持用ハートビート（30秒間隔）
+    - heartbeat: 接続維持用ハートビート（30秒間隔）。`earthquake_ok` / `tsunami_ok` に直近の取得の成否（未取得は null）
     """
     try:
         queue = await event_manager.connect()
