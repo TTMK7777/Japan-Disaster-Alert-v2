@@ -247,6 +247,7 @@ describe('densityFlags (fitting without shrinking text)', () => {
   it('shows everything at level 0 with few bands', () => {
     expect(densityFlags(0, 2)).toEqual({
       hideSecondary: false,
+      stacked: false,
       hideDetail: false,
       maxBands: 3,
       actionOnlyFirst: false,
@@ -262,13 +263,16 @@ describe('densityFlags (fitting without shrinking text)', () => {
   it('removes less critical parts one level at a time, ending with the heading', () => {
     const at = (level: number) => densityFlags(level, 1);
     expect(at(1).hideSecondary).toBe(true);
-    expect(at(1).hideDetail).toBe(false);
-    expect(at(2).hideDetail).toBe(true);
-    expect(at(3).maxBands).toBe(0);
-    expect(at(4).actionOnlyFirst).toBe(true);
-    expect(at(4).hideQuake).toBe(false);
-    expect(at(5).hideQuake).toBe(true);
-    expect(at(5).hideHeading).toBe(false);
+    expect(at(1).stacked).toBe(false);
+    expect(at(2).stacked).toBe(true);
+    expect(at(2).hideDetail).toBe(false);
+    expect(at(3).hideDetail).toBe(true);
+    expect(at(3).maxBands).toBe(3);
+    expect(at(4).maxBands).toBe(0);
+    expect(at(5).actionOnlyFirst).toBe(true);
+    expect(at(5).hideQuake).toBe(false);
+    expect(at(6).hideQuake).toBe(true);
+    expect(at(6).hideHeading).toBe(false);
     expect(at(MAX_DENSITY).hideHeading).toBe(true);
   });
 

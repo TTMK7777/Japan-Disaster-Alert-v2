@@ -187,7 +187,11 @@ function SignageScreen({ setup, memory, now, rotation }: ScreenProps) {
           </p>
         )}
 
-        <section className="signage-bands" aria-live="polite" ref={bandsRef}>
+        <section
+          className={flags.stacked ? 'signage-bands signage-bands-stacked' : 'signage-bands'}
+          aria-live="polite"
+          ref={bandsRef}
+        >
           {shown.map((band, i) => (
             <AlertBandView key={band.key} band={band} lang={lang} now={now} flags={flags} first={i === 0} />
           ))}
@@ -197,7 +201,15 @@ function SignageScreen({ setup, memory, now, rotation }: ScreenProps) {
             </p>
           )}
           <TsunamiStatus view={tsunamiView} t={t} now={now} />
-          {!flags.hideQuake && <QuakePanel view={quakes} lang={lang} now={now} />}
+          {(!flags.hideQuake || quakes.kind === 'unavailable') && (
+            <QuakePanel
+              view={quakes}
+              lang={lang}
+              now={now}
+              // 津波の欄で「警報が無いという意味ではない」を出していれば、詰めるときは繰り返さない
+              showUnavailableDetail={!(flags.actionOnlyFirst && tsunamiView.kind === 'unavailable')}
+            />
+          )}
         </section>
 
         <section className="signage-lines">
@@ -237,7 +249,19 @@ function SignageScreen({ setup, memory, now, rotation }: ScreenProps) {
   );
 }
 
-function Unavailable({ title, lastFetchedAt, t, now }: { title: string; lastFetchedAt: number | null; t: SignageStrings; now: number }) {
+function Unavailable({
+  title,
+  lastFetchedAt,
+  t,
+  now,
+  showDetail = true,
+}: {
+  title: string;
+  lastFetchedAt: number | null;
+  t: SignageStrings;
+  now: number;
+  showDetail?: boolean;
+}) {
   return (
     <div className="signage-band signage-tone-unavailable" data-testid="signage-unavailable" role="alert">
       <div className="signage-band-main">
@@ -248,7 +272,7 @@ function Unavailable({ title, lastFetchedAt, t, now }: { title: string; lastFetc
           {lastFetchedAt === null ? t.neverReceived : fillTemplate(t.lastAvailableAt, { time: formatJst(lastFetchedAt, now) })}
         </p>
       </div>
-      <p className="signage-band-action">{t.unavailableDetail}</p>
+      {showDetail && <p className="signage-band-action">{t.unavailableDetail}</p>}
     </div>
   );
 }
@@ -327,10 +351,24 @@ function TsunamiStatus({ view, t, now }: { view: DatasetView<TsunamiItem>; t: Si
   return null;
 }
 
-function QuakePanel({ view, lang, now }: { view: DatasetView<QuakeItem>; lang: SignageLanguage; now: number }) {
+function QuakePanel({
+  view,
+  lang,
+  now,
+  showUnavailableDetail,
+}: {
+  view: DatasetView<QuakeItem>;
+  lang: SignageLanguage;
+  now: number;
+  showUnavailableDetail: boolean;
+}) {
   const t = SIGNAGE_TEXT[lang];
   if (view.kind === 'loading') return <p className="signage-status">{t.loading}</p>;
-  if (view.kind === 'unavailable') return <Unavailable title={t.quakeTitle} lastFetchedAt={view.lastFetchedAt} t={t} now={now} />;
+  if (view.kind === 'unavailable') {
+    return (
+      <Unavailable title={t.quakeTitle} lastFetchedAt={view.lastFetchedAt} t={t} now={now} showDetail={showUnavailableDetail} />
+    );
+  }
   const latest = view.items[0];
   if (!latest) return <p className="signage-status">{t.quakeNone}</p>;
   const place = latest.locationJa ?? t.quakeEpicenterPending;

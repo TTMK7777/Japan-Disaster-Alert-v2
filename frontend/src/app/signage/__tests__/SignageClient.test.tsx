@@ -274,3 +274,22 @@ describe('SignageClient: fitting on small screens', () => {
     restore();
   });
 });
+
+describe('SignageClient: fitting never hides an outage', () => {
+  it('keeps the earthquake "unavailable" block at the highest level and states "not no-warning" once', async () => {
+    const sh = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('signage-bands') ? 1000 : 0;
+    });
+    const ch = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockImplementation(() => 500);
+    queue(snapshotAt(T0_ISO, { earthquakes: dataset('error', null, null), tsunami: dataset('error', null, null) }));
+    await mount();
+    expect(root().dataset.density).toBe(String(MAX_DENSITY));
+    const blocks = screen.getAllByTestId('signage-unavailable');
+    const text = blocks.map((b) => b.textContent ?? '').join('\n');
+    expect(text).toContain(`${SIGNAGE_TEXT.en.tsunamiTitle}: ${SIGNAGE_TEXT.en.unavailable}`);
+    expect(text).toContain(`${SIGNAGE_TEXT.en.quakeTitle}: ${SIGNAGE_TEXT.en.unavailable}`);
+    expect(text.split(SIGNAGE_TEXT.en.unavailableDetail).length - 1).toBe(1);
+    sh.mockRestore();
+    ch.mockRestore();
+  });
+});

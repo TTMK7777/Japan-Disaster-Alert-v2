@@ -349,17 +349,20 @@ export function limitBands(
 /** この本数以上の帯が出るときは、はじめから 2 段目の言語を省く */
 export const DENSE_BAND_COUNT = 3;
 /** 詰め方の段階の上限（段階ごとの中身は densityFlags） */
-export const MAX_DENSITY = 6;
+export const MAX_DENSITY = 7;
 
 export interface DensityFlags {
   /** 帯の 2 段目の言語を出さない */
   hideSecondary: boolean;
+  /** 帯を 1 列にする（行動の呼びかけを見出しの下に全幅で出す。狭い右列で何行にも折り返さない） */
+  stacked: boolean;
   /** 警報の帯の補足（区域数・震源・時刻）を出さない。「取得できません」の時刻は消さない */
   hideDetail: boolean;
   /** limitBands に渡す本数（固定の帯はこれを超えても全部出る） */
   maxBands: number;
-  /** 行動の呼びかけを最初の帯だけに出す（津波の帯どうしは同じ文） */
+  /** 行動の呼びかけ・「警報が無いという意味ではない」を最初の 1 か所だけに出す */
   actionOnlyFirst: boolean;
+  /** 地震の欄を出さない。「取得できません」の欄は消さない */
   hideQuake: boolean;
   hideHeading: boolean;
 }
@@ -372,11 +375,12 @@ export interface DensityFlags {
 export function densityFlags(level: number, bandCount: number): DensityFlags {
   return {
     hideSecondary: level >= 1 || bandCount >= DENSE_BAND_COUNT,
-    hideDetail: level >= 2,
-    maxBands: level >= 3 ? 0 : MAX_ALERT_BANDS,
-    actionOnlyFirst: level >= 4,
-    hideQuake: level >= 5,
-    hideHeading: level >= 6,
+    stacked: level >= 2,
+    hideDetail: level >= 3,
+    maxBands: level >= 4 ? 0 : MAX_ALERT_BANDS,
+    actionOnlyFirst: level >= 5,
+    hideQuake: level >= 6,
+    hideHeading: level >= 7,
   };
 }
 
