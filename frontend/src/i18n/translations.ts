@@ -2165,7 +2165,7 @@ export const translations: Record<string, Record<string, string>> = {
     'emergency.visitorHotline.description': "びょうき・さいがいなどで こまった ときの たすけ。えいご・ちゅうごくご・かんこくご・にほんごで、まいにち 24じかん。",
     'emergency.fire.name': "しょうぼう・きゅうきゅうしゃ",
     'emergency.fire.description': "かじ、きゅうな びょうきや けがで、いそいで たすけが いる ときの でんわ。",
-    'emergency.onlineOnly': "インターネットに つながって いる ときだけ ひらけます（いまは ひらけません）。",
+    'emergency.onlineOnly': "インターネットに つながって いる ときだけ ひらけます（つながって いない ときは ひらけません）。",
   },
 };
 
