@@ -27,6 +27,7 @@ import {
   parseLangsParam,
   regionName,
   resolveSignageOrigin,
+  quakeLocation,
   tsunamiEpicenter,
   volcanoName,
   type AlertBand,
@@ -371,7 +372,7 @@ function QuakePanel({
   }
   const latest = view.items[0];
   if (!latest) return <p className="signage-status">{t.quakeNone}</p>;
-  const place = latest.locationJa ?? t.quakeEpicenterPending;
+  const place = quakeLocation(latest, lang) ?? t.quakeEpicenterPending;
   const when = latest.occurredAt !== null ? formatJst(latest.occurredAt, now) : null;
   return (
     <div className="signage-quake" data-testid="signage-quake">

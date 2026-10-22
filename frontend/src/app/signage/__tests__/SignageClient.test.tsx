@@ -7,7 +7,7 @@ import { MAX_DENSITY, POLL_INTERVAL_MS, ROTATE_INTERVAL_MS, STALE_LIMIT_MS } fro
 import { QR_QUIET_ZONE } from '../../poster/QrCodeSvg';
 import { decodeQrMatrix } from '../../poster/__tests__/qrDecode';
 import { svgToMatrix } from '../../poster/__tests__/qrSvg';
-import { dataset, snapshotAt, tsunami, volcano } from './snapshotFixtures';
+import { dataset, quake, snapshotAt, tsunami, volcano } from './snapshotFixtures';
 
 const T0_ISO = '2026-10-22T05:30:00Z';
 const T0 = Date.parse(T0_ISO);
@@ -103,6 +103,19 @@ describe('SignageClient: language rotation', () => {
       seen.push(root().getAttribute('lang'));
     }
     expect(seen).toEqual(['en', 'zh', 'zh-TW', 'ko', 'ja', 'en']);
+  });
+
+  it('shows the epicenter in the display language, falling back to English', async () => {
+    const i18n = { en: 'Off the east coast of Chiba', ko: '지바현 동방 앞바다' };
+    queue(snapshotAt(T0_ISO, { earthquakes: dataset('ok', T0_ISO, [quake({ location_i18n: i18n })]) }));
+    setUrl('/signage?langs=ko,zh,ja');
+    await mount();
+    const place = () => screen.getByTestId('signage-quake').textContent ?? '';
+    expect(place()).toContain('지바현 동방 앞바다');
+    await advance(ROTATE_INTERVAL_MS);
+    expect(place()).toContain('Off the east coast of Chiba');
+    await advance(ROTATE_INTERVAL_MS);
+    expect(place()).toContain('千葉県東方沖');
   });
 
   it('uses ?langs= in the given order', async () => {
