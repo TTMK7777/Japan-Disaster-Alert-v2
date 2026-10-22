@@ -25,6 +25,25 @@ const REQUIRED_KEYS = [
   'darkMode',
   'lightMode',
   'systemMode',
+  // B4b: 津波の初回取得失敗の帯・保存済みデータの表示（13 言語は .team/inbox/CDX/i18n-b4b）
+  'tsunami.unconfirmed',
+  'tsunami.officialLink',
+  'freshness.savedData',
+  // B11: 緊急連絡タブとオフライン画面（訳は .team/inbox/CDX/i18n-b11。onlineOnly は実装者訳）
+  'emergency.fire.name',
+  'emergency.fire.description',
+  'emergency.visitorHotline.description',
+  'emergency.message171.note',
+  'emergency.web171.name',
+  'emergency.web171.description',
+  'emergency.medicalSearch.name',
+  'emergency.medicalSearch.description',
+  'emergency.consultation7119.name',
+  'emergency.consultation7119.description',
+  'emergency.consultation7119.note',
+  'emergency.embassy.name',
+  'emergency.embassy.description',
+  'emergency.onlineOnly',
 ];
 
 // Phase 1A: コンポーネント翻訳キー（全16言語で必須）
