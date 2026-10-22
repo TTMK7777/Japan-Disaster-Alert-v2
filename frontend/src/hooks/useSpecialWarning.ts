@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { API_BASE_URL } from '@/config/api';
 import { hasActiveSpecialWarning } from '@/lib/specialWarning';
+import { parseFailedAreas } from '@/lib/fetchFailure';
 
 /** 警報タブ（WarningBanner）と同じ 5 分間隔 */
 export const SPECIAL_WARNING_POLL_MS = 5 * 60 * 1000;
@@ -25,6 +26,8 @@ interface Options {
  *
  * 取得に失敗したときは前回の判定を保つ。圏外になった瞬間に帯が消えると「解除された」と読まれるため。
  * 地域を変えたら前の地域の判定は使わない（別地域の特別警報を今の地域のものとして出さない）。
+ * **一部の予報区が取れなかった応答（partial）で、取れた分に特別警報が無いときも前回の判定を保つ。**
+ * 欠けた予報区（例: 宮古島）に特別警報が出ていたら、取れた本島の分だけで「なし」にすると帯が消える（B4a）。
  *
  * effect の依存はプリミティブだけ（CLAUDE.md の規約）。
  */
@@ -33,9 +36,12 @@ export function useSpecialWarning({ prefCode, language, paused }: Options) {
   // 最後に判定を得た地域と時刻。effect の再開時に「まだ新しいか」を見るだけなので state にしない
   const lastRef = useRef<{ code: string; at: number } | null>(null);
 
-  const report = useCallback((code: string, alerts: unknown) => {
+  const report = useCallback((code: string, alerts: unknown, options?: { partial?: boolean }) => {
     lastRef.current = { code, at: Date.now() };
-    setResult({ code, active: hasActiveSpecialWarning(alerts) });
+    const active = hasActiveSpecialWarning(alerts);
+    // 一部欠落で「なし」は確定できない。前回の判定（同じ地域なら）を保つ
+    if (options?.partial && !active) return;
+    setResult({ code, active });
   }, []);
 
   // 言語は API のクエリにだけ使う（判定は言語に依存しない）。言語の変更で取り直さないよう ref で持つ
@@ -60,7 +66,7 @@ export function useSpecialWarning({ prefCode, language, paused }: Options) {
         if (!response.ok) throw new Error(`alerts ${response.status}`);
         const data = await response.json();
         if (cancelled || current.signal.aborted) return;
-        report(prefCode, data);
+        report(prefCode, data, { partial: parseFailedAreas(response).length > 0 });
       } catch (err) {
         // 失敗は前回の判定を保つ（上のコメント）。中断は次の取得が進行中か、アンマウント
         if (!current.signal.aborted) console.warn('[special-warning] 取得に失敗:', err);

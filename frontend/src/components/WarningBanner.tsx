@@ -6,6 +6,14 @@ import { getTranslation, getLocale } from '@/i18n/translations';
 import { formatRelativeTime } from '@/lib/relativeTime';
 import { PREFECTURES } from '@/lib/prefectures';
 import { OfficialInfoLink } from '@/components/ScopeNotice';
+import FetchFailureNotice from '@/components/FetchFailureNotice';
+import {
+  createTimedAbort,
+  classifyFetchError,
+  parseFailedAreas,
+  type FailureReason,
+  type TimedAbort,
+} from '@/lib/fetchFailure';
 import {
   normalizeSeverity,
   SEVERITY_STYLES,
@@ -37,8 +45,12 @@ interface WarningBannerProps {
    */
   areaCode?: string | null;
   language?: string;
-  /** 取得できた警報と、その取得に使った地域コード（ページ全体の特別警報の帯が使う） */
-  onWarningsUpdate?: (warnings: Warning[], areaCode: string) => void;
+  /**
+   * 取得できた警報と、その取得に使った地域コード（ページ全体の特別警報の帯が使う）。
+   * partial は一部の予報区が取れなかった応答（取れた分に特別警報が無くても「なし」と確定できない）。
+   * 取得に失敗したときは呼ばない
+   */
+  onWarningsUpdate?: (warnings: Warning[], areaCode: string, status: { partial: boolean }) => void;
   /** 利用者がセレクタで地域を変えたときに呼ぶ（URL の同期用） */
   onAreaCodeChange?: (code: string) => void;
 }
@@ -94,6 +106,9 @@ function PrefectureSelector({ selectedAreaCode, onAreaCodeChange, language }: Pr
   );
 }
 
+/** 取得の期限。過ぎたら「時間内に応答がない」失敗として出す（黙って緑にしない） */
+export const WARNING_FETCH_TIMEOUT_MS = 10_000;
+
 export default function WarningBanner({
   areaCode: initialAreaCode = null,
   language = 'ja',
@@ -101,8 +116,15 @@ export default function WarningBanner({
   onAreaCodeChange,
 }: WarningBannerProps) {
   const [warnings, setWarnings] = useState<Warning[]>([]);
+  // warnings がどの地域のものか（別地域の前回値を今の地域の「前回確認」として出さない）
+  const [dataAreaCode, setDataAreaCode] = useState<string | null>(null);
   const [loading, setLoading] = useState(initialAreaCode !== null);
-  const [error, setError] = useState<string | null>(null);
+  // 取得の失敗（全体）。**再取得が成功したときだけ解除する**
+  const [failure, setFailure] = useState<FailureReason | null>(null);
+  // 一部の予報区だけ取れなかった（表示言語の地名）
+  const [partialAreas, setPartialAreas] = useState<string[]>([]);
+  // 最後に取得できた地域と時刻
+  const [lastSuccess, setLastSuccess] = useState<{ code: string; at: number } | null>(null);
   const [selectedAreaCode, setSelectedAreaCode] = useState<string | null>(initialAreaCode);
 
   // HIGH #10: onWarningsUpdate を ref で保持し deps から除外
@@ -116,6 +138,12 @@ export default function WarningBanner({
   useEffect(() => {
     setSelectedAreaCode(initialAreaCode);
   }, [initialAreaCode]);
+
+  // 地域が変わったら前の地域の失敗表示は持ち越さない
+  useEffect(() => {
+    setFailure(null);
+    setPartialAreas([]);
+  }, [selectedAreaCode]);
 
   const handleAreaCodeChange = useCallback((code: string) => {
     setSelectedAreaCode(code);
@@ -139,47 +167,55 @@ export default function WarningBanner({
   // A→B と切り替えたとき、A のレスポンスが遅れて後着すると
   // setWarnings(A のデータ) が勝ち、見出しは B のまま A の警報一覧が出る —
   // 災害情報アプリで**別地域の警報を今の地域のものとして見せてしまう**
-  const fetchRef = useRef<AbortController | null>(null);
+  const fetchRef = useRef<TimedAbort | null>(null);
   const fetchWarnings = useCallback(async () => {
     fetchRef.current?.abort();
     // 地域が未選択なら取りに行かない（東京などで埋めない）
     if (selectedAreaCode === null) {
       fetchRef.current = null;
       setLoading(false);
-      setError(null);
+      setFailure(null);
+      setPartialAreas([]);
       setWarnings([]);
       return;
     }
-    const controller = new AbortController();
-    fetchRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const request = createTimedAbort(WARNING_FETCH_TIMEOUT_MS);
+    fetchRef.current = request;
     setLoading(true);
-    setError(null);
 
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/v1/alerts?area_code=${encodeURIComponent(selectedAreaCode)}&lang=${encodeURIComponent(language)}`,
-        { signal: controller.signal }
+        { signal: request.signal }
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch warnings');
+        throw new Error(`Failed to fetch warnings: ${response.status}`);
       }
 
       const data = await response.json();
-      if (controller.signal.aborted) return;
+      if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      // 配列でない本文を「0 件」にしない
+      if (!Array.isArray(data)) throw new Error('Unexpected warnings payload');
+      const failedAreas = parseFailedAreas(response);
       setWarnings(data);
-      onWarningsUpdateRef.current?.(data, selectedAreaCode);
+      setDataAreaCode(selectedAreaCode);
+      setPartialAreas(failedAreas);
+      setFailure(null);
+      setLastSuccess({ code: selectedAreaCode, at: Date.now() });
+      onWarningsUpdateRef.current?.(data, selectedAreaCode, { partial: failedAreas.length > 0 });
     } catch (err) {
-      // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
-      if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
+      // 自分で中断した分（地域の切替・アンマウント）は表示しない。期限超過は失敗として出す
+      const reason = classifyFetchError(request, err);
+      if (reason === null) return;
       console.error('Warning fetch error:', err);
-      setError(t('error'));
+      // 失敗は特別警報の帯へ渡さない（「なし」と読ませない。帯は前回の判定を保つ）
+      setFailure(reason);
     } finally {
-      clearTimeout(timeoutId);
-      if (fetchRef.current === controller) setLoading(false);
+      request.clear();
+      if (fetchRef.current === request) setLoading(false);
     }
-  }, [selectedAreaCode, language, t]);
+  }, [selectedAreaCode, language]);
 
   useEffect(() => {
     fetchWarnings();
@@ -213,33 +249,48 @@ export default function WarningBanner({
     );
   }
 
-  if (error) {
+  // この地域で前に取れた警報（失敗時に「前回確認」として残す）
+  const shownWarnings = dataAreaCode === selectedAreaCode ? warnings : [];
+  const lastSuccessAt = lastSuccess && lastSuccess.code === selectedAreaCode ? lastSuccess.at : null;
+
+  const selector = (
+    <PrefectureSelector
+      selectedAreaCode={selectedAreaCode}
+      onAreaCodeChange={handleAreaCodeChange}
+      language={language}
+    />
+  );
+
+  // 取得できなかった（全体の失敗・期限超過・一部の予報区の欠落）。緑の「警報なし」は出さない
+  if (failure || partialAreas.length > 0) {
     return (
-      <div className="p-4 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-800 rounded-lg">
-        <p className="text-red-700 dark:text-red-300">{error}</p>
-        <button
-          onClick={fetchWarnings}
-          className="mt-2 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+      <div className="space-y-3">
+        {selector}
+        <FetchFailureNotice
+          language={language}
+          reason={failure}
+          partialAreas={failure ? [] : partialAreas}
+          lastSuccessAt={failure ? lastSuccessAt : null}
+          onRetry={fetchWarnings}
+          testId="warning-fetch-failure"
+          heading={`${t('title')} - ${prefectureName}`}
         >
-          {t('retry')}
-        </button>
-        {/* 取得に失敗したときこそ公式情報が要る */}
-        <OfficialInfoLink language={language} areaCode={selectedAreaCode} className="mt-3" />
+          {/* 取得に失敗したときこそ公式情報が要る */}
+          <OfficialInfoLink language={language} areaCode={selectedAreaCode} />
+        </FetchFailureNotice>
+        {shownWarnings.length > 0 && renderWarningList(shownWarnings)}
       </div>
     );
   }
 
-  if (warnings.length === 0) {
+  if (shownWarnings.length === 0) {
     return (
       <div className="space-y-3">
-        <PrefectureSelector
-          selectedAreaCode={selectedAreaCode}
-          onAreaCodeChange={handleAreaCodeChange}
-          language={language}
-        />
+        {selector}
         {/* このアプリは避難指示・避難所の開設状況を扱わない。「警報なし」を「避難指示なし」と
             読ませないよう、選んだ県の公式防災ページへ 1 タップで行けるようにする */}
         <OfficialInfoLink language={language} areaCode={selectedAreaCode} />
+        {/* 緑の「警報なし」は、**すべての予報区を取得できて 0 件だったときだけ** */}
         <div className="p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 rounded-lg">
           <div className="flex items-center gap-2">
             <span className="text-2xl">✅</span>
@@ -255,17 +306,20 @@ export default function WarningBanner({
 
   return (
     <div className="space-y-3">
-      <PrefectureSelector
-        selectedAreaCode={selectedAreaCode}
-        onAreaCodeChange={handleAreaCodeChange}
-        language={language}
-      />
+      {selector}
       <OfficialInfoLink language={language} areaCode={selectedAreaCode} />
+      {renderWarningList(shownWarnings)}
+    </div>
+  );
+
+  function renderWarningList(list: Warning[]) {
+    return (
+      <>
       <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100">{t('title')} - {prefectureName}</h3>
       {/* 一覧であることを支援技術に伝える。従来はカードが平置きで、しかも全件に
           role="alert" が付いていたため、注意報が並ぶ日は読み上げが割り込みで埋まった */}
       <ul className="space-y-3">
-      {warnings.map((warning) => {
+      {list.map((warning) => {
         // 継続中の警報では相対時刻を出さない。気象庁は内容が変わらない限り
         // reportDatetime を更新しないため、伊豆諸島の注意報のように 3 か月前の
         // 日時が入る。単独の「3 か月前」は**情報が古い＝壊れている**と読まれるが、
@@ -340,6 +394,7 @@ export default function WarningBanner({
         );
       })}
       </ul>
-    </div>
-  );
+      </>
+    );
+  }
 }

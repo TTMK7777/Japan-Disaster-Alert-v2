@@ -6,6 +6,7 @@ import time
 
 import httpx
 from typing import Optional
+from ..exceptions import UpstreamUnavailableError
 from ..models import VolcanoInfo, VolcanoWarning
 from .volcano_levels import (
     CONTINUING_CONDITIONS,
@@ -152,8 +153,12 @@ class VolcanoService:
         """
         data = await self._fetch_json(self.WARNING_PATH, self.WARNING_TTL_SECONDS)
         if data is None:
-            return []
-        return await self._warnings_from_raw(data)
+            # 取得できず、期限切れの成功値も無い。[] にすると「噴火警報なし」と読める
+            raise UpstreamUnavailableError("噴火警報を取得できず、使える直近の値も無い")
+        if not isinstance(data, list):
+            raise ValueError(f"噴火警報が配列ではない: {type(data).__name__}")
+        # strict: 空でないのに 1 件も読めなければ ValueError（形の変化を「なし」に見せない）
+        return await self._warnings_from_raw(data, strict=True)
 
     #: 発表中の噴火警報がすべて入る 1 本の JSON
     WARNING_PATH = "data/warning.json"

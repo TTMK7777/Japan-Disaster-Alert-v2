@@ -123,9 +123,13 @@ class EventManager:
                 await asyncio.sleep(self.POLL_INTERVAL)
 
     async def _check_earthquakes(self) -> None:
-        """地震情報の更新をチェック"""
+        """地震情報の更新をチェック
+
+        取得に失敗したときは**何も配信しない**（前回の状態を保つ）。失敗を 0 件として
+        配信すると、P2P の一時的な障害で画面の地震一覧が消え「地震なし」と読める。
+        """
         try:
-            earthquakes = await self._p2p_service.get_recent_earthquakes(limit=10)
+            earthquakes = await self._p2p_service.fetch_recent_earthquakes(limit=10)
             current_ids = {eq.id for eq in earthquakes}
 
             if current_ids != self._last_earthquake_ids:

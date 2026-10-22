@@ -12,6 +12,8 @@ import {
   badgeClassName,
   continuingBadgeClassName,
 } from '@/lib/warningSeverity';
+import FetchFailureNotice from '@/components/FetchFailureNotice';
+import { createTimedAbort, classifyFetchError, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
 
 /**
  * 発表中の噴火警報。
@@ -60,34 +62,43 @@ interface VolcanoWarningsProps {
 /** 気象庁の噴火警戒レベルの解説ページ。出典を常に辿れるようにしておく */
 const JMA_VOLCANO_URL = 'https://www.jma.go.jp/jma/kishou/know/kazan/kaisetsu.html';
 
+/** 取得の期限。過ぎたら失敗として出す（黙って無表示にしない） */
+const VOLCANO_FETCH_TIMEOUT_MS = 10_000;
+
 export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
   const [warnings, setWarnings] = useState<VolcanoWarning[]>([]);
-  const [failed, setFailed] = useState(false);
+  // 取得の失敗（期限超過を含む）。再取得の成功でだけ解除する
+  const [failure, setFailure] = useState<FailureReason | null>(null);
+  const [lastSuccessAt, setLastSuccessAt] = useState<number | null>(null);
 
   // 前回の取得を必ず中断してから始める（言語切替でレスポンス順序が
   // 逆転すると、旧言語の警報が新言語の UI に載る）
-  const fetchRef = useRef<AbortController | null>(null);
+  const fetchRef = useRef<TimedAbort | null>(null);
   const fetchWarnings = useCallback(async () => {
     fetchRef.current?.abort();
-    const controller = new AbortController();
-    fetchRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const request = createTimedAbort(VOLCANO_FETCH_TIMEOUT_MS);
+    fetchRef.current = request;
     try {
       const response = await fetch(
         `${API_BASE_URL}/api/v1/volcanoes/warnings?lang=${encodeURIComponent(language)}`,
-        { signal: controller.signal }
+        { signal: request.signal }
       );
       if (!response.ok) throw new Error(String(response.status));
       const data = await response.json();
-      if (controller.signal.aborted) return;
-      setWarnings(Array.isArray(data) ? data : []);
-      setFailed(false);
+      if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      // 配列でない本文を「噴火警報なし」にしない
+      if (!Array.isArray(data)) throw new Error('Unexpected volcano warnings payload');
+      setWarnings(data);
+      setFailure(null);
+      setLastSuccessAt(Date.now());
     } catch (error) {
-      if (controller.signal.aborted && (error as Error).name === 'AbortError') return;
+      // 言語切替・アンマウントによる中断は出さない。期限超過は失敗として出す
+      const reason = classifyFetchError(request, error);
+      if (reason === null) return;
       console.error('Volcano warning fetch error:', error);
-      setFailed(true);
+      setFailure(reason);
     } finally {
-      clearTimeout(timeoutId);
+      request.clear();
     }
   }, [language]);
 
@@ -102,21 +113,34 @@ export default function VolcanoWarnings({ language }: VolcanoWarningsProps) {
   }, [fetchWarnings]);
 
   // 取得に失敗したとき、警報が無いかのように見せない。
-  // 何も描画しないことで「安全だ」と読まれるのが一番まずい
-  if (failed) {
-    return (
-      <p className="text-sm text-gray-600 dark:text-gray-300" role="status">
-        {getTranslation(language, 'volcano.title')} — {getTranslation(language, 'warning.error')}
-      </p>
-    );
-  }
+  // 何も描画しないことで「安全だ」と読まれるのが一番まずい。前に取れた警報があれば下に残す
+  const failureNotice = failure && (
+    <FetchFailureNotice
+      language={language}
+      reason={failure}
+      lastSuccessAt={lastSuccessAt}
+      onRetry={fetchWarnings}
+      testId="volcano-fetch-failure"
+      heading={`🌋 ${getTranslation(language, 'volcano.title')}`}
+    >
+      <a
+        href={JMA_VOLCANO_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block text-sm underline hover:no-underline"
+      >
+        {getTranslation(language, 'volcano.source')}
+      </a>
+    </FetchFailureNotice>
+  );
 
   // 発表中の警報が無いときは何も置かない。日本では常時いくつか出ているため
-  // 「ありません」の行を常設するより静かな方が読みやすい
-  if (warnings.length === 0) return null;
+  // 「ありません」の行を常設するより静かな方が読みやすい（**取得できて 0 件のときだけ**）
+  if (warnings.length === 0) return failureNotice || null;
 
   return (
     <section aria-labelledby="volcano-warnings-heading" className="space-y-3">
+      {failureNotice}
       <h3
         id="volcano-warnings-heading"
         className="font-bold text-lg text-gray-800 dark:text-gray-100"

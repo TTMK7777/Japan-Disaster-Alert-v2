@@ -7,6 +7,15 @@ import 'leaflet/dist/leaflet.css';
 import { API_BASE_URL } from '@/config/api';
 import { getTranslation } from '@/i18n/translations';
 import { ShelterIcon, LocationIcon } from './icons/DisasterIcons';
+import FetchFailureNotice from './FetchFailureNotice';
+import { OfficialInfoLink } from './ScopeNotice';
+import { createTimedAbort, classifyFetchError, type FailureReason } from '@/lib/fetchFailure';
+
+/** 現在地からの検索半径（km）。成功の 0 件にはこの半径を添える */
+export const SHELTER_SEARCH_RADIUS_KM = 5;
+const SHELTER_SEARCH_LIMIT = 50;
+/** 取得の期限。過ぎたら失敗として出す */
+const SHELTER_FETCH_TIMEOUT_MS = 15_000;
 
 interface Shelter {
   id: string;
@@ -482,26 +491,32 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
   const [hasSearched, setHasSearched] = useState(false);
   const [selectedShelter, setSelectedShelter] = useState<Shelter | null>(null);
   const [filterType, setFilterType] = useState<ShelterType | 'all'>('all');
+  // 取得の失敗（期限超過を含む）。「見つかりませんでした」と分けて出す。再取得の成功でだけ解除する
+  const [fetchFailure, setFetchFailure] = useState<FailureReason | null>(null);
+  // 再試行で同じ地点を取り直すため、最後に検索した地点を持つ
+  const [lastQuery, setLastQuery] = useState<{ lat: number; lon: number } | null>(null);
 
   // 実データの取得。以前このコンポーネントは API を一度も呼ばず、
   // ファイル内にハードコードした3件を全利用者に見せていた
   const fetchShelters = useCallback(async (lat: number, lon: number) => {
     setSheltersLoading(true);
     setHasSearched(true);
+    setLastQuery({ lat, lon });
+    const request = createTimedAbort(SHELTER_FETCH_TIMEOUT_MS);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000);
       const res = await fetch(
-        `${API_BASE_URL}/api/v1/shelters?lat=${lat}&lon=${lon}&radius=5&limit=50`,
-        { signal: controller.signal }
+        `${API_BASE_URL}/api/v1/shelters?lat=${lat}&lon=${lon}&radius=${SHELTER_SEARCH_RADIUS_KM}&limit=${SHELTER_SEARCH_LIMIT}`,
+        { signal: request.signal }
       );
-      clearTimeout(timeoutId);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const body = await res.json();
+      // shelters が無い応答を「0 件」にしない（形の異常は失敗）
+      if (!Array.isArray(body?.shelters)) throw new Error('Unexpected shelters payload');
       setIsSampleData(Boolean(body?.meta?.is_sample_data));
       setAttribution(body?.meta?.attribution ?? null);
+      setFetchFailure(null);
       setShelters(
-        (body?.shelters ?? []).map((raw: ApiShelter): Shelter => ({
+        (body.shelters as ApiShelter[]).map((raw: ApiShelter): Shelter => ({
           id: raw.id,
           name: raw.name,
           address: raw.address,
@@ -521,10 +536,12 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
       );
     } catch (err) {
       console.error('Failed to fetch shelters:', err);
-      // 取れなかったときに古い結果や見本を残さない。
-      // 「取得できなかった」ことが分かる方が、誤った避難先を出すより安全
+      // 取れなかったときに古い結果や見本を残さない（別の地点の結果を今の最寄りとして見せない）。
+      // ただし「見つかりませんでした」とは出さない。取得できなかったことを失敗の枠で出す
       setShelters([]);
+      setFetchFailure(classifyFetchError(request, err) ?? 'failed');
     } finally {
+      request.clear();
       setSheltersLoading(false);
     }
   }, []);
@@ -640,9 +657,23 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
         </div>
       )}
 
-      {hasSearched && !sheltersLoading && filteredShelters.length === 0 && (
-        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-gray-600 text-sm">
-          {t('noNearby')}
+      {hasSearched && !sheltersLoading && fetchFailure && (
+        <FetchFailureNotice
+          language={language}
+          reason={fetchFailure}
+          lastSuccessAt={null}
+          onRetry={lastQuery ? () => void fetchShelters(lastQuery.lat, lastQuery.lon) : undefined}
+          testId="shelter-fetch-failure"
+        >
+          <OfficialInfoLink language={language} areaCode={null} />
+        </FetchFailureNotice>
+      )}
+
+      {hasSearched && !sheltersLoading && !fetchFailure && filteredShelters.length === 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center text-gray-600 text-sm space-y-1">
+          <p>{t('noNearby')}</p>
+          {/* 「この範囲」がどこかを示す。全国に避難所が無いという意味ではない */}
+          <p>{getTranslation(language, 'shelter.searchArea').replace('{km}', String(SHELTER_SEARCH_RADIUS_KM))}</p>
         </div>
       )}
 

@@ -188,7 +188,7 @@ describe('WarningBanner — 選んだ県の公式防災ページへのボタン'
   it('警報の取得に失敗した画面にも出る（いちばん公式情報が要る場面）', async () => {
     mockFetch({}, false);
     render(<WarningBanner areaCode="471000" language="th" />);
-    await screen.findByText(getTranslation('th', 'warning.error'));
+    await screen.findByText(getTranslation('th', 'status.fetchFailed'));
     expect(await findOfficialLink()).toHaveAttribute('href', okinawa.foreignUrl!);
   });
 
@@ -237,6 +237,6 @@ describe('WarningBanner — 地域未指定（B8: 黙って東京を出さない
     expect(onAreaCodeChange).toHaveBeenCalledWith('260000');
     await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
     expect(String(fetchFn.mock.calls[0][0])).toContain('area_code=260000');
-    await waitFor(() => expect(onWarningsUpdate).toHaveBeenCalledWith([NEW_WARNING], '260000'));
+    await waitFor(() => expect(onWarningsUpdate).toHaveBeenCalledWith([NEW_WARNING], '260000', { partial: false }));
   });
 });
