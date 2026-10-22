@@ -188,7 +188,7 @@ describe('WarningBanner — 選んだ県の公式防災ページへのボタン'
   it('警報の取得に失敗した画面にも出る（いちばん公式情報が要る場面）', async () => {
     mockFetch({}, false);
     render(<WarningBanner areaCode="471000" language="th" />);
-    await screen.findByText(getTranslation('th', 'warning.error'));
+    await screen.findByText(getTranslation('th', 'status.fetchFailed'));
     expect(await findOfficialLink()).toHaveAttribute('href', okinawa.foreignUrl!);
   });
 
@@ -208,3 +208,35 @@ describe('WarningBanner — 選んだ県の公式防災ページへのボタン'
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+
+describe('WarningBanner — 地域未指定（B8: 黙って東京を出さない）', () => {
+  it('areaCode が無ければ取りに行かず「地域を選んでください」を出す', async () => {
+    const fetchFn = mockFetch([NEW_WARNING]);
+    render(<WarningBanner language="ja" />);
+    expect(await screen.findByTestId('warning-choose-region')).toHaveTextContent(getTranslation('ja', 'region.choose'));
+    expect(fetchFn).not.toHaveBeenCalled();
+    // 見出しに地域名が出ない（セレクタの選択肢には東京都もあるので、見出しで見る）
+    expect(screen.queryByRole('heading', { name: /東京/ })).toBeNull();
+    const select = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(select.value).toBe('');
+  });
+
+  it('null を渡しても同じ（未選択）', async () => {
+    const fetchFn = mockFetch([]);
+    render(<WarningBanner language="en" areaCode={null} />);
+    expect(await screen.findByTestId('warning-choose-region')).toBeInTheDocument();
+    expect(fetchFn).not.toHaveBeenCalled();
+  });
+
+  it('未選択の画面で選ぶと、その地域で取りに行き onAreaCodeChange と onWarningsUpdate にコードを渡す', async () => {
+    const fetchFn = mockFetch([NEW_WARNING]);
+    const onAreaCodeChange = vi.fn();
+    const onWarningsUpdate = vi.fn();
+    render(<WarningBanner language="ja" onAreaCodeChange={onAreaCodeChange} onWarningsUpdate={onWarningsUpdate} />);
+    fireEvent.change(await screen.findByRole('combobox'), { target: { value: '260000' } });
+    expect(onAreaCodeChange).toHaveBeenCalledWith('260000');
+    await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
+    expect(String(fetchFn.mock.calls[0][0])).toContain('area_code=260000');
+    await waitFor(() => expect(onWarningsUpdate).toHaveBeenCalledWith([NEW_WARNING], '260000', { partial: false }));
+  });
+});

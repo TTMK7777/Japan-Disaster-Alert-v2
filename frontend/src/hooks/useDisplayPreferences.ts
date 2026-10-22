@@ -18,6 +18,8 @@ import type { SupportedLanguage } from '@/i18n/types';
 import { readStorage, writeStorage } from '@/lib/safeStorage';
 
 export const LANGUAGE_STORAGE_KEY = 'disaster-app-lang';
+/** 利用者が画面で選んだ地域（府県予報区コード 6 桁）。URL 由来の地域は保存しない */
+export const PREF_STORAGE_KEY = 'disaster-app-pref';
 
 /**
  * 表示言語と地域（警報タブの都道府県）を決め、保存と URL の同期を受け持つ。
@@ -29,12 +31,17 @@ export const LANGUAGE_STORAGE_KEY = 'disaster-app-lang';
  *
  * **URL 由来の値は保存しない。** 保存すると、QR を一度読んだだけでその端末の
  * 以後の既定言語が固定されてしまう。利用者が画面で選び直したときだけ保存する。
- * 地域はそもそも保存しない（従来どおり）。
+ *
+ * 地域の優先順位: URL の `?pref=` > 利用者が以前画面で選んだ地域（保存値）> 未選択（null）。
+ * **未選択を東京などの既定値で埋めない**（B8）。以前は WarningBanner が黙って東京（130000）を出しており、
+ * 訪日客が「どこの情報か分からないまま東京の警報を見る」状態になっていた。
+ * 地域も URL 由来は保存しない（宿の QR を一度読んだだけで端末の地域が固定されないように）。
  *
  * 利用者が画面で言語・地域を変えたら URL のクエリを今の状態に合わせる
  * （共有したリンクが今の表示を再現する）。開いただけでは URL を書き換えない。
  *
- * `prefCode` は URL で有効な地域が指定されていない限り null（WarningBanner の既定に任せる）。
+ * `prefCode` は URL・保存値のどちらにも有効な地域が無ければ null（未選択）。
+ * `prefResolved` はマウント後の決定が済んだか（済む前に「地域を選んでください」を一瞬出さないため）。
  */
 export function useDisplayPreferences() {
   // SSR と初回描画は 'ja'。hydration mismatch を避けるため、決定はマウント後に行う
@@ -44,6 +51,7 @@ export function useDisplayPreferences() {
   // 表示中の言語が URL 由来か（URL 由来なら保存しない）
   const [languageFromUrl, setLanguageFromUrl] = useState(false);
   const [prefCode, setPrefCode] = useState<string | null>(null);
+  const [prefResolved, setPrefResolved] = useState(false);
 
   // 注意: 保存エフェクトより先に宣言しないと、マウント時に保存済みの言語が
   // デフォルトの 'ja' で上書きされてしまう
@@ -55,7 +63,9 @@ export function useDisplayPreferences() {
         resolveInitialLanguage(readStorage(LANGUAGE_STORAGE_KEY), getBrowserLanguages())
     );
     setLanguageFromUrl(urlLanguage !== null);
-    setPrefCode(readPrefParam(search));
+    const savedPref = readStorage(PREF_STORAGE_KEY);
+    setPrefCode(readPrefParam(search) ?? (isPrefectureCode(savedPref) ? savedPref : null));
+    setPrefResolved(true);
     setLanguageResolved(true);
   }, []);
 
@@ -81,8 +91,9 @@ export function useDisplayPreferences() {
   const selectPref = useCallback((code: string) => {
     if (!isPrefectureCode(code)) return;
     setPrefCode(code);
+    writeStorage(PREF_STORAGE_KEY, code);
     replaceQueryParam(PREF_PARAM, code);
   }, []);
 
-  return { language, prefCode, selectLanguage, selectPref };
+  return { language, prefCode, prefResolved, selectLanguage, selectPref };
 }

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useDisplayPreferences, LANGUAGE_STORAGE_KEY } from '../useDisplayPreferences';
+import { useDisplayPreferences, LANGUAGE_STORAGE_KEY, PREF_STORAGE_KEY } from '../useDisplayPreferences';
 
 /**
  * 表示言語と地域の決定・保存・URL 同期。
@@ -120,7 +120,7 @@ describe('useDisplayPreferences — 地域', () => {
     expect(result.current.prefCode).toBe('260000');
   });
 
-  it('URL の pref が無効なら null（WarningBanner の既定に任せる）', () => {
+  it('URL の pref が無効なら null（未選択。東京などの既定値で埋めない）', () => {
     setUrl('/?pref=16000');
     const { result } = renderHook(() => useDisplayPreferences());
     expect(result.current.prefCode).toBeNull();
@@ -173,5 +173,55 @@ describe('useDisplayPreferences — URL 同期', () => {
     expect(result.current.language).toBe('fr');
     expect(result.current.prefCode).toBeNull();
     expect(window.location.search).toBe('');
+  });
+});
+
+/**
+ * B8: 地域を黙って東京にしない。
+ * 地域は URL の ?pref= > 利用者が以前画面で選んだ地域（保存値）> 未選択（null）。
+ * 未選択のときは画面が「地域を選んでください」を出す。URL 由来の地域は保存しない（言語と同じ）
+ */
+describe('useDisplayPreferences — 地域の保存（B8）', () => {
+  it('URL も保存値も無ければ null（未選択）で、解決済みになる', () => {
+    const { result } = renderHook(() => useDisplayPreferences());
+    expect(result.current.prefCode).toBeNull();
+    expect(result.current.prefResolved).toBe(true);
+  });
+
+  it('画面で選んだ地域は保存し、次に開いたときに使う', () => {
+    const first = renderHook(() => useDisplayPreferences());
+    act(() => first.result.current.selectPref('270000'));
+    expect(localStorage.getItem(PREF_STORAGE_KEY)).toBe('270000');
+    first.unmount();
+    setUrl('/');
+    const { result } = renderHook(() => useDisplayPreferences());
+    expect(result.current.prefCode).toBe('270000');
+  });
+
+  it('URL の pref は保存値より優先し、保存値を上書きしない', () => {
+    localStorage.setItem(PREF_STORAGE_KEY, '270000');
+    setUrl('/?pref=471000');
+    const { result } = renderHook(() => useDisplayPreferences());
+    expect(result.current.prefCode).toBe('471000');
+    expect(localStorage.getItem(PREF_STORAGE_KEY)).toBe('270000');
+  });
+
+  it('保存値が許可リスト外（壊れた値・存在しない 460000）なら未選択', () => {
+    for (const bad of ['460000', 'tokyo', '', '130000<script>']) {
+      localStorage.setItem(PREF_STORAGE_KEY, bad);
+      const { result, unmount } = renderHook(() => useDisplayPreferences());
+      expect(result.current.prefCode, bad).toBeNull();
+      unmount();
+    }
+  });
+
+  it('保存できない環境（localStorage が例外）でも選択は効く', () => {
+    vi.spyOn(window, 'localStorage', 'get').mockImplementation(() => {
+      throw new DOMException('denied', 'SecurityError');
+    });
+    const { result } = renderHook(() => useDisplayPreferences());
+    expect(result.current.prefCode).toBeNull();
+    act(() => result.current.selectPref('260000'));
+    expect(result.current.prefCode).toBe('260000');
   });
 });

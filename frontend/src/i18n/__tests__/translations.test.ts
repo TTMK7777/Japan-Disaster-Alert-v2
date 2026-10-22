@@ -25,6 +25,27 @@ const REQUIRED_KEYS = [
   'darkMode',
   'lightMode',
   'systemMode',
+  // B4b: 津波の初回取得失敗の帯・保存済みデータの表示（13 言語は .team/inbox/CDX/i18n-b4b）
+  'tsunami.unconfirmed',
+  'tsunami.officialLink',
+  'freshness.savedData',
+  // B11: 緊急連絡タブとオフライン画面（訳は .team/inbox/CDX/i18n-b11。onlineOnly は実装者訳）
+  'emergency.fire.name',
+  'emergency.fire.description',
+  'emergency.visitorHotline.description',
+  'emergency.message171.note',
+  'emergency.web171.name',
+  'emergency.web171.description',
+  'emergency.medicalSearch.name',
+  'emergency.medicalSearch.description',
+  'emergency.consultation7119.name',
+  'emergency.consultation7119.description',
+  'emergency.consultation7119.note',
+  'emergency.embassy.name',
+  'emergency.embassy.description',
+  'emergency.onlineOnly',
+  // B10b: 会話タブの名前（13 言語は .team/inbox/CDX/i18n-b10b/tab-name.json）
+  'conversation',
 ];
 
 // Phase 1A: コンポーネント翻訳キー（全16言語で必須）
@@ -58,6 +79,12 @@ const COMPONENT_KEYS = [
   'scope.notCovered',
   'scope.prefectureLink',
   'scope.travelerLink',
+  // 地域の明示・特別警報の帯（B8。components/RegionBar.tsx・SpecialWarningBand.tsx）
+  'region.showing',
+  'region.change',
+  'region.officialSwitchHint',
+  'warning.specialBanner',
+  'warning.view',
   // 低電力モード・最後に取得できた時刻（components/LowPower.tsx, ShelterMap の地図遅延）
   'lowPower.label',
   'lowPower.on',
@@ -266,5 +293,59 @@ describe('boundaryErrorMessages', () => {
       expect(boundaryErrorMessages[code].message).toBeTruthy();
       expect(boundaryErrorMessages[code].retry).toBeTruthy();
     });
+  });
+});
+
+describe('B8 の文言', () => {
+  const langCodes = LANGUAGES.map((l) => l.code);
+
+  it('地域名を差し込む 2 キーは全 16 言語で {pref} をちょうど 1 つ持つ（訳で崩れていない）', () => {
+    for (const code of langCodes) {
+      for (const key of ['region.showing', 'warning.specialBanner']) {
+        const text = translations[code][key];
+        expect(text.split('{pref}').length - 1, `${code}.${key}`).toBe(1);
+      }
+    }
+  });
+
+  it('scope.jmaRelay は肯定形（「公式発表ではない」で警報そのものを疑わせない）', () => {
+    expect(translations.ja['scope.jmaRelay']).toBe(
+      'このアプリは、気象庁が発表した警報・情報をお伝えします。避難については、市町村の指示に従ってください。'
+    );
+    expect(translations.ja['scope.jmaRelay']).not.toContain('公式発表ではありません');
+    expect(translations.en['scope.jmaRelay']).not.toMatch(/not official/i);
+  });
+
+  it('地域の選択の 12 キーは全 16 言語が自分の訳を持つ（英語の流用ではない。easy_ja も英語にしない）', () => {
+    const keys = Object.keys(translations.ja).filter((k) => k.startsWith('region.'));
+    expect(keys.length).toBe(15); // 先行 3 キー（showing・change・officialSwitchHint）＋地域の選択 12 キー
+    for (const code of langCodes) {
+      for (const key of keys) {
+        expect(translations[code][key], `${code}.${key}`).toBeTruthy();
+        if (code !== 'en') expect(translations[code][key], `${code}.${key}`).not.toBe(translations.en[key]);
+      }
+    }
+  });
+
+  it('chooseHint の「警報・注意報」は各言語の既存の警報・注意報の訳語と揃える', () => {
+    for (const code of langCodes) {
+      const hint = translations[code]['region.chooseHint'].toLowerCase();
+      expect(hint, code).toContain(translations[code]['warning.advisory'].toLowerCase().slice(0, 4));
+    }
+  });
+});
+
+describe('会話タブ（B10b）', () => {
+  it('「翻訳は確認中」の注記が全 16 言語にあり、id / ms は「Bahasa Inggris / Inggeris」', () => {
+    for (const { code } of LANGUAGES) {
+      expect(translations[code]?.['conversation.reviewNote'], code).toBeTruthy();
+    }
+    expect(translations.id['conversation.reviewNote']).toContain('Bahasa Inggris');
+    expect(translations.ms['conversation.reviewNote']).toContain('Bahasa Inggeris');
+  });
+
+  it('タブ名は 16 言語すべてにある（de は Sätze）', () => {
+    for (const { code } of LANGUAGES) expect(translations[code]?.conversation, code).toBeTruthy();
+    expect(translations.de.conversation).toBe('Sätze');
   });
 });

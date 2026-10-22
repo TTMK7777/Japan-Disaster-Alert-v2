@@ -121,7 +121,7 @@ describe('VolcanoWarnings', () => {
     mockFetch(null, false);
     const { container } = render(<VolcanoWarnings language="en" />);
     await waitFor(() => expect(container.textContent).toContain('Volcanic Warnings'));
-    expect(container.querySelector('[role="status"]')).toBeTruthy();
+    expect(container.querySelector('[role="alert"][data-testid="volcano-fetch-failure"]')).toBeTruthy();
   });
 
   it('レベルのバッジはレベル制の火山にだけ出す', async () => {
@@ -205,9 +205,10 @@ describe('VolcanoWarnings', () => {
     expect(container.querySelector('h3')?.textContent).toContain('噴火警報');
   });
 
-  it('配列以外が返っても壊れない', async () => {
+  it('配列以外が返っても壊れず、「噴火警報なし」（無表示）にもしない', async () => {
     mockFetch({ detail: 'nope' });
     const { container } = render(<VolcanoWarnings language="en" />);
-    await waitFor(() => expect(container.querySelector('section')).toBeNull());
+    await waitFor(() => expect(container.querySelector('[data-testid="volcano-fetch-failure"]')).toBeTruthy());
+    expect(container.querySelector('section')).toBeNull();
   });
 });

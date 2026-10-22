@@ -479,8 +479,12 @@ class TestUnreadableUpstream:
         assert snap.datasets.volcano_warnings.items == []
 
     @pytest.mark.asyncio
-    async def test_既存の噴火警報エンドポイント経路は従来どおり空(self, services):
-        """get_volcano_warnings（既存 API 用）は全滅でも [] のまま（変えない）。"""
+    async def test_既存の噴火警報エンドポイント経路も全滅を空にしない(self, services):
+        """get_volcano_warnings（/api/v1/volcanoes/warnings 用）も全滅は ValueError（B4a）。
+
+        以前は [] のままにしていたが、画面で「噴火警報なし」と読めるため、スナップショットと同じ判定にそろえた。
+        """
         _, _, volcano, router = services
         router.routes["/volcano/data/warning.json"] = [{"volcanoInfo": "改名された形"}]
-        assert await volcano.get_volcano_warnings() == []
+        with pytest.raises(ValueError):
+            await volcano.get_volcano_warnings()

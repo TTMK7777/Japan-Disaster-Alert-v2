@@ -5,7 +5,16 @@
 // offline.html / offline.js を変えたら上げる。install は sw.js のバイト差分でしか走らないため、
 // 上げないと既存の利用者は古いオフライン画面（cache.addAll 済みのもの）を見続ける。
 // v3: オフライン画面に「このアプリが扱う範囲（避難指示・避難所は扱わない）」を追加
-const CACHE_NAME = 'disaster-alert-v3';
+// v6: API のキャッシュに保存時刻（X-SW-Cached-At）を付けた。保存時刻の無い旧キャッシュを捨てる
+// v7: オフライン画面の緊急連絡に 171・#7119・医療機関検索・駐日公館・web171 と説明を追加（B11）。医療機関検索の URL は表示言語別
+// v8: install 時に / が読み込む JS / CSS もキャッシュする（会話タブを電波なしで開くため。B10b）
+const CACHE_NAME = 'disaster-alert-v8';
+
+// 通信失敗時に API のキャッシュを返すときの印（frontend/src/lib/fetchFailure.ts と同じ名前）。
+// 印が無いと、画面はキャッシュの古い JSON を「今取れた」と受け取り、
+// 「最後に取得できた時刻」を現在時刻に進めてしまう（古い警報・古い空配列が最新に見える）
+const SW_CACHE_HEADER = 'X-SW-Cache';
+const SW_CACHED_AT_HEADER = 'X-SW-Cached-At';
 
 // 地図タイルはアプリ資産と別のキャッシュに置く。
 // 同居させると、地図をパンするたびに際限なく増えたタイルが
@@ -26,6 +35,8 @@ const STATIC_ASSETS = [
   '/manifest.json',
   '/offline.html',
   '/offline.js',
+  // 「現在地から選ぶ」の県推定の表（src/lib/prefGrid.ts）。圏外でも推定できるように先に入れる
+  '/data/pref-grid.json',
   '/icons/icon-192x192.png',
   '/icons/icon-512x512.png',
 ];
@@ -50,13 +61,53 @@ const CACHE_STRATEGIES = {
   ],
 };
 
+// install 時に、この HTML が読み込む Next.js の資源（/_next/static の JS / CSS）もキャッシュするページ。
+// 資源の名前はビルドごとにハッシュが変わるので sw.js には書けない。キャッシュした HTML から拾う。
+// 以前は初回訪問の資源（SW が制御を取る前に読み込んだもの）が一つもキャッシュされず、
+// 電波を切って開き直すと HTML だけが出てタブが動かなかった（会話カードの文も JS の中にある）
+const PRECACHE_PAGES = ['/'];
+
+// HTML の script / link と、RSC の flight データ（"static/chunks/..."）の両方を拾う。
+// 直前が引用符のものだけ（https://別オリジン/_next/... は拾わない）
+const NEXT_STATIC_ASSET_PATTERN = /["'](?:\/_next\/)?(static\/(?:chunks|css|media)\/[^"'\s\\?#]+?\.(?:js|css|woff2?))/g;
+
+/** HTML の本文から /_next/static の資源のパスを重複なしで取り出す */
+function extractNextStaticAssets(html) {
+  const found = new Set();
+  for (const match of html.matchAll(NEXT_STATIC_ASSET_PATTERN)) {
+    // polyfills は noModule（古いブラウザ専用）。SW が動くブラウザは読まないので入れない
+    if (/\/polyfills-/.test(match[1])) continue;
+    found.add('/_next/' + match[1]);
+  }
+  return [...found];
+}
+
+/**
+ * PRECACHE_PAGES の HTML が読み込む資源をキャッシュする。
+ * **1 件ずつ・失敗は無視する。** addAll にすると 1 件の 404 で install ごと失敗し、
+ * オフライン画面（offline.html）まで入らなくなる
+ */
+async function precachePageAssets(cache) {
+  for (const page of PRECACHE_PAGES) {
+    const response = await cache.match(page);
+    if (!response) continue;
+    const assets = extractNextStaticAssets(await response.clone().text());
+    await Promise.all(
+      assets.map((asset) =>
+        cache.add(asset).catch((error) => console.log('[SW] Precache skipped:', asset, error))
+      )
+    );
+  }
+}
+
 // Service Worker インストール
 self.addEventListener('install', (event) => {
   console.log('[SW] Installing Service Worker...');
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
+    caches.open(CACHE_NAME).then(async (cache) => {
       console.log('[SW] Caching static assets');
-      return cache.addAll(STATIC_ASSETS);
+      await cache.addAll(STATIC_ASSETS);
+      await precachePageAssets(cache);
     })
   );
   // 即座にアクティベート
@@ -107,7 +158,7 @@ self.addEventListener('fetch', (event) => {
   } else if (isStaticAsset(url)) {
     event.respondWith(cacheFirst(request));
   } else if (isApiRequest(url)) {
-    event.respondWith(networkFirst(request));
+    event.respondWith(networkFirst(request, { api: true }));
   } else {
     event.respondWith(networkFirst(request));
   }
@@ -148,20 +199,21 @@ async function cacheFirst(request) {
   }
 }
 
-// ネットワークファースト戦略
-async function networkFirst(request) {
+// ネットワークファースト戦略。
+// api: true のときは、保存時に保存時刻を付け、通信失敗でキャッシュを返すときに印を付ける
+async function networkFirst(request, { api = false } = {}) {
   try {
     const response = await fetch(request);
     if (response.ok) {
       const cache = await caches.open(CACHE_NAME);
-      cache.put(request, response.clone());
+      cache.put(request, api ? withCachedAt(response.clone()) : response.clone());
     }
     return response;
   } catch (error) {
     console.log('[SW] Network first, falling back to cache:', request.url);
     const cached = await caches.match(request);
     if (cached) {
-      return cached;
+      return api ? markFromCache(cached) : cached;
     }
 
     // オフラインページを表示（HTML リクエストの場合）
@@ -178,6 +230,46 @@ async function networkFirst(request) {
       headers: { 'Content-Type': 'application/json' }
     });
   }
+}
+
+/** 保存する応答に保存時刻を付ける（ヘッダ以外は同じ） */
+function withCachedAt(response) {
+  const headers = new Headers(response.headers);
+  headers.set(SW_CACHED_AT_HEADER, new Date().toISOString());
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/**
+ * キャッシュから返す応答に X-SW-Cache: 1 を付ける。
+ *
+ * SW が作った応答は、別オリジンの API への fetch でも CORS の公開ヘッダ
+ * （Access-Control-Expose-Headers）に載せた名前しか画面から読めない。
+ * 印・保存時刻と、元の応答で読めていたヘッダ（X-Failed-Areas 等）をすべて公開する
+ */
+function markFromCache(cached) {
+  const headers = new Headers(cached.headers);
+  headers.set(SW_CACHE_HEADER, '1');
+  const exposed = [];
+  const seen = new Set();
+  const add = (name) => {
+    const trimmed = name.trim();
+    if (!trimmed || seen.has(trimmed.toLowerCase())) return;
+    seen.add(trimmed.toLowerCase());
+    exposed.push(trimmed);
+  };
+  [SW_CACHE_HEADER, SW_CACHED_AT_HEADER].forEach(add);
+  (headers.get('Access-Control-Expose-Headers') || '').split(',').forEach(add);
+  for (const name of headers.keys()) add(name);
+  headers.set('Access-Control-Expose-Headers', exposed.join(', '));
+  return new Response(cached.body, {
+    status: cached.status,
+    statusText: cached.statusText,
+    headers,
+  });
 }
 
 // キャッシュファースト with 有効期限
@@ -309,7 +401,12 @@ async function syncEarthquakeData() {
     if (response.ok) {
       const data = await response.json();
       const cache = await caches.open(CACHE_NAME);
-      await cache.put('/api/v1/earthquakes?limit=10', new Response(JSON.stringify(data)));
+      await cache.put(
+        '/api/v1/earthquakes?limit=10',
+        new Response(JSON.stringify(data), {
+          headers: { 'Content-Type': 'application/json', [SW_CACHED_AT_HEADER]: new Date().toISOString() },
+        })
+      );
       console.log('[SW] Earthquake data synced');
     }
   } catch (error) {

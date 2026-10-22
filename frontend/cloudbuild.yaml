@@ -11,6 +11,16 @@
 #     --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
 #   gcloud builds submit frontend --config frontend/cloudbuild.yaml \
 #     --project japan-disaster-alert --substitutions _API_URL=${API_URL}
+#
+# フロント自身の公開 URL（_SITE_URL）も渡すとき（初回は frontend の URL が未確定なので、デプロイ後にもう一度ビルドする）:
+#   WEB_URL=$(gcloud run services describe disaster-web \
+#     --project japan-disaster-alert --region asia-northeast1 --format='value(status.url)')
+#   gcloud builds submit frontend --config frontend/cloudbuild.yaml \
+#     --project japan-disaster-alert \
+#     --substitutions=_API_URL=${API_URL},_SITE_URL=${WEB_URL}
+#   _SITE_URL の用途: SNS 共有の og:image を絶対 URL にする／宿の QR ポスター（/poster）の QR と
+#   印字 URL をこの URL で作る（スタッフが社内 LAN や localhost でポスターを開いても、客が開ける URL になる）。
+#   独自ドメインを付けたらその URL を渡す。複数の置換は「,」区切りで 1 つの --substitutions に書く
 
 steps:
   - name: gcr.io/cloud-builders/docker
@@ -30,7 +40,8 @@ images:
 substitutions:
   # 未指定ならローカル開発の既定値。本番では必ず上書きすること
   _API_URL: http://localhost:8000
-  # フロント自身の公開 URL（SNS 共有の og:image 用）。空なら og:image を出さない
+  # フロント自身の公開 URL（SNS 共有の og:image と /poster の QR 用）。
+  # 空なら og:image を出さず、ポスターは開いているページの origin で QR を作る
   _SITE_URL: ''
   _IMAGE: asia-northeast1-docker.pkg.dev/japan-disaster-alert/cloud-run-source-deploy/disaster-web:latest
 

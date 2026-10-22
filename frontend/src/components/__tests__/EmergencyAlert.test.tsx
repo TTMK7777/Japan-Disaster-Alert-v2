@@ -34,6 +34,11 @@ afterEach(() => {
 
 describe('自動解除カウントダウン', () => {
   it('注意報はカウントダウンが実際に進み、0で自動的に閉じる', async () => {
+    // 時刻を固定する。ダイアログには発表時刻（時:分:秒）も出るため、
+    // 以前は全文に '30' が含まれるか見ていて 22:30 台などに落ちていた（偽レッド）。
+    // 逆に xx:25 台なら '25' が時刻だけで満たされ、カウントダウンが止まっていても通っていた（偽グリーン）。
+    // 両方を踏む時刻（22:30:25）に固定し、検査はカウントダウン要素に限定する
+    vi.setSystemTime(new Date(2026, 9, 22, 22, 30, 25));
     render(<EmergencyAlert language="en" tsunamis={ADVISORY} />);
     expect(screen.getByRole('alertdialog')).toBeTruthy();
 
@@ -41,9 +46,7 @@ describe('自動解除カウントダウン', () => {
     await act(async () => {
       vi.advanceTimersByTime(5_000);
     });
-    const dialogText = screen.getByRole('alertdialog').textContent ?? '';
-    expect(dialogText).toContain('25');
-    expect(dialogText).not.toContain('30');
+    expect(screen.getByTestId('alert-countdown').textContent).toBe(' (25s)');
 
     // 残りを進めると自動で閉じる
     await act(async () => {

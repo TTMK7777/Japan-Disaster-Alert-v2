@@ -77,6 +77,13 @@ export default function ScopeNotice({ language, prefCode }: ScopeNoticeProps) {
       <p className="text-sm leading-relaxed">{t('scope.jmaRelay')}</p>
       {/* 誤解されると命に関わる側なので太字で */}
       <p className="text-base font-semibold leading-relaxed">{t('scope.notCovered')}</p>
+      {/* 未選択のときは全国の旅行者向けページを案内している。選ぶと県のページに変わることを
+          リンクのそばで伝える（アプリ内の警報タブではなく外部の公式ページの話） */}
+      {prefCode === null && (
+        <p data-testid="official-switch-hint" className="text-xs text-gray-700 dark:text-gray-300">
+          {t('region.officialSwitchHint')}
+        </p>
+      )}
       <OfficialInfoLink language={language} areaCode={prefCode} />
     </section>
   );

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import EmergencyContacts from '../EmergencyContacts';
+import { getTranslation } from '@/i18n/translations';
+import { emergencyLinkUrl } from '@/lib/emergencyContacts';
 
 describe('EmergencyContacts', () => {
   // 日本語での緊急連絡先表示テスト
@@ -46,7 +48,7 @@ describe('EmergencyContacts', () => {
     expect(screen.getByText('Emergency Contacts')).toBeInTheDocument();
     expect(screen.getByText('Use during disasters')).toBeInTheDocument();
     expect(screen.getByText('Police')).toBeInTheDocument();
-    expect(screen.getByText('Fire/Ambulance')).toBeInTheDocument();
+    expect(screen.getByText('Fire service / Ambulance')).toBeInTheDocument();
     expect(screen.getByText('Coast Guard')).toBeInTheDocument();
   });
 
@@ -124,5 +126,48 @@ describe('EmergencyContacts', () => {
 
     const policeLink = screen.getByLabelText('Call Police at 110');
     expect(policeLink).toBeInTheDocument();
+  });
+
+  // B11: 119 は「消防・救急車」に名前と説明を揃える（th は救急医療が読み取れる訳へ）
+  it('119 の名前と説明が translations の emergency.fire.* で出る（ja / th）', () => {
+    const { unmount } = render(<EmergencyContacts language="ja" />);
+    expect(screen.getByText('消防・救急車')).toBeInTheDocument();
+    expect(screen.getByText('火災や急な病気・けがの緊急通報。')).toBeInTheDocument();
+    expect(screen.getByLabelText('Call 消防・救急車 at 119')).toHaveAttribute('href', 'tel:119');
+    unmount();
+    render(<EmergencyContacts language="th" />);
+    expect(screen.getByText(getTranslation('th', 'emergency.fire.name'))).toBeInTheDocument();
+    expect(screen.getByText(getTranslation('th', 'emergency.fire.description'))).toBeInTheDocument();
+  });
+
+  it('171 に提供条件の注記、Visitor Hotline に用途・対応言語・時間が出る', () => {
+    render(<EmergencyContacts language="ja" />);
+    expect(screen.getByText(getTranslation('ja', 'emergency.message171.note'))).toBeInTheDocument();
+    expect(screen.getByText(getTranslation('ja', 'emergency.visitorHotline.description'))).toBeInTheDocument();
+  });
+
+  it('JNTO 医療機関検索・駐日公館一覧・#7119 地域一覧・web171 が名前と用途つきのリンクで出る', () => {
+    render(<EmergencyContacts language="ja" />);
+    const cases: [string, string, string][] = [
+      ['emergency.medicalSearch.name', 'emergency.medicalSearch.description', emergencyLinkUrl('medicalSearch', 'ja')],
+      ['emergency.embassy.name', 'emergency.embassy.description', emergencyLinkUrl('embassy', 'ja')],
+      ['emergency.consultation7119.name', 'emergency.consultation7119.description', emergencyLinkUrl('consultation7119', 'ja')],
+      ['emergency.web171.name', 'emergency.web171.description', emergencyLinkUrl('web171', 'ja')],
+    ];
+    for (const [nameKey, descKey, url] of cases) {
+      const link = screen.getByRole('link', { name: new RegExp(getTranslation('ja', nameKey)) });
+      expect(link).toHaveAttribute('href', url);
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(screen.getByText(getTranslation('ja', descKey))).toBeInTheDocument();
+    }
+    // #7119 は地域差の注記を必ず添える
+    expect(screen.getByText(getTranslation('ja', 'emergency.consultation7119.note'))).toBeInTheDocument();
+  });
+
+  it('未対応の言語では新しい項目も英語で出る', () => {
+    render(<EmergencyContacts language="xx" />);
+    expect(screen.getByText('Fire service / Ambulance')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /JNTO medical institution search/ })).toBeInTheDocument();
   });
 });

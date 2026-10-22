@@ -8,17 +8,23 @@ import EmergencyAlert from '@/components/EmergencyAlert';
 import WarningBanner from '@/components/WarningBanner';
 import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
+// 会話カードは静的に取り込む（next/dynamic にしない）。文のデータはこのページの JS に入り、
+// SW が install 時に / の HTML から拾ってキャッシュするので、電波が無くてもタブが開ける（B10b）
+import ConversationCards from '@/components/ConversationCards';
 import TransitLinks from '@/components/TransitLinks';
-import ScopeNotice from '@/components/ScopeNotice';
+import ScopeNotice, { OfficialInfoLink } from '@/components/ScopeNotice';
+import RegionBar from '@/components/RegionBar';
+import SpecialWarningBand from '@/components/SpecialWarningBand';
 import ThemeToggle from '@/components/ThemeToggle';
 import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
 import { LowPowerToggle, FreshnessStatus, BatterySuggestion } from '@/components/LowPower';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
-import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/translations';
+import { translations, errorMessages, boundaryErrorMessages, getLocale } from '@/i18n/translations';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import { useDisplayPreferences } from '@/hooks/useDisplayPreferences';
+import { useSpecialWarning } from '@/hooks/useSpecialWarning';
 import { useLowPowerMode } from '@/hooks/useLowPowerMode';
 import { useBatterySuggestion } from '@/hooks/useBatterySuggestion';
 
@@ -90,8 +96,11 @@ const ShelterMap = dynamic(() => import('@/components/ShelterMap'), {
 
 import type { Earthquake } from '@/types/earthquake';
 import { API_BASE_URL } from '@/config/api';
+import { createTimedAbort, classifyFetchError, readSwCache, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
 
-type TabType = 'earthquake' | 'warning' | 'emergency' | 'shelter';
+/** タブの並び（表示順・キーボード操作の順）。会話カードは B10b で追加 */
+const TABS = ['earthquake', 'warning', 'emergency', 'shelter', 'conversation'] as const;
+type TabType = (typeof TABS)[number];
 type EarthquakeViewType = 'list' | 'map';
 
 // タブアイコンコンポーネント
@@ -116,6 +125,13 @@ function TabIcon({ tab, active }: { tab: TabType; active: boolean }) {
       );
     case 'shelter':
       return <ShelterIcon size={size} className={active ? '' : 'opacity-60'} />;
+    case 'conversation':
+      // 吹き出し 2 つ（指で文を選んで見せ合う）
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+          <path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z" />
+        </svg>
+      );
   }
 }
 
@@ -123,13 +139,38 @@ function TabIcon({ tab, active }: { tab: TabType; active: boolean }) {
 interface ApiError {
   message: string;
   retryable: boolean;
+  reason?: FailureReason;
 }
+
+/** 地震一覧の取得期限。過ぎたら失敗として出す */
+const EARTHQUAKE_FETCH_TIMEOUT_MS = 10_000;
 
 export default function Home() {
   // 表示言語と警報タブの地域。URL（?lang= / ?pref=）・保存値・ブラウザ言語から決め、
   // 利用者が画面で変えたら保存と URL の同期を行う（hooks/useDisplayPreferences）
-  const { language, prefCode, selectLanguage, selectPref } = useDisplayPreferences();
+  const { language, prefCode, prefResolved, selectLanguage, selectPref } = useDisplayPreferences();
   const [activeTab, setActiveTab] = useState<TabType>('earthquake');
+  // 選択中の地域の特別警報（全タブ共通の帯）。警報タブを開いている間は WarningBanner の取得結果を使う
+  const { active: specialWarningActive, report: reportRegionWarnings } = useSpecialWarning({
+    prefCode,
+    language,
+    paused: activeTab === 'warning',
+  });
+  const handleWarningsUpdate = useCallback(
+    (warnings: unknown[], areaCode: string, status: { partial: boolean }) =>
+      reportRegionWarnings(areaCode, warnings, status),
+    [reportRegionWarnings]
+  );
+  // 帯の「警報を見る」: アプリ内の警報タブへ移り、タブにフォーカスを置いて先頭から読めるようにする
+  const showWarningTab = useCallback(() => {
+    setActiveTab('warning');
+    document.getElementById('tab-warning')?.focus();
+    try {
+      window.scrollTo({ top: 0 });
+    } catch {
+      // scrollTo が無い環境（テストの jsdom 等）では何もしない
+    }
+  }, []);
   // 低電力・低回線モード（端末に保存）。オンなら SSE をやめて 5 分ごとのポーリング、
   // 地図タイルは押されるまで読まず、アニメーションを止める
   const { lowPower, setLowPower, toggleLowPower } = useLowPowerMode();
@@ -140,6 +181,8 @@ export default function Home() {
   const [earthquakes, setEarthquakes] = useState<Earthquake[]>([]);
   const [earthquakeLoading, setEarthquakeLoading] = useState(true);
   const [earthquakeError, setEarthquakeError] = useState<ApiError | null>(null);
+  // 地震一覧を最後に取得できた時刻（失敗の枠に出す。初回で未取得なら null）
+  const [earthquakeLastSuccessAt, setEarthquakeLastSuccessAt] = useState<number | null>(null);
 
   const t = useCallback(
     (key: keyof typeof translations.ja) => translations[language]?.[key] || translations.ja[key],
@@ -157,6 +200,7 @@ export default function Home() {
     setEarthquakes(data.earthquakes);
     setEarthquakeLoading(false);
     setEarthquakeError(null);
+    setEarthquakeLastSuccessAt(Date.now());
   }, []);
 
   // SSE で届いた津波情報を保持して EmergencyAlert に渡す。
@@ -191,39 +235,45 @@ export default function Home() {
   // **前回の取得を必ず中断してから始める。** 言語切替の直後などで
   // 古いリクエストが遅れて返ると、後着の setEarthquakes が勝って
   // 旧言語のデータが新言語の UI に載る（レスポンス順序の逆転）
-  const earthquakeFetchRef = useRef<AbortController | null>(null);
+  //
+  // 失敗（503・通信・期限超過）は**一覧を消さず**失敗の枠を出す。失敗表示は再取得の成功でだけ消す
+  // （以前は開始時に消し、期限超過は黙って捨てていたため、初回なら「地震情報はありません」になった）
+  const earthquakeFetchRef = useRef<TimedAbort | null>(null);
   const fetchEarthquakes = useCallback(async () => {
     earthquakeFetchRef.current?.abort();
-    const controller = new AbortController();
-    earthquakeFetchRef.current = controller;
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const request = createTimedAbort(EARTHQUAKE_FETCH_TIMEOUT_MS);
+    earthquakeFetchRef.current = request;
     try {
       setEarthquakeLoading(true);
-      setEarthquakeError(null);
       const response = await fetch(
         `${API_BASE_URL}/api/v1/earthquakes?lang=${encodeURIComponent(language)}&limit=20`,
-        { signal: controller.signal }
+        { signal: request.signal }
       );
-      if (response.ok) {
-        const data = await response.json();
-        if (!controller.signal.aborted) setEarthquakes(data);
-      } else {
-        throw new Error('Server error');
-      }
+      if (!response.ok) throw new Error(`Server error ${response.status}`);
+      // SW がキャッシュから返した応答は「今取れた」ものではない（B4b）。失敗として扱い、前の表示を保つ
+      if (readSwCache(response).fromCache) throw new Error('served from service worker cache');
+      const data = await response.json();
+      if (request.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+      if (!Array.isArray(data)) throw new Error('Unexpected earthquakes payload');
+      setEarthquakes(data);
+      setEarthquakeError(null);
+      setEarthquakeLastSuccessAt(Date.now());
     } catch (err) {
-      // 自分で中断した分はエラー表示にしない（新しい取得が進行中）
-      if (controller.signal.aborted && (err as Error).name === 'AbortError') return;
+      // 自分で中断した分（言語の切替など）はエラー表示にしない。期限超過は失敗として出す
+      const reason = classifyFetchError(request, err);
+      if (reason === null) return;
       console.error('Failed to fetch earthquakes:', err);
       reportFailure();
       const isNetworkError = err instanceof TypeError && err.message.includes('fetch');
       setEarthquakeError({
-        message: isNetworkError ? getErrorMessage('networkError') : getErrorMessage('serverError'),
+        message: isNetworkError || reason === 'timeout' ? getErrorMessage('networkError') : getErrorMessage('serverError'),
         retryable: true,
+        reason,
       });
     } finally {
-      clearTimeout(timeoutId);
+      request.clear();
       // 後続の取得が始まっていたら loading 表示はそちらに任せる
-      if (earthquakeFetchRef.current === controller) setEarthquakeLoading(false);
+      if (earthquakeFetchRef.current === request) setEarthquakeLoading(false);
     }
   }, [language, getErrorMessage, reportFailure]);
 
@@ -234,7 +284,7 @@ export default function Home() {
 
   // タブキーボードナビゲーション（HIGH #7）
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, currentIndex: number) => {
-    const tabKeys = ['earthquake', 'warning', 'emergency', 'shelter'] as const;
+    const tabKeys = TABS;
     let newIndex = currentIndex;
 
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -288,6 +338,10 @@ export default function Home() {
           折り返すため、スクロールするとナビがヘッダーの下に潜り込んで隠れていた。
           入れ子の sticky にすれば高さを知る必要がない */}
       <div className="sticky top-0 z-40 shadow-lg dark:shadow-gray-900/30">
+      {/* 選択中の地域の特別警報。sticky の塊の先頭に置き、どのタブ・どのスクロール位置でも見える */}
+      {specialWarningActive && prefCode !== null && (
+        <SpecialWarningBand language={language} prefCode={prefCode} onView={showWarningTab} />
+      )}
       <header className="bg-disaster-blue dark:bg-gray-800 text-white">
         <div className="max-w-4xl mx-auto flex justify-between items-center gap-2 px-3 py-2 md:px-4 md:py-3">
           {/* min-w-0 が無いと flex 子要素は縮まず、タイトルが折り返す代わりに
@@ -315,14 +369,14 @@ export default function Home() {
       {/* タブナビゲーション（アイコン付き・アクセシビリティ強化） */}
       <nav className="bg-white dark:bg-gray-800 border-b dark:border-gray-700" aria-label={language === 'ja' ? 'メインナビゲーション' : 'Main navigation'}>
         <div className="max-w-4xl mx-auto flex" role="tablist" aria-label={language === 'ja' ? '情報カテゴリ' : 'Information categories'}>
-          {(['earthquake', 'warning', 'emergency', 'shelter'] as TabType[]).map((tab, index) => (
+          {TABS.map((tab, index) => (
             <button
               key={tab}
               id={`tab-${tab}`}
               data-tab={tab}
               onClick={() => setActiveTab(tab)}
               onKeyDown={(e) => handleTabKeyDown(e, index)}
-              className={`flex-1 py-3 px-2 md:px-4 text-center font-medium transition-colors flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
+              className={`flex-1 min-w-0 py-3 px-1 sm:px-2 md:px-4 text-center font-medium transition-colors flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                 activeTab === tab
                   ? 'text-disaster-blue border-b-2 border-disaster-blue bg-blue-50 dark:bg-blue-900/30'
                   : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -333,7 +387,14 @@ export default function Home() {
               tabIndex={activeTab === tab ? 0 : -1}
             >
               <TabIcon tab={tab} active={activeTab === tab} />
-              <span className="text-xs md:text-sm">{t(tab)}</span>
+              {/* 5 タブを 320px に収めるため、長い語（Notunterkünfte 等）は語の途中でも折り返す
+                  （lang を付けてハイフネーション辞書を効かせる） */}
+              <span
+                className="text-xs md:text-sm max-w-full leading-tight [overflow-wrap:anywhere] hyphens-auto"
+                lang={getLocale(language)}
+              >
+                {t(tab)}
+              </span>
             </button>
           ))}
         </div>
@@ -342,12 +403,16 @@ export default function Home() {
 
       {/* メインコンテンツ */}
       <div className="max-w-4xl mx-auto p-4">
+        {/* どこの情報を見ているか（未選択なら選択を促す）。全タブ共通・最上部（B8） */}
+        <RegionBar language={language} prefCode={prefCode} prefResolved={prefResolved} onSelect={selectPref} />
+
         {/* 接続状態 + 最後に取得できた時刻 + 今すぐ更新（全タブ共通）。
             以前は同じ判定のドットがヘッダー（ConnectionStatus）とここの2箇所にあり、
             画面に状態ランプが2つ並んでいた。ここ1箇所に統合している */}
         <FreshnessStatus
           language={language}
           lastSuccessAt={eventStream.lastSuccessAt}
+          savedAt={eventStream.savedAt}
           lastFailed={eventStream.lastFailed}
           refreshing={eventStream.refreshing}
           onRefresh={eventStream.refresh}
@@ -438,6 +503,8 @@ export default function Home() {
                   loading={earthquakeLoading}
                   error={earthquakeError}
                   onRetry={fetchEarthquakes}
+                  lastSuccessAt={earthquakeLastSuccessAt}
+                  officialLink={<OfficialInfoLink language={language} areaCode={prefCode} />}
                 />
               )}
 
@@ -456,11 +523,13 @@ export default function Home() {
 
           {activeTab === 'warning' && (
             <div id="tabpanel-warning" role="tabpanel" aria-labelledby="tab-warning" tabIndex={0} className="space-y-6">
-              {/* 地域は URL の ?pref= か利用者の選択。未指定（null）なら WarningBanner の既定 */}
+              {/* 地域は URL の ?pref= か利用者の選択。未選択（null）なら「地域を選んでください」を出す
+                  （東京などの既定値で埋めない） */}
               <WarningBanner
                 language={language}
-                areaCode={prefCode ?? undefined}
+                areaCode={prefCode}
                 onAreaCodeChange={selectPref}
+                onWarningsUpdate={handleWarningsUpdate}
               />
               {/* 噴火警報。気象庁の階級では警報の一種なので同じタブに置く。
                   タブを 5 つに増やすとモバイル幅でナビが破綻する */}
@@ -480,6 +549,13 @@ export default function Home() {
           {activeTab === 'shelter' && (
             <div id="tabpanel-shelter" role="tabpanel" aria-labelledby="tab-shelter" tabIndex={0}>
               <ShelterMap language={language} deferMap={lowPower} />
+            </div>
+          )}
+
+          {activeTab === 'conversation' && (
+            <div id="tabpanel-conversation" role="tabpanel" aria-labelledby="tab-conversation" tabIndex={0}>
+              {/* 同梱データだけで動く（通信なし）。読み上げは押したときだけなので低電力モードでも重くならない */}
+              <ConversationCards language={language} />
             </div>
           )}
         </ErrorBoundary>
