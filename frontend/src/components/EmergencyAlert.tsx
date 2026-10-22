@@ -387,8 +387,10 @@ export default function EmergencyAlert({ language, tsunamis, onDismiss }: Emerge
       data-reason={initialFailure}
       className="border-b-2 border-amber-500 bg-amber-50 dark:bg-gray-800 px-4 py-2 text-sm text-gray-900 dark:text-gray-100"
     >
-      <div className="container mx-auto flex flex-wrap items-start gap-x-3 gap-y-1">
-        <p className="font-semibold min-w-0 flex-1 [overflow-wrap:anywhere]">
+      {/* 本文とリンクは縦に積む（本文は常に横幅いっぱい）。以前は横並びの flex-1（基準幅 0）＋
+          overflow-wrap:anywhere で、390px ではリンクが幅を取り本文が 1 文字幅の縦列に潰れていた */}
+      <div className="container mx-auto flex flex-col items-start gap-1">
+        <p className="w-full font-semibold [overflow-wrap:break-word]">
           <span aria-hidden="true">&#x26A0;&#xFE0F; </span>
           {initialFailure === 'timeout' && <>{getTranslation(language, 'status.timedOut')} </>}
           {getTranslation(language, 'tsunami.unconfirmed')}
