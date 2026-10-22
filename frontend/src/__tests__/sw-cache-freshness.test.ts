@@ -185,6 +185,7 @@ describe('sw.js — 会話タブをオフラインで開くためのプリキャ
     '<script src="/_next/static/chunks/webpack-abc.js" async=""></script>',
     '<script src="/_next/static/chunks/app/page-def.js" async=""></script>',
     '<script src="https://cdn.example.com/_next/static/chunks/evil.js"></script>',
+    '<script src="/_next/static/chunks/polyfills-42372ed130431b0a.js" noModule=""></script>',
     '</head><body>',
     '<script>self.__next_f.push([1,"2:I[\\"123\\",[\\"static/chunks/123-ghi.js\\",\\"static/chunks/app/page-def.js\\"],\\"default\\"]"])</script>',
     '</body></html>',
@@ -224,6 +225,8 @@ describe('sw.js — 会話タブをオフラインで開くためのプリキャ
     );
     // 別オリジンの URL は拾わない（同じパスを自オリジンに付け替えて取りにも行かない）
     expect(paths).not.toContain('/_next/static/chunks/evil.js');
+    // 古いブラウザ専用（noModule）の polyfills は入れない
+    expect(paths.some((p) => p.includes('polyfills'))).toBe(false);
   });
 
   it('資源の 1 件が 404 でも install は失敗しない（残りはキャッシュする）', async () => {

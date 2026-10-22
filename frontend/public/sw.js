@@ -75,6 +75,8 @@ const NEXT_STATIC_ASSET_PATTERN = /["'](?:\/_next\/)?(static\/(?:chunks|css|medi
 function extractNextStaticAssets(html) {
   const found = new Set();
   for (const match of html.matchAll(NEXT_STATIC_ASSET_PATTERN)) {
+    // polyfills は noModule（古いブラウザ専用）。SW が動くブラウザは読まないので入れない
+    if (/\/polyfills-/.test(match[1])) continue;
     found.add('/_next/' + match[1]);
   }
   return [...found];
