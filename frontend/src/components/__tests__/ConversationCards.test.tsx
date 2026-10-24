@@ -345,3 +345,61 @@ describe('ConversationCards: 読み上げ', () => {
     }
   });
 });
+
+describe('ConversationCards: 英語の常時併記と「翻訳は確認中」の注記（B10b）', () => {
+  /** 要素の中で lang="en-US" の行の本文 */
+  const englishIn = (el: Element) =>
+    [...el.querySelectorAll('[lang="en-US"]')].map((n) => n.textContent);
+
+  for (const lang of ['th', 'ja', 'easy_ja'] as const) {
+    it(`${lang}: 訪日客の文の一覧の各文に英語を添える`, () => {
+      currentLang = lang;
+      render(<ConversationCards language={lang} />);
+      fireEvent.click(document.querySelector('[data-category="injury"]')!);
+      const rows = [...screen.getByTestId('conv-phrase-list').querySelectorAll('[data-phrase-id]')];
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        const p = phraseById(row.getAttribute('data-phrase-id')!)!;
+        expect(englishIn(row), p.id).toEqual([p.text.en]);
+      }
+    });
+
+    it(`${lang}: スタッフの文の一覧・相手の文・返事のボタンにも英語を添える`, () => {
+      currentLang = lang;
+      render(<ConversationCards language={lang} />);
+      openVisitorCard('injury', 'C05');
+      fireEvent.click(screen.getByTestId('conv-to-staff'));
+      expect(englishIn(screen.getByTestId('conv-visitor-said'))).toContain(phraseById('C05')!.text.en);
+      const rows = [...screen.getByTestId('conv-staff-list').querySelectorAll('[data-phrase-id]')];
+      for (const row of rows) {
+        const p = phraseById(row.getAttribute('data-phrase-id')!)!;
+        expect(englishIn(row), p.id).toEqual([p.text.en]);
+      }
+      fireEvent.click(document.querySelector('[data-phrase-id="C06"]')!);
+      for (const btn of screen.getByRole('dialog').querySelectorAll('[data-answer-id]')) {
+        const p = phraseById(btn.getAttribute('data-answer-id')!)!;
+        expect(englishIn(btn), p.id).toEqual([p.text.en]);
+      }
+    });
+  }
+
+  it('en: 一覧で英語を 2 回出さない', () => {
+    currentLang = 'en';
+    render(<ConversationCards language="en" />);
+    fireEvent.click(document.querySelector('[data-category="injury"]')!);
+    for (const row of screen.getByTestId('conv-phrase-list').querySelectorAll('[data-phrase-id]')) {
+      const p = phraseById(row.getAttribute('data-phrase-id')!)!;
+      expect(englishIn(row), p.id).toEqual([p.text.en]);
+    }
+  });
+
+  it('上部に「翻訳は確認中」の注記を利用者の言語（＋日本語）で出す', () => {
+    render(<ConversationCards language="id" />);
+    const note = screen.getByTestId('conv-review-note');
+    expect(note).toHaveTextContent('Bahasa Inggris');
+    expect(note).toHaveTextContent('この翻訳は確認中です。');
+    expect(
+      note.compareDocumentPosition(screen.getByTestId('conv-mode-visitor')) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+});

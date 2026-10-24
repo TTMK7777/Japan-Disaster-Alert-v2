@@ -44,6 +44,10 @@ export const translations: Record<string, Record<string, string>> = {
     warning: '警報',
     emergency: '緊急連絡',
     shelter: '避難所',
+    // B10b: 会話タブの名前（ja/en/easy_ja は実装者訳）
+    conversation: '会話',
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "この翻訳は確認中です。英語も併記しています。",
     settings: '設定',
     loading: '読み込み中...',
     noData: 'データがありません',
@@ -181,6 +185,10 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Alerts',
     emergency: 'SOS',
     shelter: 'Shelters',
+    // B10b: 会話タブの名前（ja/en/easy_ja は実装者訳）
+    conversation: 'Phrases',
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "This translation is under review. English is also shown.",
     settings: 'Settings',
     loading: 'Loading...',
     noData: 'No data available',
@@ -313,6 +321,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: '警报',
     emergency: '紧急电话',
     shelter: '避难所',
+    conversation: "短语", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "此翻译正在审核中，同时附有英文。",
     settings: '设置',
     loading: '加载中...',
     noData: '暂无数据',
@@ -446,6 +457,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: '警報',
     emergency: '緊急電話',
     shelter: '避難所',
+    conversation: "短句", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "此翻譯正在審核中，同時附有英文。",
     settings: '設定',
     loading: '載入中...',
     noData: '暫無資料',
@@ -579,6 +593,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: '경보',
     emergency: '긴급전화',
     shelter: '대피소',
+    conversation: "문구", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "이 번역은 검토 중입니다. 영어도 함께 표시합니다.",
     settings: '설정',
     loading: '로딩 중...',
     noData: '데이터가 없습니다',
@@ -712,6 +729,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Cảnh báo',
     emergency: 'Khẩn cấp',
     shelter: 'Nơi trú ẩn',
+    conversation: "Câu", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Bản dịch này đang được kiểm tra. Có kèm tiếng Anh.",
     settings: 'Cài đặt',
     loading: 'Đang tải...',
     noData: 'Không có dữ liệu',
@@ -845,6 +865,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'คำเตือน',
     emergency: 'ฉุกเฉิน',
     shelter: 'ที่พักพิง',
+    conversation: "วลี", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "คำแปลนี้อยู่ระหว่างตรวจสอบ มีภาษาอังกฤษกำกับด้วย",
     settings: 'ตั้งค่า',
     loading: 'กำลังโหลด...',
     noData: 'ไม่มีข้อมูล',
@@ -978,6 +1001,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Peringatan',
     emergency: 'Darurat',
     shelter: 'Tempat Pengungsian',
+    conversation: "Frasa", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Terjemahan ini sedang ditinjau. Bahasa Inggris juga ditampilkan.",
     settings: 'Pengaturan',
     loading: 'Memuat...',
     noData: 'Tidak ada data',
@@ -1111,6 +1137,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Amaran',
     emergency: 'Kecemasan',
     shelter: 'Tempat Perlindungan',
+    conversation: "Frasa", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Terjemahan ini sedang disemak. Bahasa Inggeris turut dipaparkan.",
     settings: 'Tetapan',
     loading: 'Memuatkan...',
     noData: 'Tiada data',
@@ -1244,6 +1273,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Babala',
     emergency: 'Emergency',
     shelter: 'Evacuation Center',
+    conversation: "Parirala", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Sinusuri pa ang saling ito. May Ingles din.",
     settings: 'Mga Setting',
     loading: 'Naglo-load...',
     noData: 'Walang data',
@@ -1377,6 +1409,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'चेतावनी',
     emergency: 'आपातकालीन',
     shelter: 'आश्रय',
+    conversation: "वाक्य", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "यो अनुवाद जाँच हुँदै छ। अङ्ग्रेजी पनि देखाइएको छ।",
     settings: 'सेटिङ',
     loading: 'लोड हुँदैछ...',
     noData: 'डाटा छैन',
@@ -1510,6 +1545,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Alertes',
     emergency: 'Urgence',
     shelter: 'Abris',
+    conversation: "Phrases", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Traduction en cours de vérification. Anglais aussi affiché.",
     settings: 'Paramètres',
     loading: 'Chargement...',
     noData: 'Pas de données',
@@ -1640,9 +1678,12 @@ export const translations: Record<string, Record<string, string>> = {
     title: 'Katastrophen-KI',
     subtitle: 'Mehrsprachiges System',
     earthquake: 'Erdbeben',
-    warning: 'Warnungen',
+    warning: 'Warnung', // 5 タブを 320px に収めるため短縮（意味は同じ。B10b）
     emergency: 'Notfall',
     shelter: 'Notunterkünfte',
+    conversation: "Sätze", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Diese Übersetzung wird geprüft. Englisch steht auch dabei.",
     settings: 'Einstellungen',
     loading: 'Laden...',
     noData: 'Keine Daten',
@@ -1776,6 +1817,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Allerte',
     emergency: 'Emergenza',
     shelter: 'Rifugi',
+    conversation: "Frasi", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Traduzione in verifica. È mostrato anche l’inglese.",
     settings: 'Impostazioni',
     loading: 'Caricamento...',
     noData: 'Nessun dato',
@@ -1909,6 +1953,9 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'Alertas',
     emergency: 'Emergencia',
     shelter: 'Refugios',
+    conversation: "Frases", // B10b: 会話タブ（訳は .team/inbox/CDX/i18n-b10b/tab-name.json）
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "Traducción en revisión. También se muestra en inglés.",
     settings: 'Configuración',
     loading: 'Cargando...',
     noData: 'Sin datos',
@@ -2042,6 +2089,10 @@ export const translations: Record<string, Record<string, string>> = {
     warning: 'けいほう',
     emergency: 'きんきゅう',
     shelter: 'ひなんじょ',
+    // B10b: 会話タブの名前（ja/en/easy_ja は実装者訳）
+    conversation: 'かいわ',
+    // B10b: 会話カードの訳が確認中である旨（訳は .team/inbox/CDX/i18n-b10b。id/ms は Bahasa を補正）
+    'conversation.reviewNote': "この やくは かくにんちゅうです。えいごも のせています。",
     settings: 'せってい',
     loading: 'よみこみちゅう...',
     noData: 'データが ありません',

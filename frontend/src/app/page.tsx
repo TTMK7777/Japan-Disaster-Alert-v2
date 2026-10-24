@@ -8,6 +8,9 @@ import EmergencyAlert from '@/components/EmergencyAlert';
 import WarningBanner from '@/components/WarningBanner';
 import VolcanoWarnings from '@/components/VolcanoWarnings';
 import EmergencyContacts from '@/components/EmergencyContacts';
+// 会話カードは静的に取り込む（next/dynamic にしない）。文のデータはこのページの JS に入り、
+// SW が install 時に / の HTML から拾ってキャッシュするので、電波が無くてもタブが開ける（B10b）
+import ConversationCards from '@/components/ConversationCards';
 import TransitLinks from '@/components/TransitLinks';
 import ScopeNotice, { OfficialInfoLink } from '@/components/ScopeNotice';
 import RegionBar from '@/components/RegionBar';
@@ -17,7 +20,7 @@ import InstallBanner from '@/components/InstallBanner';
 import PushNotificationBanner from '@/components/PushNotificationBanner';
 import { LowPowerToggle, FreshnessStatus, BatterySuggestion } from '@/components/LowPower';
 import { EarthquakeIcon, ShelterIcon } from '@/components/icons/DisasterIcons';
-import { translations, errorMessages, boundaryErrorMessages } from '@/i18n/translations';
+import { translations, errorMessages, boundaryErrorMessages, getLocale } from '@/i18n/translations';
 import { useEventStream } from '@/hooks/useEventStream';
 import { useTheme } from '@/hooks/useTheme';
 import { useDisplayPreferences } from '@/hooks/useDisplayPreferences';
@@ -95,7 +98,9 @@ import type { Earthquake } from '@/types/earthquake';
 import { API_BASE_URL } from '@/config/api';
 import { createTimedAbort, classifyFetchError, readSwCache, type FailureReason, type TimedAbort } from '@/lib/fetchFailure';
 
-type TabType = 'earthquake' | 'warning' | 'emergency' | 'shelter';
+/** タブの並び（表示順・キーボード操作の順）。会話カードは B10b で追加 */
+const TABS = ['earthquake', 'warning', 'emergency', 'shelter', 'conversation'] as const;
+type TabType = (typeof TABS)[number];
 type EarthquakeViewType = 'list' | 'map';
 
 // タブアイコンコンポーネント
@@ -120,6 +125,13 @@ function TabIcon({ tab, active }: { tab: TabType; active: boolean }) {
       );
     case 'shelter':
       return <ShelterIcon size={size} className={active ? '' : 'opacity-60'} />;
+    case 'conversation':
+      // 吹き出し 2 つ（指で文を選んで見せ合う）
+      return (
+        <svg width={size} height={size} viewBox="0 0 24 24" fill={color} aria-hidden="true">
+          <path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z" />
+        </svg>
+      );
   }
 }
 
@@ -272,7 +284,7 @@ export default function Home() {
 
   // タブキーボードナビゲーション（HIGH #7）
   const handleTabKeyDown = useCallback((e: React.KeyboardEvent, currentIndex: number) => {
-    const tabKeys = ['earthquake', 'warning', 'emergency', 'shelter'] as const;
+    const tabKeys = TABS;
     let newIndex = currentIndex;
 
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
@@ -357,14 +369,14 @@ export default function Home() {
       {/* タブナビゲーション（アイコン付き・アクセシビリティ強化） */}
       <nav className="bg-white dark:bg-gray-800 border-b dark:border-gray-700" aria-label={language === 'ja' ? 'メインナビゲーション' : 'Main navigation'}>
         <div className="max-w-4xl mx-auto flex" role="tablist" aria-label={language === 'ja' ? '情報カテゴリ' : 'Information categories'}>
-          {(['earthquake', 'warning', 'emergency', 'shelter'] as TabType[]).map((tab, index) => (
+          {TABS.map((tab, index) => (
             <button
               key={tab}
               id={`tab-${tab}`}
               data-tab={tab}
               onClick={() => setActiveTab(tab)}
               onKeyDown={(e) => handleTabKeyDown(e, index)}
-              className={`flex-1 py-3 px-2 md:px-4 text-center font-medium transition-colors flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
+              className={`flex-1 min-w-0 py-3 px-1 sm:px-2 md:px-4 text-center font-medium transition-colors flex flex-col md:flex-row items-center justify-center gap-1 md:gap-2 focus:outline-none focus:ring-2 focus:ring-disaster-blue focus:ring-inset ${
                 activeTab === tab
                   ? 'text-disaster-blue border-b-2 border-disaster-blue bg-blue-50 dark:bg-blue-900/30'
                   : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-700'
@@ -375,7 +387,14 @@ export default function Home() {
               tabIndex={activeTab === tab ? 0 : -1}
             >
               <TabIcon tab={tab} active={activeTab === tab} />
-              <span className="text-xs md:text-sm">{t(tab)}</span>
+              {/* 5 タブを 320px に収めるため、長い語（Notunterkünfte 等）は語の途中でも折り返す
+                  （lang を付けてハイフネーション辞書を効かせる） */}
+              <span
+                className="text-xs md:text-sm max-w-full leading-tight [overflow-wrap:anywhere] hyphens-auto"
+                lang={getLocale(language)}
+              >
+                {t(tab)}
+              </span>
             </button>
           ))}
         </div>
@@ -530,6 +549,13 @@ export default function Home() {
           {activeTab === 'shelter' && (
             <div id="tabpanel-shelter" role="tabpanel" aria-labelledby="tab-shelter" tabIndex={0}>
               <ShelterMap language={language} deferMap={lowPower} />
+            </div>
+          )}
+
+          {activeTab === 'conversation' && (
+            <div id="tabpanel-conversation" role="tabpanel" aria-labelledby="tab-conversation" tabIndex={0}>
+              {/* 同梱データだけで動く（通信なし）。読み上げは押したときだけなので低電力モードでも重くならない */}
+              <ConversationCards language={language} />
             </div>
           )}
         </ErrorBoundary>
