@@ -1,22 +1,36 @@
 'use client';
 
+import { getTranslation } from '@/i18n/translations';
+import {
+  emergencyLinkUrl,
+  EMERGENCY_PHONE_NUMBERS,
+  LINK_ORDER,
+  LINK_TEXT_KEYS,
+  PHONE_TEXT_KEYS,
+  type PhoneContactId,
+} from '@/lib/emergencyContacts';
+
 interface EmergencyContactsProps {
   language: string;
 }
 
-// 緊急連絡先の多言語データ
-const contactsData: Record<string, {
+interface PhoneContactText {
+  /** 番号は持たない。EMERGENCY_PHONE_NUMBERS[id] から引く（offline.html と同じ正本） */
+  id: PhoneContactId;
+  /** 省略時は PHONE_TEXT_KEYS の翻訳キーから引く（119 の名前など） */
+  name?: string;
+  description?: string;
+  available?: string;
+  languages?: string;
+}
+
+// 緊急連絡先の多言語データ（番号は src/lib/emergencyContacts.ts が正本）
+export const contactsData: Record<string, {
   title: string;
   subtitle: string;
   sections: {
     title: string;
-    contacts: {
-      name: string;
-      number: string;
-      description: string;
-      available?: string;
-      languages?: string;
-    }[];
+    contacts: PhoneContactText[];
   }[];
   tips: string[];
 }> = {
@@ -27,16 +41,16 @@ const contactsData: Record<string, {
       {
         title: '緊急通報',
         contacts: [
-          { name: '警察', number: '110', description: '事件・事故', available: '24時間' },
-          { name: '消防・救急', number: '119', description: '火災・救急', available: '24時間' },
-          { name: '海上保安庁', number: '118', description: '海での事故', available: '24時間' },
+          { id: 'police', name: '警察', description: '事件・事故', available: '24時間' },
+          { id: 'fire', available: '24時間' },
+          { id: 'coastGuard', name: '海上保安庁', description: '海での事故', available: '24時間' },
         ]
       },
       {
         title: '災害・観光相談',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '外国人向け24時間対応', available: '24時間', languages: 'EN/CN/KO/JP' },
-          { name: '災害用伝言ダイヤル', number: '171', description: '安否確認', available: '災害時' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24時間', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: '災害用伝言ダイヤル', description: '安否確認', available: '災害時' },
         ]
       },
     ],
@@ -53,16 +67,16 @@ const contactsData: Record<string, {
       {
         title: 'Emergency Services',
         contacts: [
-          { name: 'Police', number: '110', description: 'Crime, accidents', available: '24/7' },
-          { name: 'Fire/Ambulance', number: '119', description: 'Fire, medical emergency', available: '24/7' },
-          { name: 'Coast Guard', number: '118', description: 'Sea accidents', available: '24/7' },
+          { id: 'police', name: 'Police', description: 'Crime, accidents', available: '24/7' },
+          { id: 'fire', available: '24/7' },
+          { id: 'coastGuard', name: 'Coast Guard', description: 'Sea accidents', available: '24/7' },
         ]
       },
       {
         title: 'Tourist Support',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '24h multilingual support', available: '24/7', languages: 'EN/CN/KO/JP' },
-          { name: 'Disaster Message Dial', number: '171', description: 'Safety confirmation', available: 'During disasters' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24/7', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Disaster Message Dial', description: 'Safety confirmation', available: 'During disasters' },
         ]
       },
     ],
@@ -79,16 +93,16 @@ const contactsData: Record<string, {
       {
         title: '紧急服务',
         contacts: [
-          { name: '警察', number: '110', description: '犯罪、事故', available: '24小时' },
-          { name: '消防/急救', number: '119', description: '火灾、急救', available: '24小时' },
-          { name: '海上保安', number: '118', description: '海上事故', available: '24小时' },
+          { id: 'police', name: '警察', description: '犯罪、事故', available: '24小时' },
+          { id: 'fire', available: '24小时' },
+          { id: 'coastGuard', name: '海上保安', description: '海上事故', available: '24小时' },
         ]
       },
       {
         title: '游客支援',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '24小时多语言服务', available: '24小时', languages: '中文/EN/KO/JP' },
-          { name: '灾害留言电话', number: '171', description: '确认安全', available: '灾害时' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24小时', languages: '中文/EN/KO/JP' },
+          { id: 'message171', name: '灾害留言电话', description: '确认安全', available: '灾害时' },
         ]
       },
     ],
@@ -105,16 +119,16 @@ const contactsData: Record<string, {
       {
         title: '緊急服務',
         contacts: [
-          { name: '警察', number: '110', description: '犯罪、事故', available: '24小時' },
-          { name: '消防/急救', number: '119', description: '火災、急救', available: '24小時' },
-          { name: '海上保安', number: '118', description: '海上事故', available: '24小時' },
+          { id: 'police', name: '警察', description: '犯罪、事故', available: '24小時' },
+          { id: 'fire', available: '24小時' },
+          { id: 'coastGuard', name: '海上保安', description: '海上事故', available: '24小時' },
         ]
       },
       {
         title: '遊客支援',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '24小時多語言服務', available: '24小時', languages: '中文/EN/KO/JP' },
-          { name: '災害留言電話', number: '171', description: '確認安全', available: '災害時' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24小時', languages: '中文/EN/KO/JP' },
+          { id: 'message171', name: '災害留言電話', description: '確認安全', available: '災害時' },
         ]
       },
     ],
@@ -131,16 +145,16 @@ const contactsData: Record<string, {
       {
         title: '긴급 서비스',
         contacts: [
-          { name: '경찰', number: '110', description: '범죄, 사고', available: '24시간' },
-          { name: '소방/구급', number: '119', description: '화재, 응급', available: '24시간' },
-          { name: '해상 보안', number: '118', description: '해상 사고', available: '24시간' },
+          { id: 'police', name: '경찰', description: '범죄, 사고', available: '24시간' },
+          { id: 'fire', available: '24시간' },
+          { id: 'coastGuard', name: '해상 보안', description: '해상 사고', available: '24시간' },
         ]
       },
       {
         title: '관광객 지원',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '24시간 다국어 서비스', available: '24시간', languages: '한국어/EN/CN/JP' },
-          { name: '재해 메시지 다이얼', number: '171', description: '안부 확인', available: '재해 시' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24시간', languages: '한국어/EN/CN/JP' },
+          { id: 'message171', name: '재해 메시지 다이얼', description: '안부 확인', available: '재해 시' },
         ]
       },
     ],
@@ -157,16 +171,16 @@ const contactsData: Record<string, {
       {
         title: 'Dịch vụ khẩn cấp',
         contacts: [
-          { name: 'Cảnh sát', number: '110', description: 'Tội phạm, tai nạn', available: '24/7' },
-          { name: 'Cứu hỏa/Cấp cứu', number: '119', description: 'Hỏa hoạn, y tế', available: '24/7' },
-          { name: 'Bảo vệ bờ biển', number: '118', description: 'Tai nạn trên biển', available: '24/7' },
+          { id: 'police', name: 'Cảnh sát', description: 'Tội phạm, tai nạn', available: '24/7' },
+          { id: 'fire', available: '24/7' },
+          { id: 'coastGuard', name: 'Bảo vệ bờ biển', description: 'Tai nạn trên biển', available: '24/7' },
         ]
       },
       {
         title: 'Hỗ trợ du khách',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Hỗ trợ đa ngôn ngữ 24h', available: '24/7', languages: 'EN/CN/KO/JP' },
-          { name: 'Đường dây nhắn tin thảm họa', number: '171', description: 'Xác nhận an toàn', available: 'Khi có thảm họa' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24/7', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Đường dây nhắn tin thảm họa', description: 'Xác nhận an toàn', available: 'Khi có thảm họa' },
         ]
       },
     ],
@@ -183,16 +197,16 @@ const contactsData: Record<string, {
       {
         title: 'บริการฉุกเฉิน',
         contacts: [
-          { name: 'ตำรวจ', number: '110', description: 'อาชญากรรม อุบัติเหตุ', available: '24 ชม.' },
-          { name: 'ดับเพลิง/รถพยาบาล', number: '119', description: 'ไฟไหม้ ฉุกเฉินทางการแพทย์', available: '24 ชม.' },
-          { name: 'หน่วยยามชายฝั่ง', number: '118', description: 'อุบัติเหตุทางทะเล', available: '24 ชม.' },
+          { id: 'police', name: 'ตำรวจ', description: 'อาชญากรรม อุบัติเหตุ', available: '24 ชม.' },
+          { id: 'fire', available: '24 ชม.' },
+          { id: 'coastGuard', name: 'หน่วยยามชายฝั่ง', description: 'อุบัติเหตุทางทะเล', available: '24 ชม.' },
         ]
       },
       {
         title: 'สนับสนุนนักท่องเที่ยว',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'บริการหลายภาษา 24 ชม.', available: '24 ชม.', languages: 'EN/CN/KO/JP' },
-          { name: 'สายด่วนข้อความภัยพิบัติ', number: '171', description: 'ยืนยันความปลอดภัย', available: 'เมื่อเกิดภัยพิบัติ' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 ชม.', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'สายด่วนข้อความภัยพิบัติ', description: 'ยืนยันความปลอดภัย', available: 'เมื่อเกิดภัยพิบัติ' },
         ]
       },
     ],
@@ -209,16 +223,16 @@ const contactsData: Record<string, {
       {
         title: 'Layanan Darurat',
         contacts: [
-          { name: 'Polisi', number: '110', description: 'Kejahatan, kecelakaan', available: '24 jam' },
-          { name: 'Pemadam/Ambulans', number: '119', description: 'Kebakaran, darurat medis', available: '24 jam' },
-          { name: 'Penjaga Pantai', number: '118', description: 'Kecelakaan laut', available: '24 jam' },
+          { id: 'police', name: 'Polisi', description: 'Kejahatan, kecelakaan', available: '24 jam' },
+          { id: 'fire', available: '24 jam' },
+          { id: 'coastGuard', name: 'Penjaga Pantai', description: 'Kecelakaan laut', available: '24 jam' },
         ]
       },
       {
         title: 'Dukungan Wisatawan',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Dukungan multibahasa 24 jam', available: '24 jam', languages: 'EN/CN/KO/JP' },
-          { name: 'Telepon Pesan Bencana', number: '171', description: 'Konfirmasi keselamatan', available: 'Saat bencana' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 jam', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Telepon Pesan Bencana', description: 'Konfirmasi keselamatan', available: 'Saat bencana' },
         ]
       },
     ],
@@ -235,16 +249,16 @@ const contactsData: Record<string, {
       {
         title: 'Perkhidmatan Kecemasan',
         contacts: [
-          { name: 'Polis', number: '110', description: 'Jenayah, kemalangan', available: '24 jam' },
-          { name: 'Bomba/Ambulans', number: '119', description: 'Kebakaran, kecemasan perubatan', available: '24 jam' },
-          { name: 'Pengawal Pantai', number: '118', description: 'Kemalangan laut', available: '24 jam' },
+          { id: 'police', name: 'Polis', description: 'Jenayah, kemalangan', available: '24 jam' },
+          { id: 'fire', available: '24 jam' },
+          { id: 'coastGuard', name: 'Pengawal Pantai', description: 'Kemalangan laut', available: '24 jam' },
         ]
       },
       {
         title: 'Sokongan Pelancong',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Sokongan pelbagai bahasa 24 jam', available: '24 jam', languages: 'EN/CN/KO/JP' },
-          { name: 'Dail Mesej Bencana', number: '171', description: 'Pengesahan keselamatan', available: 'Semasa bencana' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 jam', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Dail Mesej Bencana', description: 'Pengesahan keselamatan', available: 'Semasa bencana' },
         ]
       },
     ],
@@ -261,16 +275,16 @@ const contactsData: Record<string, {
       {
         title: 'Emergency Services',
         contacts: [
-          { name: 'Pulis', number: '110', description: 'Krimen, aksidente', available: '24 oras' },
-          { name: 'Bumbero/Ambulansya', number: '119', description: 'Sunog, medikal na emergency', available: '24 oras' },
-          { name: 'Coast Guard', number: '118', description: 'Aksidente sa dagat', available: '24 oras' },
+          { id: 'police', name: 'Pulis', description: 'Krimen, aksidente', available: '24 oras' },
+          { id: 'fire', available: '24 oras' },
+          { id: 'coastGuard', name: 'Coast Guard', description: 'Aksidente sa dagat', available: '24 oras' },
         ]
       },
       {
         title: 'Suporta para sa Turista',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '24 oras na multilingual na suporta', available: '24 oras', languages: 'EN/CN/KO/JP' },
-          { name: 'Disaster Message Dial', number: '171', description: 'Kumpirmasyon ng kaligtasan', available: 'Kapag may sakuna' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 oras', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Disaster Message Dial', description: 'Kumpirmasyon ng kaligtasan', available: 'Kapag may sakuna' },
         ]
       },
     ],
@@ -287,16 +301,16 @@ const contactsData: Record<string, {
       {
         title: 'आपतकालीन सेवा',
         contacts: [
-          { name: 'प्रहरी', number: '110', description: 'अपराध, दुर्घटना', available: '२४ घण्टा' },
-          { name: 'दमकल/एम्बुलेन्स', number: '119', description: 'आगलागी, चिकित्सा आपतकालीन', available: '२४ घण्टा' },
-          { name: 'तटरक्षक', number: '118', description: 'समुद्री दुर्घटना', available: '२४ घण्टा' },
+          { id: 'police', name: 'प्रहरी', description: 'अपराध, दुर्घटना', available: '२४ घण्टा' },
+          { id: 'fire', available: '२४ घण्टा' },
+          { id: 'coastGuard', name: 'तटरक्षक', description: 'समुद्री दुर्घटना', available: '२४ घण्टा' },
         ]
       },
       {
         title: 'पर्यटक सहायता',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: '२४ घण्टा बहुभाषिक सहायता', available: '२४ घण्टा', languages: 'EN/CN/KO/JP' },
-          { name: 'विपद् सन्देश डायल', number: '171', description: 'सुरक्षा पुष्टि', available: 'विपद्को समयमा' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '२४ घण्टा', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'विपद् सन्देश डायल', description: 'सुरक्षा पुष्टि', available: 'विपद्को समयमा' },
         ]
       },
     ],
@@ -313,16 +327,16 @@ const contactsData: Record<string, {
       {
         title: 'Services d\'urgence',
         contacts: [
-          { name: 'Police', number: '110', description: 'Crimes, accidents', available: '24h/24' },
-          { name: 'Pompiers/Ambulance', number: '119', description: 'Incendie, urgence m\u00e9dicale', available: '24h/24' },
-          { name: 'Garde c\u00f4ti\u00e8re', number: '118', description: 'Accidents en mer', available: '24h/24' },
+          { id: 'police', name: 'Police', description: 'Crimes, accidents', available: '24h/24' },
+          { id: 'fire', available: '24h/24' },
+          { id: 'coastGuard', name: 'Garde c\u00f4ti\u00e8re', description: 'Accidents en mer', available: '24h/24' },
         ]
       },
       {
         title: 'Assistance touristique',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Support multilingue 24h', available: '24h/24', languages: 'EN/CN/KO/JP' },
-          { name: 'Service de messages catastrophe', number: '171', description: 'Confirmation de s\u00e9curit\u00e9', available: 'En cas de catastrophe' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24h/24', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Service de messages catastrophe', description: 'Confirmation de s\u00e9curit\u00e9', available: 'En cas de catastrophe' },
         ]
       },
     ],
@@ -339,16 +353,16 @@ const contactsData: Record<string, {
       {
         title: 'Notdienste',
         contacts: [
-          { name: 'Polizei', number: '110', description: 'Verbrechen, Unf\u00e4lle', available: '24 Std.' },
-          { name: 'Feuerwehr/Rettung', number: '119', description: 'Brand, medizinischer Notfall', available: '24 Std.' },
-          { name: 'K\u00fcstenwache', number: '118', description: 'Seeunf\u00e4lle', available: '24 Std.' },
+          { id: 'police', name: 'Polizei', description: 'Verbrechen, Unf\u00e4lle', available: '24 Std.' },
+          { id: 'fire', available: '24 Std.' },
+          { id: 'coastGuard', name: 'K\u00fcstenwache', description: 'Seeunf\u00e4lle', available: '24 Std.' },
         ]
       },
       {
         title: 'Touristenhilfe',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Mehrsprachiger Support 24 Std.', available: '24 Std.', languages: 'EN/CN/KO/JP' },
-          { name: 'Katastrophen-Nachrichtendienst', number: '171', description: 'Sicherheitsbest\u00e4tigung', available: 'Bei Katastrophen' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 Std.', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Katastrophen-Nachrichtendienst', description: 'Sicherheitsbest\u00e4tigung', available: 'Bei Katastrophen' },
         ]
       },
     ],
@@ -365,16 +379,16 @@ const contactsData: Record<string, {
       {
         title: 'Servizi di emergenza',
         contacts: [
-          { name: 'Polizia', number: '110', description: 'Crimini, incidenti', available: '24 ore' },
-          { name: 'Vigili del fuoco/Ambulanza', number: '119', description: 'Incendi, emergenze mediche', available: '24 ore' },
-          { name: 'Guardia costiera', number: '118', description: 'Incidenti in mare', available: '24 ore' },
+          { id: 'police', name: 'Polizia', description: 'Crimini, incidenti', available: '24 ore' },
+          { id: 'fire', available: '24 ore' },
+          { id: 'coastGuard', name: 'Guardia costiera', description: 'Incidenti in mare', available: '24 ore' },
         ]
       },
       {
         title: 'Assistenza turistica',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Supporto multilingue 24 ore', available: '24 ore', languages: 'EN/CN/KO/JP' },
-          { name: 'Servizio messaggi disastro', number: '171', description: 'Conferma sicurezza', available: 'Durante i disastri' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 ore', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'Servizio messaggi disastro', description: 'Conferma sicurezza', available: 'Durante i disastri' },
         ]
       },
     ],
@@ -391,16 +405,16 @@ const contactsData: Record<string, {
       {
         title: 'Servicios de emergencia',
         contacts: [
-          { name: 'Polic\u00eda', number: '110', description: 'Delitos, accidentes', available: '24 horas' },
-          { name: 'Bomberos/Ambulancia', number: '119', description: 'Incendios, emergencia m\u00e9dica', available: '24 horas' },
-          { name: 'Guardacostas', number: '118', description: 'Accidentes mar\u00edtimos', available: '24 horas' },
+          { id: 'police', name: 'Polic\u00eda', description: 'Delitos, accidentes', available: '24 horas' },
+          { id: 'fire', available: '24 horas' },
+          { id: 'coastGuard', name: 'Guardacostas', description: 'Accidentes mar\u00edtimos', available: '24 horas' },
         ]
       },
       {
         title: 'Apoyo al turista',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'Soporte multiling\u00fce 24h', available: '24 horas', languages: 'EN/CN/KO/JP' },
-          { name: 'L\u00ednea de mensajes de desastre', number: '171', description: 'Confirmaci\u00f3n de seguridad', available: 'Durante desastres' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24 horas', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'L\u00ednea de mensajes de desastre', description: 'Confirmaci\u00f3n de seguridad', available: 'Durante desastres' },
         ]
       },
     ],
@@ -417,16 +431,16 @@ const contactsData: Record<string, {
       {
         title: 'きんきゅう でんわ',
         contacts: [
-          { name: 'けいさつ', number: '110', description: 'じけん・じこ', available: '24じかん' },
-          { name: 'しょうぼう・きゅうきゅう', number: '119', description: 'かじ・きゅうきゅう', available: '24じかん' },
-          { name: 'かいじょうほあんちょう', number: '118', description: 'うみの じこ', available: '24じかん' },
+          { id: 'police', name: 'けいさつ', description: 'じけん・じこ', available: '24じかん' },
+          { id: 'fire', available: '24じかん' },
+          { id: 'coastGuard', name: 'かいじょうほあんちょう', description: 'うみの じこ', available: '24じかん' },
         ]
       },
       {
         title: 'さいがい・かんこう そうだん',
         contacts: [
-          { name: 'Japan Visitor Hotline', number: '050-3816-2787', description: 'がいこくじん むけ 24じかん たいおう', available: '24じかん', languages: 'EN/CN/KO/JP' },
-          { name: 'さいがいよう でんごん ダイヤル', number: '171', description: 'あんぴ かくにん', available: 'さいがいのとき' },
+          { id: 'visitorHotline', name: 'Japan Visitor Hotline', available: '24じかん', languages: 'EN/CN/KO/JP' },
+          { id: 'message171', name: 'さいがいよう でんごん ダイヤル', description: 'あんぴ かくにん', available: 'さいがいのとき' },
         ]
       },
     ],
@@ -456,9 +470,29 @@ function InfoIcon({ className = '' }: { className?: string }) {
   );
 }
 
+// 外部リンクのアイコン（新しいタブで公式ページを開く）
+function GlobeIcon({ className = '' }: { className?: string }) {
+  return (
+    <svg className={className} width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm6.93 6h-2.95a15.65 15.65 0 0 0-1.38-3.56A8.03 8.03 0 0 1 18.93 8zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2s.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56A7.99 7.99 0 0 1 5.08 16zm2.95-8H5.08a7.99 7.99 0 0 1 4.33-3.56A15.65 15.65 0 0 0 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2s.07-1.35.16-2h4.68c.09.65.16 1.32.16 2s-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95a8.03 8.03 0 0 1-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2s-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/>
+    </svg>
+  );
+}
+
 export default function EmergencyContacts({ language }: EmergencyContactsProps) {
   // 言語データを取得（未対応言語はenにフォールバック）
   const data = contactsData[language] || contactsData.en;
+  const effectiveLanguage = contactsData[language] ? language : 'en';
+  const t = (key: string) => getTranslation(effectiveLanguage, key);
+  /** 名前・説明・注記: contactsData に無いものは translations.ts（PHONE_TEXT_KEYS）から */
+  const phoneText = (contact: PhoneContactText) => {
+    const keys = PHONE_TEXT_KEYS[contact.id] ?? {};
+    return {
+      name: keys.name ? t(keys.name) : contact.name ?? '',
+      description: keys.description ? t(keys.description) : contact.description ?? '',
+      note: keys.note ? t(keys.note) : undefined,
+    };
+  };
 
   return (
     <div className="space-y-4">
@@ -478,27 +512,33 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
             {section.title}
           </h3>
           <div className="divide-y dark:divide-gray-700">
-            {section.contacts.map((contact, contactIdx) => (
-              <div key={contactIdx} className="p-4 flex items-center gap-4">
+            {section.contacts.map((contact) => {
+              const number = EMERGENCY_PHONE_NUMBERS[contact.id];
+              const text = phoneText(contact);
+              return (
+              <div key={contact.id} className="p-4 flex items-center gap-4">
                 {/* 発信ボタンは「意図してここを押した」と言える大きさに留める。
                     行全体をリンクにすると 110/119 の誤発信を招くため広げない。
                     番号は桁数で幅が変わるのでボタンの中に入れず本文側に出す
                     （以前は 80x80px の箱に text-lg で描いていたため、110 は収まっても
                     「050-3816-2787」はボタン枠からはみ出して切れていた） */}
                 <a
-                  href={`tel:${contact.number}`}
+                  href={`tel:${number}`}
                   className="flex-shrink-0 w-16 h-16 bg-red-500 hover:bg-red-600 text-white rounded-xl flex items-center justify-center transition-colors shadow-md focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                  aria-label={`Call ${contact.name} at ${contact.number}`}
+                  aria-label={`Call ${text.name} at ${number}`}
                 >
                   <PhoneIcon className="w-8 h-8" />
                 </a>
                 <div className="flex-1 min-w-0">
-                  <h4 className="font-bold text-gray-900 dark:text-gray-100">{contact.name}</h4>
+                  <h4 className="font-bold text-gray-900 dark:text-gray-100">{text.name}</h4>
                   {/* tabular-nums で桁を揃える。長い番号でも折り返さず1行に収まる */}
                   <p className="text-2xl font-bold text-red-600 dark:text-red-400 tabular-nums tracking-tight leading-tight">
-                    {contact.number}
+                    {number}
                   </p>
-                  <p className="text-gray-600 dark:text-gray-300 text-sm mt-0.5">{contact.description}</p>
+                  <p className="text-gray-600 dark:text-gray-300 text-sm mt-0.5">{text.description}</p>
+                  {text.note && (
+                    <p className="text-amber-800 dark:text-amber-200 text-xs mt-1">{text.note}</p>
+                  )}
                   <div className="flex flex-wrap gap-2 mt-2">
                     {contact.available && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
@@ -513,7 +553,36 @@ export default function EmergencyContacts({ language }: EmergencyContactsProps) 
                   </div>
                 </div>
               </div>
-            ))}
+              );
+            })}
+            {/* 公式ページへの導線（電話番号を持たない）。新しいセクション見出しの訳が無いため、
+                最後のセクション（災害・観光相談）の続きに並べる。#7119 は地域で有無・時間が違うので
+                発信ボタンにせず消防庁の地域一覧へ案内し、注記を必ず添える */}
+            {sectionIdx === data.sections.length - 1 && LINK_ORDER.map((id) => {
+              const keys = LINK_TEXT_KEYS[id];
+              return (
+                <div key={id} className="p-4 flex items-center gap-4">
+                  <span className="flex-shrink-0 w-16 h-16 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl flex items-center justify-center" aria-hidden="true">
+                    <GlobeIcon className="w-8 h-8" />
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <a
+                      href={emergencyLinkUrl(id, effectiveLanguage)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center min-h-[44px] font-bold text-blue-700 dark:text-blue-300 underline underline-offset-2 focus:outline-none focus:ring-2 focus:ring-blue-500 rounded"
+                    >
+                      {t(keys.name)}
+                      <span aria-hidden="true" className="ml-1">↗</span>
+                    </a>
+                    <p className="text-gray-600 dark:text-gray-300 text-sm">{t(keys.description)}</p>
+                    {keys.note && (
+                      <p className="text-amber-800 dark:text-amber-200 text-xs mt-1">{t(keys.note)}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       ))}

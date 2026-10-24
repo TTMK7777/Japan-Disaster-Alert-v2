@@ -43,10 +43,12 @@ export const TSUNAMI_FETCH_TIMEOUT_MS = 10000;
 
 /**
  * 気象庁の津波警報・注意報の地図（公式）。やさしい日本語・日本語以外は英語表示にする。
- * 圏外ではリンク自体が開かないので、帯の本文（高い所へ）だけで行動できるようにしてある
+ * 圏外ではリンク自体が開かないので、帯の本文（高い所へ）だけで行動できるようにしてある。
+ * URL は気象庁のメニュー定義（https://www.jma.go.jp/bosai/common/const/contents.json の id=tsunami）
+ * どおり。url = map.html#contents=tsunami&elem=warn、enUrl = その末尾に &lang=en（2026-10-22 確認）
  */
 export function jmaTsunamiUrl(language: string): string {
-  const base = 'https://www.jma.go.jp/bosai/map.html#contents=tsunami';
+  const base = 'https://www.jma.go.jp/bosai/map.html#contents=tsunami&elem=warn';
   return language === 'ja' || language === 'easy_ja' ? base : `${base}&lang=en`;
 }
 
