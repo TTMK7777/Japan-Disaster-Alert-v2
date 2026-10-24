@@ -5,13 +5,17 @@ JSON Schema の書き出し先は docs/dev/snapshot-schema.json（テストで�
 
 方針:
 - 言語別の表示文は持たない。事実（コード・数値・気象庁の日本語名）だけを持ち、
-  文言はフロントの辞書で描く
+  文言はフロントの辞書で描く。例外は震源地名の訳（location_i18n / epicenter_i18n）で、
+  地震一覧 API の location_translated と同じ静的な訳（手訳＋形態からの組み立て。AI は使わない）を
+  言語コードをキーに持つ。訳の無い言語はキーごと省く（表示側は en → 日本語名へ落とす）
 - dataset ごとに status を持つ。「取得失敗」と「0 件」を区別する
   - ok    : 今回取得に成功。items は空配列もありうる（確認済みの 0 件）
   - stale : 今回は失敗。items と fetched_at は**前回成功時**のもの（前回成功から 15 分以内に限る）
   - error : 今回失敗し、15 分以内の前回成功も無い。items は null（0 件ではない）
 - 未確定・不明な値は null。0 や番兵値（-1・-200）を入れない
 - 互換のない変更は schema_version の上位桁を上げる。キーの追加は下位桁
+  - 1.1: location_i18n（地震）・epicenter_i18n（津波）を追加。1.0 の前回ファイルも読める
+    （キーが無ければ空。stale では前回成功時の items をそのまま出すので、訳も前回のまま）
 """
 from __future__ import annotations
 
@@ -21,7 +25,14 @@ from typing import Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+#: 読み込みで受け付ける版（前回ファイルの引き継ぎ用）。書き出しは常に SCHEMA_VERSION
+_READABLE_SCHEMA_VERSIONS = Literal["1.0", "1.1"]
+
+_I18N_DESCRIPTION = (
+    "震源地名の訳（キーは言語コード: en / zh / zh-TW / ko / vi / th / id / ms / tl / fr / de / it / es / ne / easy_ja）。"
+    "地震一覧 API の location_translated と同じ静的な訳。訳の無い言語はキーを省く。ja は持たない"
+)
 
 
 class DatasetStatus(str, Enum):
@@ -60,6 +71,9 @@ class EarthquakeItem(BaseModel):
     id: str = Field(description="P2P の発表 ID")
     occurred_at: Optional[datetime] = Field(description="発生時刻（JST のオフセット付き）。解釈できなければ null")
     location_ja: Optional[str] = Field(description="震源地名（気象庁の日本語名）。調査中は null")
+    location_i18n: dict[str, str] = Field(
+        default_factory=dict, description=_I18N_DESCRIPTION + "。location_ja が null なら空"
+    )
     magnitude: Optional[float] = Field(description="マグニチュード。未確定は null")
     depth_km: Optional[int] = Field(description="震源の深さ km。0 は『ごく浅い』。未確定は null")
     max_intensity: Optional[str] = Field(description="最大震度（気象庁の表記: 1〜4, 5弱, 5強, 6弱, 6強, 7）。不明は null")
@@ -91,7 +105,10 @@ class TsunamiItem(BaseModel):
     warning_level: Literal["major_warning", "warning", "advisory", "unknown"]
     earthquake_time: Optional[str]
     epicenter_ja: Optional[str]
-    epicenter_en: Optional[str]
+    epicenter_en: Optional[str] = Field(description="上流（気象庁）の英語の震源名")
+    epicenter_i18n: dict[str, str] = Field(
+        default_factory=dict, description=_I18N_DESCRIPTION + "。epicenter_ja から作る。epicenter_ja が null なら空"
+    )
     magnitude: Optional[str] = Field(description="上流の文字列そのまま（『M8を超える』等がありうる）")
     areas: list[TsunamiArea]
 
@@ -166,7 +183,7 @@ class Snapshot(BaseModel):
 
     model_config = ConfigDict(extra="forbid", title="JapanDisasterAlertSnapshot")
 
-    schema_version: Literal["1.0"] = SCHEMA_VERSION
+    schema_version: _READABLE_SCHEMA_VERSIONS = SCHEMA_VERSION
     generated_at: datetime = Field(description="この包みを作った時刻（UTC）。上流の発表時刻ではない")
     source: SnapshotSource
     datasets: SnapshotDatasets

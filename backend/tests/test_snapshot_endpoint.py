@@ -114,7 +114,7 @@ class TestEndpoint:
         assert res.status_code == 200
         assert res.headers["content-type"].startswith("application/json")
         data = res.json()
-        assert data["schema_version"] == "1.0"
+        assert data["schema_version"] == "1.1"
         assert set(data["datasets"]) == {"earthquakes", "tsunami", "volcano_warnings"}
 
     @pytest.mark.asyncio
@@ -162,7 +162,7 @@ class TestEndpoint:
     async def test_ETagが違えば200(self, client, fresh_cache):
         res = await client.get("/api/v1/snapshot", headers={"If-None-Match": '"other"'})
         assert res.status_code == 200
-        assert json.loads(res.content)["schema_version"] == "1.0"
+        assert json.loads(res.content)["schema_version"] == "1.1"
 
     @pytest.mark.asyncio
     async def test_連続リクエストは生成1回(self, client, fresh_cache):
