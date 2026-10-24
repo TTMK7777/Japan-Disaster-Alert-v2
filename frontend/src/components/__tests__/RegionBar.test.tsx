@@ -218,6 +218,18 @@ describe('SpecialWarningBand', () => {
     );
   });
 
+  it('unconfirmed なら「特別警報を確認できません」を別の見た目（status）で出し、「警報を見る」も出す', () => {
+    const onView = vi.fn();
+    render(<SpecialWarningBand language="ja" prefCode="130000" onView={onView} unconfirmed />);
+    expect(screen.queryByTestId('special-warning-band')).toBeNull();
+    const band = screen.getByTestId('special-warning-unconfirmed');
+    expect(band).toHaveAttribute('role', 'status');
+    expect(band).toHaveTextContent(tr('ja', 'warning.specialUnconfirmed').replace('{pref}', '東京都'));
+    expect(band.textContent).not.toContain('特別警報が出ています');
+    fireEvent.click(screen.getByRole('button', { name: tr('ja', 'warning.view') }));
+    expect(onView).toHaveBeenCalledTimes(1);
+  });
+
   it('表に無いコードでは出さない（"undefined" に特別警報と出さない）', () => {
     const { container } = render(<SpecialWarningBand language="en" prefCode="460000" onView={() => {}} />);
     expect(container.textContent).toBe('');

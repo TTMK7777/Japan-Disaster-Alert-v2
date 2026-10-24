@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, cleanup, within } from '@testing-library/react';
 import { LOW_POWER_STORAGE_KEY } from '@/hooks/useLowPowerMode';
 import { getTranslation } from '@/i18n/translations';
@@ -54,6 +54,13 @@ async function renderHome() {
   const { default: Home } = await import('../page');
   return render(<Home />);
 }
+
+// page.tsx は依存が多く、初回の import に単独でも 0.5 秒、全件並列の負荷下では 5 秒を超えることがある。
+// renderHome の中で初めて import すると、その時間が**先頭のテスト**の 5 秒枠に入って時々落ちていた
+// （先頭以外は 50ms 前後）。読み込みはここで済ませ、各テストの時間はテストの中身だけにする
+beforeAll(async () => {
+  await import('../page');
+}, 60_000);
 
 function openWarningTab() {
   fireEvent.click(document.getElementById('tab-warning') as HTMLElement);
@@ -365,6 +372,19 @@ describe('page.tsx — 特別警報の帯（B8）', () => {
     // 帯はタブのナビより前（sticky の塊の先頭）
     const nav = document.querySelector('nav') as HTMLElement;
     expect(screen.getByTestId('special-warning-band').compareDocumentPosition(nav) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('最初の取得が失敗したら「特別警報を確認できません」の帯を出す（特別警報の帯ではない）', async () => {
+    global.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/api/v1/alerts')) return { ok: false, status: 503, json: async () => ({}) };
+      return { ok: true, status: 200, json: async () => [] };
+    }) as unknown as typeof fetch;
+    setUrl('/?pref=130000&lang=ja');
+    await renderHome();
+    const band = await screen.findByTestId('special-warning-unconfirmed');
+    expect(band).toHaveTextContent(getTranslation('ja', 'warning.specialUnconfirmed').replace('{pref}', '東京都'));
+    expect(screen.queryByTestId('special-warning-band')).toBeNull();
   });
 
   it('警報・注意報だけなら帯は出ない', async () => {

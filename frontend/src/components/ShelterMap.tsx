@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -9,7 +9,7 @@ import { getTranslation } from '@/i18n/translations';
 import { ShelterIcon, LocationIcon } from './icons/DisasterIcons';
 import FetchFailureNotice from './FetchFailureNotice';
 import { OfficialInfoLink } from './ScopeNotice';
-import { createTimedAbort, classifyFetchError, type FailureReason } from '@/lib/fetchFailure';
+import { createTimedAbort, classifyFetchError, readSwCache, type FailureReason } from '@/lib/fetchFailure';
 
 /** 現在地からの検索半径（km）。成功の 0 件にはこの半径を添える */
 export const SHELTER_SEARCH_RADIUS_KM = 5;
@@ -493,8 +493,13 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
   const [filterType, setFilterType] = useState<ShelterType | 'all'>('all');
   // 取得の失敗（期限超過を含む）。「見つかりませんでした」と分けて出す。再取得の成功でだけ解除する
   const [fetchFailure, setFetchFailure] = useState<FailureReason | null>(null);
+  // SW のキャッシュしか取れなかったときの保存時刻。失敗の枠に「最後に取得できた時刻」として出す
+  const [cachedAt, setCachedAt] = useState<number | null>(null);
   // 再試行で同じ地点を取り直すため、最後に検索した地点を持つ
   const [lastQuery, setLastQuery] = useState<{ lat: number; lon: number } | null>(null);
+  // 進行中の取得。新しい取得を始めたら前のものを中断し、遅れて返った古い応答（別の地点・キャッシュ）で
+  // 今の結果を上書きしない
+  const shelterRequestRef = useRef<ReturnType<typeof createTimedAbort> | null>(null);
 
   // 実データの取得。以前このコンポーネントは API を一度も呼ばず、
   // ファイル内にハードコードした3件を全利用者に見せていた
@@ -502,7 +507,10 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
     setSheltersLoading(true);
     setHasSearched(true);
     setLastQuery({ lat, lon });
+    shelterRequestRef.current?.abort();
     const request = createTimedAbort(SHELTER_FETCH_TIMEOUT_MS);
+    shelterRequestRef.current = request;
+    const isCurrent = () => shelterRequestRef.current === request;
     try {
       const res = await fetch(
         `${API_BASE_URL}/api/v1/shelters?lat=${lat}&lon=${lon}&radius=${SHELTER_SEARCH_RADIUS_KM}&limit=${SHELTER_SEARCH_LIMIT}`,
@@ -512,9 +520,14 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
       const body = await res.json();
       // shelters が無い応答を「0 件」にしない（形の異常は失敗）
       if (!Array.isArray(body?.shelters)) throw new Error('Unexpected shelters payload');
+      if (!isCurrent()) return;
+      // SW のキャッシュ（圏外）は「今取れた」ではない。避難所の場所はほぼ変わらないので一覧は出すが、
+      // 失敗の枠と保存時刻を添え、0 件を「見つかりませんでした」にしない（Codex P1。他の経路と同じ印を見る）
+      const cache = readSwCache(res);
       setIsSampleData(Boolean(body?.meta?.is_sample_data));
       setAttribution(body?.meta?.attribution ?? null);
-      setFetchFailure(null);
+      setFetchFailure(cache.fromCache ? 'failed' : null);
+      setCachedAt(cache.fromCache ? cache.cachedAt : null);
       setShelters(
         (body.shelters as ApiShelter[]).map((raw: ApiShelter): Shelter => ({
           id: raw.id,
@@ -535,14 +548,17 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
         }))
       );
     } catch (err) {
+      // 新しい取得に置き換えられた分は何もしない（今の取得の表示を消さない）
+      if (!isCurrent()) return;
       console.error('Failed to fetch shelters:', err);
       // 取れなかったときに古い結果や見本を残さない（別の地点の結果を今の最寄りとして見せない）。
       // ただし「見つかりませんでした」とは出さない。取得できなかったことを失敗の枠で出す
       setShelters([]);
+      setCachedAt(null);
       setFetchFailure(classifyFetchError(request, err) ?? 'failed');
     } finally {
       request.clear();
-      setSheltersLoading(false);
+      if (isCurrent()) setSheltersLoading(false);
     }
   }, []);
 
@@ -661,7 +677,7 @@ export default function ShelterMap({ language, deferMap = false }: ShelterMapPro
         <FetchFailureNotice
           language={language}
           reason={fetchFailure}
-          lastSuccessAt={null}
+          lastSuccessAt={cachedAt}
           onRetry={lastQuery ? () => void fetchShelters(lastQuery.lat, lastQuery.lon) : undefined}
           testId="shelter-fetch-failure"
         >

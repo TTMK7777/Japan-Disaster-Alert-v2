@@ -29,19 +29,31 @@ interface Options {
  * **一部の予報区が取れなかった応答（partial）で、取れた分に特別警報が無いときも前回の判定を保つ。**
  * 欠けた予報区（例: 宮古島）に特別警報が出ていたら、取れた本島の分だけで「なし」にすると帯が消える（B4a）。
  *
+ * **判定がまだ無い地域で取れなかったら `unconfirmed`**（取得失敗・期限超過・SW のキャッシュ応答・
+ * 取れた分に特別警報が無い一部欠落）。以前はここで active=false になるだけで、初回や地域変更直後に
+ * 取れなかった利用者ほど「確認できていない」ことさえ分からなかった（Codex P1）。
+ * 応答待ちの間は出さない（ちらつかせない）。地域の切替などで自分から中断した取得は失敗に数えない。
+ *
  * effect の依存はプリミティブだけ（CLAUDE.md の規約）。
  */
 export function useSpecialWarning({ prefCode, language, paused }: Options) {
   const [result, setResult] = useState<{ code: string; active: boolean } | null>(null);
+  // 判定を得られなかった地域（取得失敗・一部欠落）。result がその地域のものでないときだけ「未確認」に使う
+  const [failedCode, setFailedCode] = useState<string | null>(null);
   // 最後に判定を得た地域と時刻。effect の再開時に「まだ新しいか」を見るだけなので state にしない
   const lastRef = useRef<{ code: string; at: number } | null>(null);
 
   const report = useCallback((code: string, alerts: unknown, options?: { partial?: boolean }) => {
     lastRef.current = { code, at: Date.now() };
     const active = hasActiveSpecialWarning(alerts);
-    // 一部欠落で「なし」は確定できない。前回の判定（同じ地域なら）を保つ
-    if (options?.partial && !active) return;
+    // 一部欠落で「なし」は確定できない。前回の判定（同じ地域なら）を保ち、無ければ未確認にする
+    if (options?.partial && !active) {
+      setFailedCode(code);
+      return;
+    }
     setResult({ code, active });
+    // 別の地域の結果で、今の地域の未確認を消さない
+    setFailedCode((prev) => (prev === code ? null : prev));
   }, []);
 
   // 言語は API のクエリにだけ使う（判定は言語に依存しない）。言語の変更で取り直さないよう ref で持つ
@@ -57,7 +69,11 @@ export function useSpecialWarning({ prefCode, language, paused }: Options) {
       controller?.abort();
       const current = new AbortController();
       controller = current;
-      const timeoutId = setTimeout(() => current.abort(), FETCH_TIMEOUT_MS);
+      let timedOut = false;
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        current.abort();
+      }, FETCH_TIMEOUT_MS);
       try {
         const response = await fetch(
           `${API_BASE_URL}/api/v1/alerts?area_code=${encodeURIComponent(prefCode)}&lang=${encodeURIComponent(languageRef.current)}`,
@@ -67,11 +83,20 @@ export function useSpecialWarning({ prefCode, language, paused }: Options) {
         // SW のキャッシュ応答で帯の判定を変えない（失敗と同じく前回の判定を保つ。B4b）
         if (readSwCache(response).fromCache) throw new Error('served from service worker cache');
         const data = await response.json();
-        if (cancelled || current.signal.aborted) return;
+        // 配列でない本文（{"detail": ...} 等）を「特別警報なし」にしない。形の異常は失敗（WarningBanner と同じ）
+        if (!Array.isArray(data)) throw new Error('Unexpected alerts payload');
+        if (cancelled) return;
+        if (current.signal.aborted) {
+          // 本文を読み終えた直後に期限が来た場合も失敗に数える（自前の中断だけを黙って捨てる）
+          if (timedOut) setFailedCode(prefCode);
+          return;
+        }
         report(prefCode, data, { partial: parseFailedAreas(response).length > 0 });
       } catch (err) {
-        // 失敗は前回の判定を保つ（上のコメント）。中断は次の取得が進行中か、アンマウント
-        if (!current.signal.aborted) console.warn('[special-warning] 取得に失敗:', err);
+        // 失敗は前回の判定を保つ（上のコメント）。期限超過以外の中断は次の取得が進行中か、アンマウント
+        if (cancelled || (current.signal.aborted && !timedOut)) return;
+        console.warn('[special-warning] 取得に失敗:', err);
+        setFailedCode(prefCode);
       } finally {
         clearTimeout(timeoutId);
       }
@@ -93,6 +118,8 @@ export function useSpecialWarning({ prefCode, language, paused }: Options) {
     };
   }, [prefCode, paused, report]);
 
-  const active = prefCode !== null && result !== null && result.code === prefCode && result.active;
-  return { active, report };
+  const decided = prefCode !== null && result !== null && result.code === prefCode;
+  const active = decided && result.active;
+  const unconfirmed = prefCode !== null && !decided && failedCode === prefCode;
+  return { active, unconfirmed, report };
 }
