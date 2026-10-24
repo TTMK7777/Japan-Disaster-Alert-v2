@@ -19,9 +19,12 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Push Notifications** — Real-time earthquake/tsunami alerts via Web Push (VAPID)
 - **WCAG 2.1 AA** — Accessible: zoom enabled, skip links, 44px touch targets, safe-area support
 - **JMA Warning Guidance** — Weather warnings with JMA-defined precautions and affected areas
+- **Emergency Warning Band** — Shown on every tab for the selected region; when the status cannot be confirmed (fetch failure, offline cache, partial data) it says so instead of looking like "no warning"
+- **Emergency Contacts** — 110 / 119 / 118, Japan Visitor Hotline, 171 / web171, JNTO medical institution search, #7119 and embassies; the same numbers and URLs are available on the offline page
+- **Conversation Cards** — 40 phrases × 16 languages for talking with hotel and shelter staff, always shown with English and usable offline
 - **Official Transit Links** — Curated official rail / air / road information sources, with each link's language availability shown before you tap it
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 1,852 tests (pytest backend 1438, Vitest unit 381, Playwright E2E 33), mutation-checked regression suites
+- **Comprehensive Testing** — 3,610 tests (pytest backend 1658, Vitest unit 1919, Playwright E2E 33), mutation-checked regression suites
 
 ## Supported Languages
 
