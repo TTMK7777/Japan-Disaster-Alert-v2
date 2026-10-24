@@ -6,7 +6,8 @@
 // 上げないと既存の利用者は古いオフライン画面（cache.addAll 済みのもの）を見続ける。
 // v3: オフライン画面に「このアプリが扱う範囲（避難指示・避難所は扱わない）」を追加
 // v6: API のキャッシュに保存時刻（X-SW-Cached-At）を付けた。保存時刻の無い旧キャッシュを捨てる
-const CACHE_NAME = 'disaster-alert-v6';
+// v7: オフライン画面の緊急連絡に 171・#7119・医療機関検索・駐日公館・web171 と説明を追加（B11）。医療機関検索の URL は表示言語別
+const CACHE_NAME = 'disaster-alert-v7';
 
 // 通信失敗時に API のキャッシュを返すときの印（frontend/src/lib/fetchFailure.ts と同じ名前）。
 // 印が無いと、画面はキャッシュの古い JSON を「今取れた」と受け取り、
