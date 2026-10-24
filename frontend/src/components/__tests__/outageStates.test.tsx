@@ -294,6 +294,80 @@ describe('Service Worker のキャッシュ応答を「今取れた」にしな�
     render(<VolcanoWarnings language="en" />);
     await screen.findByTestId('volcano-fetch-failure');
   });
+
+  describe('避難所（Codex P1: この経路だけキャッシュ印を見ていなかった）', () => {
+    beforeEach(stubGeolocation);
+    const SHELTER = {
+      id: 's1', name: '保存済み小学校', address: '東京都', latitude: 35.68, longitude: 139.76,
+      distance: 0.3, types: ['earthquake'],
+    };
+
+    it('キャッシュの一覧は残すが失敗の枠を出し、保存した時刻を「最後に取得できた時刻」として添える', async () => {
+      route = () => ({ ok: true, body: { shelters: [SHELTER], meta: {} }, headers: CACHED });
+      render(<ShelterMap language="en" />);
+      fireEvent.click(screen.getByRole('button', { name: /Get my location/i }));
+      await screen.findByTestId('shelter-fetch-failure');
+      // 圏外でも保存済みの避難所は案内する（場所はほぼ変わらない）。ただし「今取れた」とは見せない
+      expect(screen.getByText('保存済み小学校')).toBeTruthy();
+      expect(screen.getByTestId('shelter-fetch-failure-last-success')).toBeTruthy();
+    });
+
+    it('キャッシュの 0 件は「見つかりませんでした」にしない', async () => {
+      route = () => ({ ok: true, body: { shelters: [], meta: {} }, headers: CACHED });
+      const { container } = render(<ShelterMap language="en" />);
+      fireEvent.click(screen.getByRole('button', { name: /Get my location/i }));
+      await screen.findByTestId('shelter-fetch-failure');
+      expect(container.textContent).not.toContain('No evacuation sites found in this area');
+    });
+
+    it('遅れて返った前の取得（キャッシュ）で、後から取れた今の結果を上書きしない', async () => {
+      // 1 回目は保留し、2 回目（電波が戻って取り直し）が先に成功する。その後 1 回目がキャッシュで返る
+      let releaseFirst: (() => void) | undefined;
+      const fresh = { ...SHELTER, id: 's2', name: '今の小学校' };
+      let call = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+          call += 1;
+          const reply = (body: unknown, headers: Record<string, string>) => ({
+            ok: true,
+            status: 200,
+            headers: { get: (n: string) => headers[n] ?? null },
+            json: async () => body,
+          });
+          if (call === 1) {
+            return new Promise((resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+              releaseFirst = () => resolve(reply({ shelters: [SHELTER], meta: {} }, CACHED));
+            });
+          }
+          return Promise.resolve(reply({ shelters: [fresh], meta: {} }, {}));
+        })
+      );
+      render(<ShelterMap language="en" />);
+      const locate = screen.getByRole('button', { name: /Get my location/i });
+      fireEvent.click(locate);
+      fireEvent.click(locate);
+      await screen.findByText('今の小学校');
+      await act(async () => {
+        releaseFirst?.();
+      });
+      expect(screen.getByText('今の小学校')).toBeTruthy();
+      expect(screen.queryByText('保存済み小学校')).toBeNull();
+      expect(screen.queryByTestId('shelter-fetch-failure')).toBeNull();
+    });
+
+    it('再試行で通信が戻ったら失敗の枠を外す', async () => {
+      route = () => ({ ok: true, body: { shelters: [SHELTER], meta: {} }, headers: CACHED });
+      render(<ShelterMap language="en" />);
+      fireEvent.click(screen.getByRole('button', { name: /Get my location/i }));
+      await screen.findByTestId('shelter-fetch-failure');
+      route = () => ({ ok: true, body: { shelters: [SHELTER], meta: {} } });
+      fireEvent.click(screen.getByRole('button', { name: en('status.retry') }));
+      await waitFor(() => expect(screen.queryByTestId('shelter-fetch-failure')).toBeNull());
+      expect(screen.getByText('保存済み小学校')).toBeTruthy();
+    });
+  });
 });
 
 describe('FreshnessStatus — 保存済みのデータ（B4b）', () => {

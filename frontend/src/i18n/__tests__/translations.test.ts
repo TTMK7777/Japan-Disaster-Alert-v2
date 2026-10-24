@@ -84,6 +84,7 @@ const COMPONENT_KEYS = [
   'region.change',
   'region.officialSwitchHint',
   'warning.specialBanner',
+  'warning.specialUnconfirmed',
   'warning.view',
   // 低電力モード・最後に取得できた時刻（components/LowPower.tsx, ShelterMap の地図遅延）
   'lowPower.label',
@@ -301,7 +302,7 @@ describe('B8 の文言', () => {
 
   it('地域名を差し込む 2 キーは全 16 言語で {pref} をちょうど 1 つ持つ（訳で崩れていない）', () => {
     for (const code of langCodes) {
-      for (const key of ['region.showing', 'warning.specialBanner']) {
+      for (const key of ['region.showing', 'warning.specialBanner', 'warning.specialUnconfirmed']) {
         const text = translations[code][key];
         expect(text.split('{pref}').length - 1, `${code}.${key}`).toBe(1);
       }

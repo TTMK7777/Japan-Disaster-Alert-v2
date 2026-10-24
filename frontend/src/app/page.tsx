@@ -151,7 +151,11 @@ export default function Home() {
   const { language, prefCode, prefResolved, selectLanguage, selectPref } = useDisplayPreferences();
   const [activeTab, setActiveTab] = useState<TabType>('earthquake');
   // 選択中の地域の特別警報（全タブ共通の帯）。警報タブを開いている間は WarningBanner の取得結果を使う
-  const { active: specialWarningActive, report: reportRegionWarnings } = useSpecialWarning({
+  const {
+    active: specialWarningActive,
+    unconfirmed: specialWarningUnconfirmed,
+    report: reportRegionWarnings,
+  } = useSpecialWarning({
     prefCode,
     language,
     paused: activeTab === 'warning',
@@ -339,8 +343,13 @@ export default function Home() {
           入れ子の sticky にすれば高さを知る必要がない */}
       <div className="sticky top-0 z-40 shadow-lg dark:shadow-gray-900/30">
       {/* 選択中の地域の特別警報。sticky の塊の先頭に置き、どのタブ・どのスクロール位置でも見える */}
-      {specialWarningActive && prefCode !== null && (
-        <SpecialWarningBand language={language} prefCode={prefCode} onView={showWarningTab} />
+      {(specialWarningActive || specialWarningUnconfirmed) && prefCode !== null && (
+        <SpecialWarningBand
+          language={language}
+          prefCode={prefCode}
+          onView={showWarningTab}
+          unconfirmed={!specialWarningActive && specialWarningUnconfirmed}
+        />
       )}
       <header className="bg-disaster-blue dark:bg-gray-800 text-white">
         <div className="max-w-4xl mx-auto flex justify-between items-center gap-2 px-3 py-2 md:px-4 md:py-3">

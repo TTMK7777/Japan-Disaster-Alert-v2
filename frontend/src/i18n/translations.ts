@@ -67,6 +67,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "地域を変更",
     'region.officialSwitchHint': "地域を選ぶと、その都道府県の公式防災ページに切り替わります。",
     'warning.specialBanner': "{pref}に特別警報が出ています",
+    'warning.specialUnconfirmed': "{pref}の特別警報が出ているか確認できません",
     'warning.view': "警報を見る",
     // 地域の選択（B8）
     'region.choose': "地域を選んでください",
@@ -208,6 +209,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Change area",
     'region.officialSwitchHint': "Select an area to switch to that prefecture's official disaster information page.",
     'warning.specialBanner': "An Emergency Warning is in effect for {pref}",
+    'warning.specialUnconfirmed': "Cannot confirm whether an Emergency Warning is in effect for {pref}",
     'warning.view': "View warnings",
     // 地域の選択（B8）
     'region.choose': "Choose your area",
@@ -343,6 +345,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "更改地区",
     'region.officialSwitchHint': "选择地区后，将切换到该都道府县的官方防灾页面。",
     'warning.specialBanner': "{pref}现已发布特别警报",
+    'warning.specialUnconfirmed': "无法确认{pref}是否已发布特别警报",
     'warning.view': "查看预警",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "请选择地区",
@@ -479,6 +482,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "變更地區",
     'region.officialSwitchHint': "選擇地區後，將切換至該都道府縣的官方防災頁面。",
     'warning.specialBanner': "{pref}現已發布特別警報",
+    'warning.specialUnconfirmed': "無法確認{pref}是否已發布特別警報",
     'warning.view': "查看警報",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "請選擇地區",
@@ -615,6 +619,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "지역 변경",
     'region.officialSwitchHint': "지역을 선택하면 해당 도도부현의 공식 방재 페이지로 전환됩니다.",
     'warning.specialBanner': "{pref}에 특별경보가 발령되어 있습니다",
+    'warning.specialUnconfirmed': "{pref}에 특별경보가 발령되었는지 확인할 수 없습니다",
     'warning.view': "경보 보기",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "지역을 선택해 주세요",
@@ -751,6 +756,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Đổi khu vực",
     'region.officialSwitchHint': "Chọn một khu vực để chuyển sang trang thông tin phòng chống thiên tai chính thức của tỉnh đó.",
     'warning.specialBanner': "Cảnh báo đặc biệt đang có hiệu lực tại {pref}",
+    'warning.specialUnconfirmed': "Không thể xác nhận có cảnh báo đặc biệt tại {pref} hay không",
     'warning.view': "Xem cảnh báo",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Vui lòng chọn khu vực",
@@ -887,6 +893,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "เปลี่ยนพื้นที่",
     'region.officialSwitchHint': "เมื่อเลือกพื้นที่ จะเปลี่ยนไปยังหน้าข้อมูลป้องกันภัยพิบัติอย่างเป็นทางการของจังหวัดนั้น",
     'warning.specialBanner': "มีการประกาศคำเตือนพิเศษสำหรับ {pref}",
+    'warning.specialUnconfirmed': "ไม่สามารถยืนยันได้ว่ามีคำเตือนพิเศษสำหรับ {pref} หรือไม่",
     'warning.view': "ดูคำเตือน",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "โปรดเลือกพื้นที่",
@@ -1023,6 +1030,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Ubah wilayah",
     'region.officialSwitchHint': "Pilih wilayah untuk beralih ke halaman informasi kebencanaan resmi prefektur tersebut.",
     'warning.specialBanner': "Peringatan khusus sedang berlaku untuk {pref}",
+    'warning.specialUnconfirmed': "Tidak dapat memastikan apakah peringatan khusus berlaku untuk {pref}",
     'warning.view': "Lihat peringatan",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Silakan pilih wilayah",
@@ -1159,6 +1167,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Tukar kawasan",
     'region.officialSwitchHint': "Pilih kawasan untuk beralih ke halaman maklumat bencana rasmi wilayah berkenaan.",
     'warning.specialBanner': "Amaran khas sedang berkuat kuasa untuk {pref}",
+    'warning.specialUnconfirmed': "Tidak dapat mengesahkan sama ada amaran khas berkuat kuasa untuk {pref}",
     'warning.view': "Lihat amaran",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Sila pilih kawasan",
@@ -1295,6 +1304,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Palitan ang lugar",
     'region.officialSwitchHint': "Pumili ng lugar upang lumipat sa opisyal na pahina ng impormasyon sa sakuna ng prepekturang iyon.",
     'warning.specialBanner': "May umiiral na espesyal na babala para sa {pref}",
+    'warning.specialUnconfirmed': "Hindi makumpirma kung may espesyal na babala para sa {pref}",
     'warning.view': "Tingnan ang mga babala",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Piliin ang iyong lugar",
@@ -1431,6 +1441,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "क्षेत्र परिवर्तन गर्नुहोस्",
     'region.officialSwitchHint': "क्षेत्र छान्दा सम्बन्धित प्रिफेक्चरको आधिकारिक विपद् जानकारी पृष्ठमा परिवर्तन हुन्छ।",
     'warning.specialBanner': "{pref} का लागि विशेष चेतावनी लागू छ",
+    'warning.specialUnconfirmed': "{pref} का लागि विशेष चेतावनी लागू छ कि छैन पुष्टि गर्न सकिँदैन",
     'warning.view': "चेतावनी हेर्नुहोस्",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "कृपया आफ्नो क्षेत्र छान्नुहोस्",
@@ -1567,6 +1578,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Changer de zone",
     'region.officialSwitchHint': "Sélectionnez une zone pour passer à la page officielle d’information sur les catastrophes de cette préfecture.",
     'warning.specialBanner': "Une alerte spéciale est en vigueur pour {pref}",
+    'warning.specialUnconfirmed': "Impossible de confirmer si une alerte spéciale est en vigueur pour {pref}",
     'warning.view': "Voir les alertes",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Choisissez votre zone",
@@ -1703,6 +1715,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Region ändern",
     'region.officialSwitchHint': "Wählen Sie eine Region, um zur offiziellen Katastrophenschutzseite der betreffenden Präfektur zu wechseln.",
     'warning.specialBanner': "Für {pref} gilt eine Sonderwarnung",
+    'warning.specialUnconfirmed': "Es kann nicht bestätigt werden, ob für {pref} eine Sonderwarnung gilt",
     'warning.view': "Warnungen ansehen",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Wählen Sie Ihre Region",
@@ -1839,6 +1852,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Cambia zona",
     'region.officialSwitchHint': "Seleziona una zona per passare alla pagina ufficiale di informazione sui disastri della relativa prefettura.",
     'warning.specialBanner': "È in vigore un’allerta speciale per {pref}",
+    'warning.specialUnconfirmed': "Impossibile confermare se è in vigore un’allerta speciale per {pref}",
     'warning.view': "Vedi le allerte",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Scegli la tua zona",
@@ -1975,6 +1989,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "Cambiar zona",
     'region.officialSwitchHint': "Selecciona una zona para cambiar a la página oficial de información sobre desastres de esa prefectura.",
     'warning.specialBanner': "Hay una alerta especial vigente para {pref}",
+    'warning.specialUnconfirmed': "No se puede confirmar si hay una alerta especial vigente para {pref}",
     'warning.view': "Ver alertas",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "Elige tu zona",
@@ -2112,6 +2127,7 @@ export const translations: Record<string, Record<string, string>> = {
     'region.change': "地域を変える",
     'region.officialSwitchHint': "地域を選ぶと、その都道府県の公式の防災ページに変わります。",
     'warning.specialBanner': "{pref}に特別警報が出ています",
+    'warning.specialUnconfirmed': "{pref}に 特別警報が 出ているか わかりません",
     'warning.view': "警報を見る",
     // 地域の選択（B8。訳は .team/inbox/CDX/i18n-b8b。easy_ja は実装者訳。注意報の訳語は warning.advisory に揃えた）
     'region.choose': "ちいきを えらんで ください",
