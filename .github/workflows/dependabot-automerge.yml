@@ -8,16 +8,55 @@ permissions:
 jobs:
   automerge:
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    # actor（イベントを起こした人）ではなく PR の作成者と head の所在で見る。
+    # actor だけだと、フォークの PR を dependabot に更新させた場合にも通りうる
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Fetch metadata
         id: meta
         uses: dependabot/fetch-metadata@d7267f607e9d3fb96fc2fbe83e0af444713e90b7  # v2.3.0
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
-      - name: Enable auto-merge for non-major
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+
+      # pull_request_target の既定の checkout は base。PR 側のコードはここでは実行しない
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      # update-type は PR 名の依存しか表さない（#92: postcss-selector-parser の removed に
+      # tailwindcss 3 → 4 が同乗していた）。package.json の差分そのものでも確かめる。
+      # head の package.json は JSON として読むだけ（実行しない）
+      - name: Check direct dependency majors
+        id: majors
+        run: |
+          gh api "repos/${REPO}/contents/frontend/package.json?ref=${HEAD_SHA}" \
+            -H "Accept: application/vnd.github.raw" > "$RUNNER_TEMP/head-package.json"
+          node .github/scripts/major-bump.mjs frontend/package.json "$RUNNER_TEMP/head-package.json"
+        env:
+          REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 許可リスト: patch / minor だけ。以前は「major 以外」で、removed（空）が通っていた
+      - name: Enable auto-merge for patch / minor
+        if: >-
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
         run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 判定で止まったら、以前の push で付いた auto-merge も外す
+      # （patch で auto-merge が付いた PR を dependabot がメジャーに差し替えた場合）
+      - name: Disable auto-merge when blocked
+        if: >-
+          failure() ||
+          (steps.meta.outputs.update-type != 'version-update:semver-patch' &&
+           steps.meta.outputs.update-type != 'version-update:semver-minor')
+        run: gh pr merge --disable-auto "$PR_URL" || true
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
