@@ -24,13 +24,13 @@
   子ではなく素通りする。`asyncio.gather` は `return_exceptions=True` か内側で握り、1件の故障で全域を落とさない
 
 ## Testing / Proof
-変更後は該当する層を必ず実行する（CI が回すのは backend pytest と frontend vitest の2つのみ。E2E はローカル実行）。
+変更後は該当する層を必ず実行する。CI は backend pytest、frontend Vitest、型チェック、本番ビルド、本番ビルドでの E2E を実行する（公開処理は含まない）。
 
-| 層 | コマンド | 件数（2026-08-25 実測） |
+| 層 | コマンド | 件数（2026-10-25 実測） |
 |----|----------|------|
-| Backend unit | `cd backend && pytest tests/ -v` | 1438 |
-| Frontend unit | `cd frontend && npm run test:run` | 381 |
-| Frontend E2E | 下記「E2E を動かすとき」を参照 | 33（CI 未実行） |
+| Backend unit | `cd backend && pytest tests/ -v` | 1658 |
+| Frontend unit | `cd frontend && npm run test:run` | 1945 |
+| Frontend E2E | 下記「E2E を動かすとき」を参照 | 35 |
 | 型チェック | `cd frontend && node ./node_modules/typescript/bin/tsc --noEmit` | - |
 | Build | `cd frontend && npm run build` | - |
 
@@ -56,8 +56,8 @@ node ./node_modules/@playwright/test/cli.js test --config playwright.local-chrom
    `playwright.local-chrome.config.ts` は**インストール済みの Google Chrome を使う**
    （`channel: 'chrome'`）ので、ダウンロードなしで走る
 2. dev でクライアント React が動かない件は後述「クライアント挙動の検証」参照。
-   E2E 固有の注意: **既定の `playwright.config.ts` は `npm run dev` 起動のままなので
-   クライアント挙動を見るテストには信用できない**。ローカル用 config（`npm run start` 起動）を使う
+   既定の `playwright.config.ts` も本番起動へ統一済み。CI は Chromium と専用 backend を使う。
+   ローカルは backend を別ターミナルで起動し、導入済み Chrome を使う config を選ぶ
 3. **ロケールを固定しないと日本語の文言を探すテストが全部落ちる。**
    初回訪問時はブラウザ言語から表示言語を推定するため（`src/i18n/detectLanguage.ts`）、
    実行環境が英語だと UI が英語になる。両 config に `locale: 'ja-JP'` を入れてある。

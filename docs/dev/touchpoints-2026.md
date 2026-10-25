@@ -1,7 +1,7 @@
 # 接点戦略: 好みの入口から使えるようにする（2026-10）
 
 作成日: 2026-10-21
-ステータス: 方針確定（実装は未着手）
+ステータス: URL 指定・QR ポスター・JSON スナップショット・サイネージは実装済み。公開と配信開始は保留（2026-10-25 確認）
 
 訪日客・宿泊施設・自治体が、それぞれ好みの接点（QR・サイト埋め込み・サイネージ・メッセージアプリ・ストアアプリ）から使えるようにするための方針と順番。
 差別化の全体像は [差別化戦略](../strategy/differentiation-and-social-impact.md)（軸A「インストール不要」）を前提とし、本書はその**接点の作り方と順番**を決める。
@@ -14,13 +14,13 @@
 - 費用上限は構造で固定する: Cloud Run `--min-instances 0 --max-instances 1`
 - PUBLIC + MIT。売れるのはコードではなく運用・責任なので、接点を増やすほど「責任の範囲」を明示する必要がある
 
-## 2. 現状（2026-10-21 コード確認）
+## 2. 現状（2026-10-25 コード確認）
 
 | 項目 | 現状 | 出典 |
 |---|---|---|
 | iframe 埋め込み | 禁止（`frame-ancestors 'none'` + `X-Frame-Options: DENY`） | `frontend/src/middleware.ts:49,61` / `backend/app/main.py:191-198` |
-| URL での言語・地域指定 | 不可（`searchParams` 使用 0 件。言語はブラウザ言語から自動判定） | `frontend/src/i18n/detectLanguage.ts` |
-| ページ構成 | 単一ページ | `frontend/src/app/page.tsx` |
+| URL での言語・地域指定 | 対応済み（`?lang=&pref=`、未指定時は言語自動判定・地域選択） | `frontend/src/hooks/useDisplayPreferences.ts` |
+| ページ構成 | 本体・`/poster`・`/signage`・`/conversation` | `frontend/src/app/` |
 | PWA | 対応済み（`display: standalone`） | `frontend/public/manifest.json` |
 | 外部からの API 利用 | CORS 許可リスト制 | `backend/app/main.py:164-175` |
 | 市町村の避難指示・避難所開設 | **扱っていない**（データ源は気象庁・国土地理院のみ） | — |
@@ -45,7 +45,7 @@
 | 3 | `/signage` ビュー（ロビー・館内テレビ向け。大きな文字・言語の自動ローテーション） | Claude | 実装は不要 |
 | 4 | `/embed`・LINE ボット・TWA は 1〜3 の反応を見て判断 | — | — |
 
-**1〜3 は公開 URL を待たずに実装できる。** 公開 URL を待つのは、ポスターの最終出力・フィード配信開始・疎通確認だけ。
+**1〜3 のローカル実装は完了。** 公開 URL を待つのは、ポスターの最終出力・JSON フィード配信開始・疎通確認。CAP 形式は未実装の将来候補で、現在提供するスナップショットは JSON。新しい形式・配信先の追加は別途判断する。
 
 ### 3.4 常時表示する範囲の明示（どの接点でも）
 
