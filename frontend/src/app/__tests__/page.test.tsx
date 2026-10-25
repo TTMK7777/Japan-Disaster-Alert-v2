@@ -387,6 +387,25 @@ describe('page.tsx — 特別警報の帯（B8）', () => {
     expect(screen.queryByTestId('special-warning-band')).toBeNull();
   });
 
+  it('前回なしでも警報タブの取得失敗を上部の未確認に反映し、再取得成功で消す', async () => {
+    vi.useFakeTimers();
+    setUrl('/?pref=130000&lang=ja');
+    await renderHome();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(countOf('/api/v1/alerts')).toBe(1);
+    expect(screen.queryByTestId('special-warning-unconfirmed')).toBeNull();
+    global.fetch = vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })) as unknown as typeof fetch;
+    openWarningTab();
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.getByTestId('special-warning-unconfirmed')).toBeInTheDocument();
+    expect(screen.queryByTestId('special-warning-band')).toBeNull();
+    installAlerts([]);
+    fireEvent.click(within(screen.getByTestId('warning-fetch-failure')).getByRole('button'));
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByTestId('special-warning-unconfirmed')).toBeNull();
+    expect(screen.queryByTestId('warning-fetch-failure')).toBeNull();
+  });
+
   it('警報・注意報だけなら帯は出ない', async () => {
     installAlerts([{ ...SPECIAL[0], id: 'y', severity: 'high', type: 'warning' }]);
     setUrl('/?pref=130000&lang=ja');

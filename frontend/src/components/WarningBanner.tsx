@@ -49,9 +49,11 @@ interface WarningBannerProps {
   /**
    * 取得できた警報と、その取得に使った地域コード（ページ全体の特別警報の帯が使う）。
    * partial は一部の予報区が取れなかった応答（取れた分に特別警報が無くても「なし」と確定できない）。
-   * 取得に失敗したときは呼ばない
+   * 取得失敗は onWarningsFailure で通知する
    */
   onWarningsUpdate?: (warnings: Warning[], areaCode: string, status: { partial: boolean }) => void;
+  /** 現在の地域で取得に失敗したときに呼ぶ（自己中断は除く） */
+  onWarningsFailure?: (areaCode: string) => void;
   /** 利用者がセレクタで地域を変えたときに呼ぶ（URL の同期用） */
   onAreaCodeChange?: (code: string) => void;
 }
@@ -114,6 +116,7 @@ export default function WarningBanner({
   areaCode: initialAreaCode = null,
   language = 'ja',
   onWarningsUpdate,
+  onWarningsFailure,
   onAreaCodeChange,
 }: WarningBannerProps) {
   const [warnings, setWarnings] = useState<Warning[]>([]);
@@ -131,6 +134,8 @@ export default function WarningBanner({
   // HIGH #10: onWarningsUpdate を ref で保持し deps から除外
   const onWarningsUpdateRef = useRef(onWarningsUpdate);
   onWarningsUpdateRef.current = onWarningsUpdate;
+  const onWarningsFailureRef = useRef(onWarningsFailure);
+  onWarningsFailureRef.current = onWarningsFailure;
   const onAreaCodeChangeRef = useRef(onAreaCodeChange);
   onAreaCodeChangeRef.current = onAreaCodeChange;
 
@@ -209,11 +214,12 @@ export default function WarningBanner({
       onWarningsUpdateRef.current?.(data, selectedAreaCode, { partial: failedAreas.length > 0 });
     } catch (err) {
       // 自分で中断した分（地域の切替・アンマウント）は表示しない。期限超過は失敗として出す
+      if (fetchRef.current !== request || (request.signal.aborted && !request.timedOut())) return;
       const reason = classifyFetchError(request, err);
       if (reason === null) return;
       console.error('Warning fetch error:', err);
-      // 失敗は特別警報の帯へ渡さない（「なし」と読ませない。帯は前回の判定を保つ）
       setFailure(reason);
+      onWarningsFailureRef.current?.(selectedAreaCode);
     } finally {
       request.clear();
       if (fetchRef.current === request) setLoading(false);
@@ -228,6 +234,7 @@ export default function WarningBanner({
     return () => {
       clearInterval(interval);
       fetchRef.current?.abort();
+      fetchRef.current = null;
     };
   }, [fetchWarnings, selectedAreaCode]);
 

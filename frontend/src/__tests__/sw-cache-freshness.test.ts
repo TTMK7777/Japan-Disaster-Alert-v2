@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { readSwCache } from '@/lib/fetchFailure';
 
 /**
  * Service Worker が API の通信失敗時にキャッシュを返すとき、それと分かる印を付ける（B4b）。
@@ -169,7 +170,21 @@ describe('sw.js — API のキャッシュ応答に印を付ける', () => {
     expect(res.headers.get('Access-Control-Allow-Origin')).toBe('http://localhost:3000');
   });
 
-  it('キャッシュ名を上げてある（旧キャッシュの保存時刻なし応答を activate で捨てる）', () => {
+  it('保存時刻のない旧キャッシュも本文と HTTP Date を保持し、現在時刻を付けない', async () => {
+    const { dispatchFetch, caches } = loadSw(network);
+    const name = SW_SOURCE.match(/const CACHE_NAME = '([^']+)'/)![1];
+    const date = 'Wed, 21 Oct 2026 00:00:00 GMT';
+    await (await caches.open(name)).put(API_URL, new Response(body, { headers: { Date: date } }));
+    online = false;
+    const res = await dispatchFetch(API_URL);
+    expect(res.headers.get('X-SW-Cached-At')).toBeNull();
+    expect(res.headers.get('Date')).toBe(date);
+    expect(res.headers.get('Access-Control-Expose-Headers')?.toLowerCase()).toContain('date');
+    expect(readSwCache(res)).toEqual({ fromCache: true, cachedAt: Date.parse(date) });
+    expect(await res.text()).toBe(body);
+  });
+
+  it('キャッシュ名を上げてある（保存時刻ヘッダ導入後のバージョン）', () => {
     const match = SW_SOURCE.match(/const CACHE_NAME = 'disaster-alert-v(\d+)'/);
     expect(match).not.toBeNull();
     expect(Number(match![1])).toBeGreaterThanOrEqual(6);

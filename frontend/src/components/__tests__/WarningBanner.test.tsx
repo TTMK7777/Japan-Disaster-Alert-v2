@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, within, fireEvent } from '@testing-library/react';
-import WarningBanner from '../WarningBanner';
+import { render, screen, waitFor, within, fireEvent, act } from '@testing-library/react';
+import WarningBanner, { WARNING_FETCH_TIMEOUT_MS } from '../WarningBanner';
 import { getTranslation } from '@/i18n/translations';
 import { PREFECTURE_DISASTER_LINKS } from '@/lib/prefectureDisasterLinks';
 
@@ -238,5 +238,68 @@ describe('WarningBanner — 地域未指定（B8: 黙って東京を出さない
     await waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(1));
     expect(String(fetchFn.mock.calls[0][0])).toContain('area_code=260000');
     await waitFor(() => expect(onWarningsUpdate).toHaveBeenCalledWith([NEW_WARNING], '260000', { partial: false }));
+  });
+});
+
+
+describe('上部帯への失敗通知', () => {
+  async function flush() { await act(async () => { await vi.advanceTimersByTimeAsync(0); }); }
+  it.each(['http', 'cache', 'payload', 'json', 'timeout'])('%s の失敗と成功・部分欠落を通知', async (kind) => {
+    vi.useFakeTimers();
+    const fetchFn = vi.fn().mockImplementation((_url, init) => kind === 'timeout'
+      ? new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))))
+      : Promise.resolve({ ok: kind !== 'http', status: 503,
+        headers: new Headers(kind === 'cache' ? { 'X-SW-Cache': '1' } : {}),
+        json: async () => { if (kind === 'json') throw new SyntaxError('invalid'); return {}; } }));
+    vi.stubGlobal('fetch', fetchFn);
+    const failed = vi.fn(); const updated = vi.fn();
+    render(<WarningBanner areaCode="130000" onWarningsFailure={failed} onWarningsUpdate={updated} />);
+    await flush();
+    if (kind === 'timeout') await act(async () => { await vi.advanceTimersByTimeAsync(WARNING_FETCH_TIMEOUT_MS); });
+    expect(failed).toHaveBeenCalledExactlyOnceWith('130000');
+    expect(updated).not.toHaveBeenCalled();
+    fetchFn.mockResolvedValue({ ok: true, headers: new Headers(), json: async () => [] });
+    fireEvent.click(within(screen.getByTestId('warning-fetch-failure')).getByRole('button'));
+    await flush();
+    expect(updated).toHaveBeenLastCalledWith([], '130000', { partial: false });
+    fetchFn.mockResolvedValue({ ok: true, headers: new Headers({ 'X-Failed-Areas': '474000' }), json: async () => [] });
+    await act(async () => { await vi.advanceTimersByTimeAsync(5 * 60 * 1000); });
+    expect(updated).toHaveBeenLastCalledWith([], '130000', { partial: true });
+    expect(failed).toHaveBeenCalledTimes(1);
+  });
+  it('中断された旧地域の遅い HTTP 失敗を通知しない', async () => {
+    vi.useFakeTimers();
+    let finish!: (response: unknown) => void;
+    vi.stubGlobal('fetch', vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValue({ ok: true, json: async () => [] }));
+    const failed = vi.fn(); const updated = vi.fn();
+    const { rerender } = render(<WarningBanner areaCode="130000" onWarningsFailure={failed} onWarningsUpdate={updated} />);
+    rerender(<WarningBanner areaCode="270000" onWarningsFailure={failed} onWarningsUpdate={updated} />);
+    await flush();
+    await act(async () => { finish({ ok: false, status: 503 }); });
+    expect(failed).not.toHaveBeenCalled();
+    expect(updated).toHaveBeenCalledExactlyOnceWith([], '270000', { partial: false });
+  });
+  it('期限超過後にアンマウントした取得の遅い失敗も通知しない', async () => {
+    vi.useFakeTimers();
+    let rejectFetch!: (error: Error) => void;
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((_resolve, reject) => { rejectFetch = reject; })));
+    const failed = vi.fn();
+    const { unmount } = render(<WarningBanner areaCode="130000" onWarningsFailure={failed} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(WARNING_FETCH_TIMEOUT_MS); });
+    unmount();
+    await act(async () => { rejectFetch(new DOMException('Aborted', 'AbortError')); });
+    expect(failed).not.toHaveBeenCalled();
+  });
+  it('地域変更とアンマウントの自己中断は通知しない', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_url, init) => new Promise((_resolve, reject) => {
+      init.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    })));
+    const failed = vi.fn();
+    const { rerender, unmount } = render(<WarningBanner areaCode="130000" onWarningsFailure={failed} />);
+    rerender(<WarningBanner areaCode="270000" onWarningsFailure={failed} />);
+    await flush(); unmount(); await flush();
+    expect(failed).not.toHaveBeenCalled();
   });
 });

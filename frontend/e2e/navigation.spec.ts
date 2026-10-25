@@ -58,6 +58,7 @@ test.describe('タブナビゲーション', () => {
       { name: /警報/, panelId: 'tabpanel-warning' },
       { name: /緊急連絡/, panelId: 'tabpanel-emergency' },
       { name: /避難所/, panelId: 'tabpanel-shelter' },
+      { name: /会話/, panelId: 'tabpanel-conversation' },
     ];
 
     for (const tab of tabs) {

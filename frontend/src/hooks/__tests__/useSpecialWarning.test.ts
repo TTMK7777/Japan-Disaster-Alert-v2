@@ -106,7 +106,7 @@ describe('useSpecialWarning', () => {
 
     // 別地域の結果は今の地域の判定にしない
     act(() => result.current.report('270000', ADVISORY));
-    expect(result.current.active).toBe(false);
+    expect(result.current.active).toBe(true);
     act(() => result.current.report('130000', EXTREME));
 
     await act(async () => {
@@ -260,7 +260,7 @@ describe('useSpecialWarning — 判定がまだ無い地域の取得失敗は「
     expect(result.current.active).toBe(true);
   });
 
-  it('判定がある地域の失敗は従来どおり前回の判定を保ち、unconfirmed にしない', async () => {
+  it('前回は特別警報なしでも今回の失敗は未確認', async () => {
     respond = () => ({ ok: true, body: ADVISORY });
     const { result } = renderHook(() => useSpecialWarning({ prefCode: '130000', language: 'en', paused: false }));
     await flush();
@@ -268,7 +268,7 @@ describe('useSpecialWarning — 判定がまだ無い地域の取得失敗は「
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SPECIAL_WARNING_POLL_MS);
     });
-    expect(result.current.unconfirmed).toBe(false);
+    expect(result.current.unconfirmed).toBe(true);
     expect(result.current.active).toBe(false);
   });
 
@@ -319,5 +319,39 @@ describe('useSpecialWarning — 判定がまだ無い地域の取得失敗は「
     rerender({ prefCode: '130000' });
     await flush();
     expect(result.current.unconfirmed).toBe(false);
+  });
+});
+
+
+describe('警報タブからの失敗通知', () => {
+  it('初回と前回なしは未確認、既知の特別警報は保持、成功で回復', () => {
+    const { result } = renderHook(() => useSpecialWarning({ prefCode: '130000', language: 'ja', paused: true }));
+    act(() => result.current.reportFailure('130000'));
+    expect(result.current.unconfirmed).toBe(true);
+    act(() => result.current.report('130000', ADVISORY));
+    expect(result.current.unconfirmed).toBe(false);
+    act(() => result.current.reportFailure('130000'));
+    expect(result.current.unconfirmed).toBe(true);
+    act(() => result.current.report('130000', EXTREME));
+    act(() => result.current.reportFailure('130000'));
+    expect(result.current.active).toBe(true);
+    expect(result.current.unconfirmed).toBe(false);
+    act(() => result.current.report('130000', ADVISORY));
+    act(() => result.current.report('130000', ADVISORY, { partial: true }));
+    expect(result.current.unconfirmed).toBe(true);
+  });
+  it('別地域の成功・失敗を棄却する', () => {
+    const { result, rerender } = renderHook(({ prefCode }) => useSpecialWarning({ prefCode, language: 'ja', paused: true }), { initialProps: { prefCode: '130000' } });
+    act(() => result.current.reportFailure('130000'));
+    act(() => result.current.reportFailure('270000'));
+    act(() => result.current.report('270000', EXTREME));
+    expect(result.current.unconfirmed).toBe(true);
+    expect(result.current.active).toBe(false);
+    rerender({ prefCode: '270000' });
+    expect(result.current.unconfirmed).toBe(false);
+    act(() => result.current.report('270000', EXTREME));
+    act(() => result.current.report('130000', ADVISORY));
+    act(() => result.current.reportFailure('130000'));
+    expect(result.current.active).toBe(true);
   });
 });

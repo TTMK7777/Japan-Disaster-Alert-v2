@@ -155,6 +155,7 @@ export default function Home() {
     active: specialWarningActive,
     unconfirmed: specialWarningUnconfirmed,
     report: reportRegionWarnings,
+    reportFailure: reportRegionWarningsFailure,
   } = useSpecialWarning({
     prefCode,
     language,
@@ -539,6 +540,7 @@ export default function Home() {
                 areaCode={prefCode}
                 onAreaCodeChange={selectPref}
                 onWarningsUpdate={handleWarningsUpdate}
+                onWarningsFailure={reportRegionWarningsFailure}
               />
               {/* 噴火警報。気象庁の階級では警報の一種なので同じタブに置く。
                   タブを 5 つに増やすとモバイル幅でナビが破綻する */}
