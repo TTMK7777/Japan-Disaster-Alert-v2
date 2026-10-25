@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 afterEach(() => { vi.unstubAllEnvs(); vi.resetModules(); });
@@ -36,4 +39,16 @@ describe('Playwright の実行契約', () => {
     expect(config.retries).toBe(0);
     expect([config.webServer].flat()[0]?.command).toContain('npm run start');
   });
+});
+
+// OS の floating alias が Playwright 未対応版へ進むとブラウザ導入前に止まる。
+it('CI runner は導入済み Playwright の対応プラットフォームへ固定する', () => {
+  const workflow = readFileSync(path.resolve(process.cwd(), '../.github/workflows/ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  const frontend = workflow.split('\n  frontend:\n')[1];
+  const runner = frontend?.match(/^\s+runs-on:\s*(\S+)/m)?.[1];
+  expect(runner).toBeTruthy();
+  const require = createRequire(path.resolve(process.cwd(), 'package.json'));
+  const nativeDeps = require(path.join(path.dirname(require.resolve('playwright-core/package.json')), 'lib/server/registry/nativeDeps.js')).deps;
+  const platform = runner?.replace('ubuntu-', 'ubuntu') + '-x64';
+  expect(Object.keys(nativeDeps)).toContain(platform);
 });

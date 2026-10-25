@@ -24,7 +24,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Conversation Cards** — 40 phrases × 16 languages for talking with hotel and shelter staff, always shown with English and usable offline
 - **Official Transit Links** — Curated official rail / air / road information sources, with each link's language availability shown before you tap it
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 3,638 tests (pytest backend 1658, Vitest unit 1945, Playwright E2E 35; 2026-10-25), mutation-checked regression suites
+- **Comprehensive Testing** — 3,639 tests (pytest backend 1658, Vitest unit 1946, Playwright E2E 35; 2026-10-25), mutation-checked regression suites
 
 ## Supported Languages
 
@@ -63,7 +63,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Next.js 15** with **React 19** and **TypeScript**
 - **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
-- **Vitest** + **React Testing Library** — unit testing (1945 tests)
+- **Vitest** + **React Testing Library** — unit testing (1946 tests)
 - **Playwright** — E2E testing (35 tests)
 - **PWA** — Service Worker for offline capability
 
@@ -213,7 +213,7 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
-│   │   │   └── __tests__/               # Vitest unit tests (1945 tests)
+│   │   │   └── __tests__/               # Vitest unit tests (1946 tests)
 │   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
@@ -250,7 +250,7 @@ pytest tests/ -v               # 1658 tests
 ```bash
 cd frontend
 npm install
-npm run test:run     # 1945 unit tests
+npm run test:run     # 1946 unit tests
 ```
 
 ### E2E (Playwright)

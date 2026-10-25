@@ -39,7 +39,7 @@ jobs:
     env:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     name: Frontend Tests (vitest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend

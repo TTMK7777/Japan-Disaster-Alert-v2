@@ -13,7 +13,8 @@
 - 回帰テスト先書き: 変更前の Playwright 設定では2件失敗、変更後は3件成功。CI/ローカル両経路を検査。
 - YAML を解析し7コマンドの順序・失敗を無視しない設定を確認。本番ビルドを除いた負例が落ちることも確認。
 - Backend pytest: 1,658件成功。
-- Frontend Vitest: 57ファイル・1,945件成功。
+- Frontend Vitest: 57ファイル・1,946件成功。
+- CI 初回で ubuntu-latest が26.04へ進み、Playwright 1.58.2 の対応OS外でブラウザ導入が失敗。frontend runner を ubuntu-24.04 に固定。導入済み Playwright の対応OS表とCI runnerを照合する回帰テストで負例→緑を確認した。
 - 型チェック・本番ビルド: 成功。
 - production + Chrome E2E: CI と同じ2サーバー自動管理で35件成功。スキップなし。
 - 独立レビュー: P1/P2 指摘なし。
