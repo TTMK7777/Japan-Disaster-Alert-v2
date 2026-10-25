@@ -24,7 +24,7 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Conversation Cards** — 40 phrases × 16 languages for talking with hotel and shelter staff, always shown with English and usable offline
 - **Official Transit Links** — Curated official rail / air / road information sources, with each link's language availability shown before you tap it
 - **Rate-Limited API** — Per-endpoint rate limiting to protect public data sources
-- **Comprehensive Testing** — 3,610 tests (pytest backend 1658, Vitest unit 1919, Playwright E2E 33), mutation-checked regression suites
+- **Comprehensive Testing** — 3,639 tests (pytest backend 1658, Vitest unit 1946, Playwright E2E 35; 2026-10-25), mutation-checked regression suites
 
 ## Supported Languages
 
@@ -63,8 +63,8 @@ A multilingual disaster information system for Japan, providing real-time earthq
 - **Next.js 15** with **React 19** and **TypeScript**
 - **Tailwind CSS** — utility-first styling with dark mode (`class` strategy)
 - **Leaflet / react-leaflet** — interactive maps
-- **Vitest** + **React Testing Library** — unit testing (381 tests)
-- **Playwright** — E2E testing (32 tests)
+- **Vitest** + **React Testing Library** — unit testing (1946 tests)
+- **Playwright** — E2E testing (35 tests)
 - **PWA** — Service Worker for offline capability
 
 ### Data Sources
@@ -213,14 +213,14 @@ Japan-Disaster-Alert-v2/
 │   ├── src/
 │   │   ├── app/                          # Next.js App Router pages
 │   │   ├── components/                   # React components
-│   │   │   └── __tests__/               # Vitest unit tests (381 tests)
+│   │   │   └── __tests__/               # Vitest unit tests (1946 tests)
 │   │   ├── hooks/                        # Custom React hooks (useEventStream, useTheme, usePushNotification)
 │   │   ├── config/                       # API configuration
 │   │   ├── i18n/                         # Translation strings (16 languages)
 │   │   ├── test/                         # Test setup (Vitest)
 │   │   ├── types/                        # TypeScript type definitions
 │   │   └── middleware.ts                 # Nonce-based CSP middleware (Edge Runtime)
-│   ├── e2e/                              # Playwright E2E tests (32 tests)
+│   ├── e2e/                              # Playwright E2E tests (35 tests)
 │   ├── public/
 │   │   ├── icons/                        # PWA icons (72-512px)
 │   │   ├── sw.js                         # Service Worker (v2)
@@ -242,7 +242,7 @@ cd backend
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-pytest tests/ -v               # 1438 tests
+pytest tests/ -v               # 1658 tests
 ```
 
 ### Frontend (Vitest)
@@ -250,16 +250,20 @@ pytest tests/ -v               # 1438 tests
 ```bash
 cd frontend
 npm install
-npm run test:run     # 381 unit tests
+npm run test:run     # 1946 unit tests
 ```
 
 ### E2E (Playwright)
 
 ```bash
 cd frontend
-npx playwright install chromium
-npx playwright test   # 28 E2E tests
+npm run build
+# Start the backend on localhost:8000 in another terminal first.
+node ./node_modules/@playwright/test/cli.js test --config playwright.local-chrome.config.ts
+# CI installs Chromium and starts both local servers with the default config.
 ```
+
+CI runs backend and frontend unit tests, TypeScript checks, a production build, and production E2E tests. The Playwright configuration starts an isolated backend in CI; tests never deploy the application.
 
 ## Deployment
 
