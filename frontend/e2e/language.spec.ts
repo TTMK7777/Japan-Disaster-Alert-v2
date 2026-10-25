@@ -9,7 +9,7 @@ test.describe('言語切り替え', () => {
   });
 
   test('言語セレクターが表示される', async ({ page }) => {
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
     await expect(selector).toBeVisible();
 
     // 16言語のオプションがあること
@@ -22,12 +22,12 @@ test.describe('言語切り替え', () => {
     await expect(page.locator('h1')).toHaveText('災害対応AI');
 
     // セレクターの値が 'ja' であること
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
     await expect(selector).toHaveValue('ja');
   });
 
   test('英語に切り替えるとUI文が変わる', async ({ page }) => {
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
 
     // 英語に切り替え
     await selector.selectOption('en');
@@ -49,7 +49,7 @@ test.describe('言語切り替え', () => {
   });
 
   test('中国語（簡体字）に切り替えるとUI文が変わる', async ({ page }) => {
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
 
     // 中国語に切り替え
     await selector.selectOption('zh');
@@ -65,7 +65,7 @@ test.describe('言語切り替え', () => {
   });
 
   test('言語がタブナビゲーション後も維持される', async ({ page }) => {
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
 
     // 英語に切り替え
     await selector.selectOption('en');
@@ -89,7 +89,7 @@ test.describe('言語切り替え', () => {
   });
 
   test('言語選択がlocalStorageに保存される', async ({ page }) => {
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
 
     // 英語に切り替え
     await selector.selectOption('en');
@@ -102,7 +102,7 @@ test.describe('言語切り替え', () => {
   });
 
   test('やさしい日本語に切り替えるとUI文が変わる', async ({ page }) => {
-    const selector = page.locator('select');
+    const selector = page.locator('header select');
 
     // やさしい日本語に切り替え
     await selector.selectOption('easy_ja');

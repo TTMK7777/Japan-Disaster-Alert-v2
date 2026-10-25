@@ -97,7 +97,7 @@ export const SW_CACHED_AT_HEADER = 'X-SW-Cached-At';
 export interface SwCacheInfo {
   /** SW がキャッシュから返した応答か */
   fromCache: boolean;
-  /** 保存した時刻（ms）。印が無い・読めなければ null */
+  /** 保存した時刻（ms）。旧キャッシュは HTTP Date による取得時刻の推定値。不明なら null */
   cachedAt: number | null;
 }
 
@@ -107,5 +107,10 @@ export function readSwCache(response: HeaderSource): SwCacheInfo {
   if (!headers || typeof headers.get !== 'function') return { fromCache: false, cachedAt: null };
   if (headers.get(SW_CACHE_HEADER) !== '1') return { fromCache: false, cachedAt: null };
   const parsed = Date.parse(headers.get(SW_CACHED_AT_HEADER) ?? '');
-  return { fromCache: true, cachedAt: Number.isNaN(parsed) ? null : parsed };
+  if (!Number.isNaN(parsed)) return { fromCache: true, cachedAt: parsed };
+  // 保存時刻のない旧キャッシュでは、サーバーが応答を生成した HTTP Date を
+  // 取得時刻の推定値として使う。保存時刻とは異なるため、新しい保存時刻より優先しない。
+  // 両方不明でも現在時刻には置き換えない（古いデータを今の取得成功に見せない）。
+  const responseDate = Date.parse(headers.get('Date') ?? '');
+  return { fromCache: true, cachedAt: Number.isNaN(responseDate) ? null : responseDate };
 }

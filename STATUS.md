@@ -1,10 +1,11 @@
 # STATUS — プロジェクト現在地
 
-## 現在地（2026-09-12 棚卸し）
-- 状態: 出荷準備（機能面はほぼ完成、公開 URL 未確定が唯一のブロッカー）
-- 現在地: 地震・気象・噴火警報・避難所検索・PWA・プッシュ通知・WCAG 2.1 AA まで実装済み。CHANGELOG の [Unreleased] に交通情報源の 16 言語対応を追加中。
-- 最終作業: 2026-09-11 fix(security): next/sharp を修正版へ更新 (Dependabot #60,#61,#62) (#87)
-- 次の一手: バックログの最適化タスク（AsyncClient 共有化 / push_service のバッチ化 / EarthquakeList の React.memo / Pydantic V2 ConfigDict 移行 / Push 通知 UI 拡張 / `scripts/generate-icons.js` 削除検討）。open issue 0 件 / open PR 0 件。
+## 現在地（2026-10-25）
+- 状態: 無料ポートフォリオの公開準備。公開 URL は未確定。
+- 現在地: 地震・気象・噴火警報・避難所・16言語・PWA に加え、URL の言語/地域指定、QR ポスター、静的スナップショット、サイネージ、緊急連絡、会話カードを実装済み。
+- 最終作業: 10/24 引き継ぎの公開以外の残作業を対応。警報タブの取得失敗を全タブ共通の未確認表示へ反映し、旧キャッシュの取得時刻を HTTP Date から補完。翻訳の意味を照合し、使い終わった作業ツリーをコミット保全後に整理。
+- 詳細: [10/25 引き継ぎ](docs/dev/handoff/2026-10-25_remaining-local-tasks.md)。専門家・母語話者による翻訳レビューは未実施。
+- 次の一手: オーナーによる Cloud Run 公開、公開 URL 確定後のポスター最終出力・フィード配信開始・疎通確認（[接点戦略](docs/dev/touchpoints-2026.md) §3.3）。
 - 判断待ち: 本番デプロイ（`gcloud run deploy`）の実行と公開 URL の確定はオーナー判断。
 
 ## 補足

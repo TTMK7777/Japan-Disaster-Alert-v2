@@ -300,7 +300,7 @@ describe('boundaryErrorMessages', () => {
 describe('B8 の文言', () => {
   const langCodes = LANGUAGES.map((l) => l.code);
 
-  it('地域名を差し込む 2 キーは全 16 言語で {pref} をちょうど 1 つ持つ（訳で崩れていない）', () => {
+  it('地域名を差し込む 3 キーは全 16 言語で {pref} をちょうど 1 つ持つ（訳で崩れていない）', () => {
     for (const code of langCodes) {
       for (const key of ['region.showing', 'warning.specialBanner', 'warning.specialUnconfirmed']) {
         const text = translations[code][key];

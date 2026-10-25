@@ -249,6 +249,8 @@ function withCachedAt(response) {
  * SW が作った応答は、別オリジンの API への fetch でも CORS の公開ヘッダ
  * （Access-Control-Expose-Headers）に載せた名前しか画面から読めない。
  * 印・保存時刻と、元の応答で読めていたヘッダ（X-Failed-Areas 等）をすべて公開する
+ * 保存時刻のない旧応答も HTTP Date を保持・公開する。画面が取得時刻の推定に使うため、
+ * ここで現在時刻を保存時刻として追加してはいけない。
  */
 function markFromCache(cached) {
   const headers = new Headers(cached.headers);

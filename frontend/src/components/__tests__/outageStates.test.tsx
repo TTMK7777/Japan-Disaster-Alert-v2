@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import WarningBanner from '../WarningBanner';
 import VolcanoWarnings from '../VolcanoWarnings';
 import EarthquakeList from '../EarthquakeList';
+import { FreshnessStatus } from '../LowPower';
 import { getTranslation } from '@/i18n/translations';
 import type { Earthquake } from '@/types/earthquake';
 
@@ -320,6 +321,29 @@ describe('Service Worker のキャッシュ応答を「今取れた」にしな�
       expect(container.textContent).not.toContain('No evacuation sites found in this area');
     });
 
+    it('旧キャッシュは HTTP Date の取得推定時刻と一覧を表示する', async () => {
+      route = () => ({
+        ok: true, body: { shelters: [SHELTER], meta: {} },
+        headers: { 'X-SW-Cache': '1', Date: 'Wed, 21 Oct 2026 00:00:00 GMT' },
+      });
+      render(<ShelterMap language="en" />);
+      fireEvent.click(screen.getByRole('button', { name: /Get my location/i }));
+      await screen.findByTestId('shelter-fetch-failure');
+      expect(screen.getByText('保存済み小学校')).toBeTruthy();
+      expect(screen.getByTestId('shelter-fetch-failure-last-success')).toBeTruthy();
+    });
+
+    it('時刻が完全に不明なキャッシュも一覧と失敗を表示し、取得時刻を作らない', async () => {
+      route = () => ({
+        ok: true, body: { shelters: [SHELTER], meta: {} }, headers: { 'X-SW-Cache': '1' },
+      });
+      render(<ShelterMap language="en" />);
+      fireEvent.click(screen.getByRole('button', { name: /Get my location/i }));
+      await screen.findByTestId('shelter-fetch-failure');
+      expect(screen.getByText('保存済み小学校')).toBeTruthy();
+      expect(screen.queryByTestId('shelter-fetch-failure-last-success')).toBeNull();
+    });
+
     it('遅れて返った前の取得（キャッシュ）で、後から取れた今の結果を上書きしない', async () => {
       // 1 回目は保留し、2 回目（電波が戻って取り直し）が先に成功する。その後 1 回目がキャッシュで返る
       let releaseFirst: (() => void) | undefined;
@@ -371,8 +395,7 @@ describe('Service Worker のキャッシュ応答を「今取れた」にしな�
 });
 
 describe('FreshnessStatus — 保存済みのデータ（B4b）', () => {
-  it('SW のキャッシュしか取れなかったら「保存済みのデータ（時刻）」を出し、最後に取得は進めない', async () => {
-    const { FreshnessStatus } = await import('../LowPower');
+  it('SW のキャッシュしか取れなかったら「保存済みのデータ（時刻）」を出し、最後に取得は進めない', () => {
     const savedAt = Date.parse('2026-10-21T00:00:00.000Z');
     render(
       <FreshnessStatus

@@ -67,6 +67,7 @@ test.describe('アクセシビリティ基本チェック', () => {
       { tabId: 'tab-warning', panelId: 'tabpanel-warning' },
       { tabId: 'tab-emergency', panelId: 'tabpanel-emergency' },
       { tabId: 'tab-shelter', panelId: 'tabpanel-shelter' },
+      { tabId: 'tab-conversation', panelId: 'tabpanel-conversation' },
     ];
 
     for (const pair of tabPanelPairs) {
