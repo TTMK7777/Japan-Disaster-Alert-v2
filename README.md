@@ -2,6 +2,22 @@
 
 A multilingual disaster information system for Japan, providing real-time earthquake, weather, and emergency alerts to foreign residents and tourists in 16 languages.
 
+保守する人は [MAINTAINING.md](MAINTAINING.md)（保守ガイド・日本語）から読んでください。
+
+## 地図 (Map)
+
+| 場所 | 中身 | 種類 |
+|---|---|---|
+| [backend/](backend/) | FastAPI の API サーバー（Python）とそのテスト | コード |
+| [frontend/](frontend/) | Next.js の画面（TypeScript）、ユニットテスト、E2E テスト | コード |
+| [scripts/](scripts/) | 開発・確認用の単体スクリプト（一部は外部サイトに接続する） | コード |
+| [docs/](docs/README.md) | 構成・運用・調査・引き継ぎメモ。入口は docs/README.md | 文書 |
+| [specs/](specs/README.md) | 個別仕様書の置き場（現状はテンプレートのみ） | 文書 |
+| [.github/](.github/workflows/ci.yml) | CI の定義（テスト・型チェック・ビルド・E2E。デプロイは含まない） | 設定 |
+| [AGENTS.md](AGENTS.md)・[CLAUDE.md](CLAUDE.md) | AI（Claude Code / Codex）に読ませる作業ルール。CLAUDE.md は過去に踏んだ落とし穴の記録も兼ねる | AI への指示書 |
+| [STATUS.md](STATUS.md) | 現在地と次の一手 | 文書 |
+| [spec.md](spec.md)・[plan.md](plan.md)・[PROJECT_PLAN.md](PROJECT_PLAN.md) | 仕様書・計画（PROJECT_PLAN.md は 2025-12 のアーカイブ） | 文書 |
+
 ## Features
 
 - **Real-time Earthquake Data** — Live feeds from P2P earthquake network with intensity maps

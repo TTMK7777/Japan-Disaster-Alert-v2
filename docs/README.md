@@ -14,6 +14,11 @@ Japan Disaster Alert のドキュメントハブです。読者のロール別�
 - [デプロイ / 実行手順](ops/deployment.md) — 起動・停止・本番設定
 - [環境変数一覧](../README.md#environment-variables) — `.env` の設定項目
 
+### 保守者 (Maintainers)
+コードを直す・確かめる方:
+- [保守ガイド (MAINTAINING.md)](../MAINTAINING.md) — 逆引き（何を直すときにどこを触るか）・確認手順・壊れたときの見る所
+- [引き継ぎメモ（日付付き）](dev/handoff/2026-10-25_remaining-local-tasks.md) — [2026-09-23 Cloud Run 公開](dev/handoff/2026-09-23_cloud-run-portfolio-release.md) / [2026-10-24 Codex P1 と dependabot ガード](dev/handoff/2026-10-24_codex-p1-and-dependabot-guard.md) / [2026-10-25 CI 品質ゲート](dev/handoff/2026-10-25_ci-quality-gates.md)。当時の記録で、現行の状態は [STATUS.md](../STATUS.md)
+
 ### 開発者 (Developers)
 内部構造やコントリビュートを行う方:
 - [アーキテクチャ](dev/architecture.md) — コンポーネント構成とデータフロー
