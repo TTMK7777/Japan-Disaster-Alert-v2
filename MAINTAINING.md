@@ -4,15 +4,15 @@
 
 > このアプリは公式の災害情報の代わりではありません（[README.md](README.md#disclaimer)）。警報・避難・緊急連絡先に関わる表示を変えるときは、必ず気象庁など公式の情報源と照らして確認してください。
 
-## 2 種類のファイル
+## ファイルの種類
 
-このリポジトリには「普通のコード」のほかに、AI（Claude Code や Codex）に読ませる指示書があります。どちらもテキストエディタで直せます。AI を使わない場合、指示書は無視して構いません。
+このリポジトリには「普通のコード」のほかに、設定、スクリプトが作った生成物、AI（Claude Code や Codex）に読ませる指示書があります。どれもテキストエディタで直せます。AI を使わない場合、指示書は無視して構いません。
 
 | 種類 | 例 | 何か | 直すときの注意 |
 |---|---|---|---|
 | 普通のコード | `backend/app/main.py`、`frontend/src/middleware.ts` | 人が書いたプログラム。AI なしで動く | 直したら下の「直したあとの確認」を回す |
 | AI への指示書 | [AGENTS.md](AGENTS.md)、[CLAUDE.md](CLAUDE.md) | AI に渡す作業ルール。ただし CLAUDE.md は「過去に踏んだ落とし穴」の記録としても有用で、人が読んでも役に立つ | 本文は AI が読んで従うので、言い回しを変えると AI の動きが変わる。人間向けの案内はこの文書や docs/ に書く |
-| 設定 | `backend/pyproject.toml`、`backend/requirements.txt`、`frontend/package.json`、`.github/workflows/ci.yml` | ツール・依存・CI の動き方 | 依存を変えたら lockfile（`frontend/package-lock.json` と、リポジトリ直下の `package-lock.json`）も一緒に直る。CI は GitHub 上で動く |
+| 設定 | `backend/pyproject.toml`、`backend/requirements.txt`、`frontend/package.json`、`package.json`（リポジトリ直下）、`.github/workflows/ci.yml` | ツール・依存・CI の動き方 | 依存を変えて `npm install` すると lockfile（`frontend/package-lock.json`、リポジトリ直下は `package-lock.json`）が更新されるので、一緒にコミットする。CI は GitHub 上で動く |
 | 生成物 | `backend/app/services/area_names.py` | スクリプトが作ったデータ | 手で直さず、元のスクリプト（`scripts/generate_area_names.py`）で作り直す。ただし実行すると気象庁のサイトに接続する |
 
 ## ファイルの置き場所
@@ -31,9 +31,9 @@
 
 | やりたいこと | 触る所 | 合わせて見る所 | 確かめ方 |
 |---|---|---|---|
-| API のレート制限（毎分の回数）を変える | `backend/app/config.py` の `rate_limit_general` / `rate_limit_translate` / `rate_limit_safety_guide`（環境変数で上書きもできる設定項目） | `git grep -n "rate_limit" -- backend` で使っている所を、`git grep -n "minute" -- backend/tests docs CLAUDE.md` で値を書き写している文書・テストを探す。[docs/glossary.md](docs/glossary.md) のレート制限の行は数字を手で書いている | 下の確認 1 を全部回す。`backend/tests/test_snapshot_endpoint.py` の `test_レート制限の対象` は一般の制限（既定 60 回）を超える 70 回を送って 429 を期待している。翻訳用・安全ガイド用の値を変えても、それを見張るテストは見つからなかったので、手で確かめる |
+| API のレート制限（毎分の回数）を変える | `backend/app/config.py` の `rate_limit_general` / `rate_limit_translate` / `rate_limit_safety_guide`（環境変数で上書きもできる設定項目） | `git grep -n "rate_limit" -- backend` で使っている所を、`git grep -n -e "minute" -e "回/分" -e "毎分" -- backend/tests docs CLAUDE.md` で値を書き写している文書・テストを探す。[docs/glossary.md](docs/glossary.md) のレート制限の行は数字を手で書いている | 下の確認 1 を全部回す。`backend/tests/test_snapshot_endpoint.py` の `test_レート制限の対象` は一般の制限（既定 60 回）を超える 70 回を送って 429 を期待している。翻訳用・安全ガイド用の値を変えても、それを見張るテストは見つからなかったので、手で確かめる |
 | 対応言語を足す・外す | `backend/app/models.py` の `ALLOWED_LANGUAGES`、`frontend/src/i18n/translations.ts`、`frontend/src/hooks/useEventStream.ts` の `VALID_LANGS` | `git grep -n "easy_ja" -- backend frontend/src docs README.md spec.md` で、言語コードを列挙している所を探す。画面の文言・地名・警報名・安全ガイド・交通リンクの見出しなど、16 言語分を持つデータが多数ある。16 言語の数は README・docs にも手で書かれている | 下の確認 1〜3 を全部回す。実測: `ALLOWED_LANGUAGES` から `ne` を 1 つ外すと、`backend/tests/test_safety_guide_endpoint.py` と `backend/tests/test_transit_links.py` が落ちた（フロント側の `VALID_LANGS` を見張るテストは確認していないので、手で合わせる） |
-| 画面の CSP（読み込みを許す範囲）を変える | `frontend/src/middleware.ts`。バックエンドの応答ヘッダは `backend/app/main.py`（`X-Frame-Options` を付けている付近） | `git grep -n -e "frame-ancestors" -e "script-src" -- . ':!frontend/src/middleware.ts'` で、書き写している文書・テストを探す。[CLAUDE.md](CLAUDE.md) の「CSP の制約」節は、静的 HTML を書くときの落とし穴の記録 | 下の確認 2 を回す。`frontend/src/__tests__/middleware.test.ts` が、CSP の全項目を並べた期待値と比べている（実測: `object-src 'none'` を `'self'` に変えると 3 件落ちた）。ヘッダの中身が実ブラウザで問題なく働くかはテストでは分からないので、本番ビルドを起動して確かめる |
+| 画面の CSP（読み込みを許す範囲）を変える | `frontend/src/middleware.ts`。バックエンドの応答ヘッダは `backend/app/main.py`（`X-Frame-Options` を付けている付近） | `git grep -n -e "frame-ancestors" -e "script-src" -- . ':!frontend/src/middleware.ts'` で、書き写している文書・テストを探す。[CLAUDE.md](CLAUDE.md) の「CSP の制約」節は、静的 HTML を書くときの落とし穴の記録 | 下の確認 2 を回す。`frontend/src/__tests__/middleware.test.ts` が、CSP の全項目を並べた期待値と比べている（実測: `object-src 'none'` を `'self'` に変えると落ちた）。ヘッダの中身が実ブラウザで問題なく働くかはテストでは分からないので、本番ビルドを起動して確かめる |
 | 交通の公式リンクを足す・直す | `backend/app/services/transit_links.py` | `git grep -n "transit" -i -- frontend/src backend/tests docs`。ファイル冒頭の説明に「リンクを足したら `scripts/verify_transit_links.py` を通す」とある | 下の確認 1。加えて、リンクの生死は `python scripts/verify_transit_links.py`（各リンク先に接続するスクリプト。このガイドの作成時には実行していない） |
 | 警報の判定・地域名（気象庁 API の読み取り） | `backend/app/services/` の `warning_service.py`・`warning_names.py`・`tsunami_service.py`・`volcano_service.py` | [CLAUDE.md](CLAUDE.md) の「気象庁 API の落とし穴」節。実際のレスポンスと形が違うと、エラーが出ないまま 0 件になる | 下の確認 1。テストは作り物のデータでも緑になるので、実データでの確認が要る（`python scripts/verify_warnings_live.py`。気象庁に接続するため、このガイドの作成時には実行していない） |
 
@@ -59,13 +59,13 @@ CI（`.github/workflows/ci.yml`）は上の 1・2・3 に加えて、Playwright 
 README の起動コマンドは、そのままだと同じネットワークの他の端末からも見える状態で待ち受けます（`backend/run.py` は `0.0.0.0`、`next dev` / `next start` も既定で全インターフェース）。手元で確かめるだけなら、次の自分のマシンだけに閉じた形で起動してください。2 つの端末（ターミナル）を使います。
 
 1. 端末 A（`backend` の中、`venv` を有効にして）: `python -m uvicorn app.main:app --host 127.0.0.1 --port 8000`
-2. 端末 B（`frontend` の中。ビルド済みであること）: `npm run start -- -H 127.0.0.1 -p 3000`（bash なら先頭に `NEXT_PUBLIC_API_URL=http://localhost:8000` を付ける）
-3. ブラウザで <http://127.0.0.1:3000/> と <http://127.0.0.1:8000/docs> を開く
+2. 端末 B（`frontend` の中。ビルド済みであること）: `npm run start -- -H 127.0.0.1 -p 3000`（画面が API を探す先の既定は `http://localhost:8000` なので、環境変数は不要。変えたいときはビルドの前に `NEXT_PUBLIC_API_URL` を設定する。この値はビルド時に画面のコードへ埋め込まれ、起動時には効かない）
+3. ブラウザで <http://localhost:3000/> と <http://localhost:8000/docs> を開く。**`127.0.0.1` で開かないこと**: バックエンドが受け付ける送り元（CORS の許可リスト、`backend/app/config.py` の `cors_origins`）は `localhost` の 3000 / 3001 番だけなので、`http://127.0.0.1:3000/` で開くと API の読み込みが拒否され、地震一覧などが出ない
 4. 終わったら両方の端末で Ctrl+C
 
 `npm run dev`（3001 番）では、CSP の都合でブラウザ側の処理が動かず、画面の確認になりません（[CLAUDE.md](CLAUDE.md) の「クライアント挙動の検証」節）。画面は本番ビルドで確認してください。
 
-外部 AI のキー（`GEMINI_API_KEY` / `ANTHROPIC_API_KEY`）が環境変数に入っていると、翻訳や安全ガイドで外部 API が呼ばれる作りです（キーが無ければ内蔵の辞書で動く。`backend/app/services/ai_provider.py`）。外部送信を避けたいときは、これらを設定しない状態で起動してください。キーの値を画面・ログ・文書に出さないでください。
+外部 AI のキー（`GEMINI_API_KEY` / `ANTHROPIC_API_KEY`）が、環境変数、または `backend/.env` / `backend/.env.local` にあると、翻訳や安全ガイドで外部 API が呼ばれる作りです（`backend/app/services/ai_provider.py`）。README の手順で `.env` を作った人は、その中にキーを書いていないか確かめてください（中身を人に見せない）。外部送信を避けたいときは、環境変数とこの 2 つのファイルの両方からキーを外して起動します。どちらで動いているかは、起動時のログで分かります。両方のキーが無いと「ANTHROPIC_API_KEY / GEMINI_API_KEY が両方とも未設定です」という警告が出ます（`backend/app/config.py`）。キーの値を画面・ログ・文書に出さないでください。
 
 ## 壊れたとき
 
